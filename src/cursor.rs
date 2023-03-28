@@ -4,10 +4,16 @@ use crate::LNode;
 use crate::LeafNodeId;
 use crate::NodeStore;
 
+/// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
 #[derive(Debug)]
 pub struct Cursor<K: Key> {
+    /// The key this cursor points to. It is possible the `k` doesn't exist in the tree.
     k: K,
-    leaf_id: LeafNodeId,
+    /// The leaf node id this cursor points to. This is a hint, which means it is possible the leaf
+    /// for `k` is changed. In that case, the cursor will do a lookup first.
+    leaf_id_hint: LeafNodeId,
+    /// The offset this cursor points to inside the leaf. This is a hint, if the underlying tree is
+    /// modified, then the offset may be invalid.
     offset_hint: usize,
 }
 
@@ -17,6 +23,7 @@ impl<K: Key> Cursor<K> {
         &self.k
     }
 
+    /// Create a `Cursor` pointing to the first key-value pair in the tree.
     pub fn first<'a, 'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
         let leaf_id = tree.first_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
@@ -26,13 +33,15 @@ impl<K: Key> Cursor<K> {
         Some((
             Self {
                 k: kv.0.clone(),
-                leaf_id,
+                leaf_id_hint: leaf_id,
                 offset_hint: 0,
             },
             &kv.1,
         ))
     }
 
+    /// Create a `Cursor` pointing to the last key-value pair in the tree. If the key for `self` is deleted, then
+    /// this returns the cursor for the key value pair just larger than the deleted key.
     pub fn last<'a, 'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
         let leaf_id = tree.last_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
@@ -41,17 +50,21 @@ impl<K: Key> Cursor<K> {
         Some((
             Self {
                 k: kv.0.clone(),
-                leaf_id,
+                leaf_id_hint: leaf_id,
                 offset_hint: leaf.len() - 1,
             },
             &kv.1,
         ))
     }
 
+    /// Get the `Cursor` points to the prev key-value pair. If the key for `self` is deleted, then
+    /// this returns the cursor for the key value pair just under the deleted key.
     pub fn prev<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<Self> {
         self.prev_with_value(tree).map(|x| x.0)
     }
 
+    /// Get the `Cursor` points to the prev key-value pair, also with a reference to the value.
+    /// This is faster than first `prev`, then `value`.
     pub fn prev_with_value<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
@@ -86,17 +99,20 @@ impl<K: Key> Cursor<K> {
         Some((
             Self {
                 k: kv.0,
-                leaf_id,
+                leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
             &kv.1,
         ))
     }
 
+    /// Get the `Cursor` points to the next key-value pair. If the key for `self` is deleted, then
+    /// this returns the cursor for the key value pair just larger than the deleted key.
     pub fn next<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<Self> {
         self.next_with_value(tree).map(|x| x.0)
     }
 
+    /// Get the `Cursor` points to the next key-value pair, also with a reference to the value.
     pub fn next_with_value<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
@@ -119,7 +135,7 @@ impl<K: Key> Cursor<K> {
             Some((
                 Self {
                     k: kv.0,
-                    leaf_id,
+                    leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
                 &kv.1,
@@ -132,7 +148,7 @@ impl<K: Key> Cursor<K> {
             Some((
                 Self {
                     k: kv.0,
-                    leaf_id,
+                    leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },
                 &kv.1,
@@ -166,7 +182,7 @@ impl<K: Key> Cursor<K> {
         &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(LeafNodeId, &'b S::LeafNode)> {
-        let leaf_id = self.leaf_id;
+        let leaf_id = self.leaf_id_hint;
         match tree.node_store.try_get_leaf(leaf_id) {
             Some(leaf) if range_contains(&leaf.key_range(), &self.k) => {
                 // still valid
