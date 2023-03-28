@@ -1,6 +1,6 @@
 # Sweep-bptree(under development)
 
-A b+ tree, locality aware, so it's faster for ordered access. 
+In memory locality aware b+ tree, faster for ordered access. 
 
 # Motivation
 
@@ -18,11 +18,11 @@ Splaytree is binary tree, so it has relative large number of nodes, which is bad
 
 std::collections::BTreeMap's Cursor support is not stablized yet. 
 
-Also I couldn't come up a design to introduce the page cache. BTree's value is stored in all nodes, that makes cache invalidate more frequently.
+Also I couldn't come up a proper cache mechanism for BTree. BTree's value is stored in all nodes, that makes cache invalidate more frequently.
 
 # Features
 
-* Inspired by splaytree, maintains last accessed leaf page. Quite performant for ordered access. (Check out benchmark)
+* Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
 * Plugable NodeStore, how to alloc or reuse Node is customizable.
 
