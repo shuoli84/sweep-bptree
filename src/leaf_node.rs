@@ -146,19 +146,36 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&(K, V)>) {
-        match self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0) {
-            Ok(idx) => {
-                // exact match, go to right child.
-                // if the child split, then the new key should inserted idx + 1
-                (idx, self.slot_data[idx].as_ref())
-            }
+    const fn binary_search_threshold() -> usize {
+        64 / std::mem::size_of::<(K, V)>()
+    }
 
-            Err(idx) => {
-                // the idx is the place where a matching element could be inserted while maintaining
-                // sorted order. go to left child
-                (idx, None)
+    pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&(K, V)>) {
+        if self.size > Self::binary_search_threshold() {
+            match self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0) {
+                Ok(idx) => {
+                    // exact match, go to right child.
+                    // if the child split, then the new key should inserted idx + 1
+                    (idx, self.slot_data[idx].as_ref())
+                }
+
+                Err(idx) => {
+                    // the idx is the place where a matching element could be inserted while maintaining
+                    // sorted order. go to left child
+                    (idx, None)
+                }
             }
+        } else {
+            assert!(self.size <= N);
+
+            for i in 0..self.size {
+                match self.slot_data[i].unwrap().0.cmp(k) {
+                    std::cmp::Ordering::Less => continue,
+                    std::cmp::Ordering::Equal => return (i, self.slot_data[i].as_ref()),
+                    std::cmp::Ordering::Greater => return (i, None),
+                }
+            }
+            (self.size, None)
         }
     }
 
