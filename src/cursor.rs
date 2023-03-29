@@ -165,7 +165,7 @@ impl<K: Key> Cursor<K> {
     }
 
     /// whether current cursor is still valid
-    pub fn exists<'a, 'b, S: NodeStore<K = K>>(&'a mut self, tree: &'b BPlusTree<S>) -> bool {
+    pub fn exists<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> bool {
         self.value(tree).is_some()
     }
 
