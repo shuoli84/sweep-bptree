@@ -1249,17 +1249,13 @@ mod tests {
             .get_mut_inner(parent_id)
             .set_data([10, 30, 50], [child_0, child_1, child_2, child_3]);
 
-        {
-            let child_1 = node_store.get_mut_leaf(child_1);
-            child_1.slot_data = [Some((10, 1)), Some((11, 1)), Some((12, 1)), Some((13, 1))];
-            child_1.size = 4;
-        }
+        node_store
+            .get_mut_leaf(child_1)
+            .set_data([(10, 1), (11, 1), (12, 1), (13, 1)]);
 
-        {
-            let child_2 = node_store.get_mut_leaf(child_2);
-            child_2.slot_data = [Some((40, 1)), Some((41, 1)), None, None];
-            child_2.size = 2;
-        }
+        node_store
+            .get_mut_leaf(child_2)
+            .set_data([(40, 1), (41, 1)]);
 
         assert!(
             BPlusTree::try_rotate_right_for_leaf_node(&mut node_store, parent_id, 1, 0).is_some()
@@ -1272,7 +1268,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_leaf(child_1);
-            assert_eq!(child_1.size, 3);
+            assert_eq!(child_1.len(), 3);
             assert_eq!(
                 child_1.iter().cloned().collect::<Vec<_>>(),
                 vec![(10, 1), (11, 1), (12, 1)]
@@ -1281,7 +1277,7 @@ mod tests {
 
         {
             let child_2 = node_store.get_leaf(child_2);
-            assert_eq!(child_2.size, 2);
+            assert_eq!(child_2.len(), 2);
 
             assert_eq!(
                 child_2.iter().cloned().collect::<Vec<_>>(),
@@ -1320,7 +1316,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_leaf(child_1);
-            assert_eq!(child_1.size, 3);
+            assert_eq!(child_1.len(), 3);
             assert_eq!(
                 child_1.iter().cloned().collect::<Vec<_>>(),
                 vec![(11, 1), (12, 1), (39, 1),]
@@ -1329,7 +1325,7 @@ mod tests {
 
         {
             let child_2 = node_store.get_leaf(child_2);
-            assert_eq!(child_2.size, 2);
+            assert_eq!(child_2.len(), 2);
 
             assert_eq!(
                 child_2.iter().cloned().collect::<Vec<_>>(),
@@ -1365,7 +1361,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_leaf(child_1);
-            assert_eq!(child_1.size, 3);
+            assert_eq!(child_1.len(), 3);
             assert_eq!(
                 child_1.iter().cloned().collect::<Vec<_>>(),
                 vec![(11, 1), (39, 1), (40, 1),]
@@ -1374,7 +1370,7 @@ mod tests {
 
         {
             let child_2 = node_store.get_leaf(child_2);
-            assert_eq!(child_2.size, 0);
+            assert_eq!(child_2.len(), 0);
         }
     }
 
@@ -1405,7 +1401,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_leaf(child_1);
-            assert_eq!(child_1.size, 3);
+            assert_eq!(child_1.len(), 3);
             assert_eq!(
                 child_1.iter().cloned().collect::<Vec<_>>(),
                 vec![(10, 1), (11, 1), (40, 1),]
@@ -1414,7 +1410,7 @@ mod tests {
 
         {
             let child_2 = node_store.get_leaf(child_2);
-            assert_eq!(child_2.size, 0);
+            assert_eq!(child_2.len(), 0);
         }
     }
 
