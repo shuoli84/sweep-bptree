@@ -161,6 +161,22 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
+    pub(crate) fn locate_child_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
+        match self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0) {
+            Ok(idx) => {
+                // exact match, go to right child.
+                // if the child split, then the new key should inserted idx + 1
+                (idx, self.slot_data[idx].as_mut().map(|x| &mut x.1))
+            }
+
+            Err(idx) => {
+                // the idx is the place where a matching element could be inserted while maintaining
+                // sorted order. go to left child
+                (idx, None)
+            }
+        }
+    }
+
     /// pop the last item, this is used when next sibling undersize
     pub(crate) fn pop(&mut self) -> (K, V) {
         assert!(self.size > Self::split_origin_size());
@@ -319,6 +335,10 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
 
     fn locate_slot(&self, k: &K) -> (usize, Option<&(K, V)>) {
         Self::locate_child(self, k)
+    }
+
+    fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
+        Self::locate_child_mut(self, k)
     }
 
     fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {

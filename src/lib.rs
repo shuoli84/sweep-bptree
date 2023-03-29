@@ -218,6 +218,23 @@ where
         self.find_descend(self.root?, k)
     }
 
+    /// Get mutable reference to value identified by key.
+    pub fn get_mut(&mut self, k: &S::K) -> Option<&mut S::V> {
+        let mut cache_leaf_id: Option<LeafNodeId> = None;
+        if let Some(cache) = self.leaf_cache.borrow_mut().as_ref() {
+            if cache.0 <= *k && cache.1 >= *k {
+                // cache hit
+                cache_leaf_id = Some(cache.2);
+            }
+        }
+
+        if let Some(leaf_id) = cache_leaf_id {
+            return self.find_in_leaf_mut(leaf_id, k);
+        }
+
+        self.find_descend_mut(self.root?, k)
+    }
+
     fn find_descend(&self, node_id: NodeId, k: &S::K) -> Option<&S::V> {
         match node_id {
             NodeId::Inner(inner_id) => {
@@ -233,6 +250,23 @@ where
         let leaf_node = self.node_store.get_leaf(leaf_id);
         let (_, kv) = leaf_node.locate_slot(k);
         kv.map(|kv| &kv.1)
+    }
+
+    fn find_descend_mut(&mut self, node_id: NodeId, k: &S::K) -> Option<&mut S::V> {
+        match node_id {
+            NodeId::Inner(inner_id) => {
+                let inner_node = self.node_store.get_inner(inner_id);
+                let (_, child_id) = inner_node.locate_child(k);
+                self.find_descend_mut(child_id, k)
+            }
+            NodeId::Leaf(leaf_id) => self.find_in_leaf_mut(leaf_id, k),
+        }
+    }
+
+    fn find_in_leaf_mut(&mut self, leaf_id: LeafNodeId, k: &S::K) -> Option<&mut S::V> {
+        let leaf_node = self.node_store.get_mut_leaf(leaf_id);
+        let (_, kv) = leaf_node.locate_slot_mut(k);
+        kv
     }
 
     fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
@@ -853,6 +887,7 @@ pub trait LNode<K: Key, V: Value>: Clone + Default {
         self_leaf_id: LeafNodeId,
     ) -> Self;
     fn locate_slot(&self, k: &K) -> (usize, Option<&(K, V)>);
+    fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>);
     fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V>;
     fn delete_at(&mut self, idx: usize) -> (K, V);
     fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V);
@@ -1412,6 +1447,14 @@ mod tests {
             let child_2 = node_store.get_leaf(child_2);
             assert_eq!(child_2.len(), 0);
         }
+    }
+
+    #[test]
+    fn test_modify_value() {
+        let (mut tree, _) = create_test_tree::<30>();
+        let v = tree.get_mut(&1).unwrap();
+        *v = 100;
+        assert_eq!(tree.get(&1).unwrap().clone(), 100);
     }
 
     pub fn create_test_tree<const N: usize>(
