@@ -181,7 +181,7 @@ impl<K: Key> Cursor<K> {
             _ => {
                 // todo: consider update self?
                 let (_, value) = leaf.locate_slot(&self.k);
-                value.map(|kv| &kv.1)
+                value.map(|kv| kv.1)
             }
         }
     }

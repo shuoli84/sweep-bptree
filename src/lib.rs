@@ -249,7 +249,7 @@ where
     fn find_in_leaf(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf_node = self.node_store.get_leaf(leaf_id);
         let (_, kv) = leaf_node.locate_slot(k);
-        kv.map(|kv| &kv.1)
+        kv.map(|kv| kv.1)
     }
 
     fn find_descend_mut(&mut self, node_id: NodeId, k: &S::K) -> Option<&mut S::V> {
@@ -259,7 +259,7 @@ where
                 let (_, child_id) = inner_node.locate_child(k);
                 self.find_descend_mut(child_id, k)
             }
-            NodeId::Leaf(leaf_id) => self.find_in_leaf_mut(leaf_id, k),
+            NodeId::Leaf(leaf_id) => self.find_in_leaf_mut_and_cache_it(leaf_id, k),
         }
     }
 
@@ -269,11 +269,23 @@ where
         kv
     }
 
+    fn find_in_leaf_mut_and_cache_it(
+        &mut self,
+        leaf_id: LeafNodeId,
+        k: &S::K,
+    ) -> Option<&mut S::V> {
+        let leaf_node = self.node_store.get_mut_leaf(leaf_id);
+        let key_range = leaf_node.key_range();
+        *self.leaf_cache.borrow_mut() = Some((key_range.0, key_range.1, leaf_id));
+        let (_, kv) = leaf_node.locate_slot_mut(k);
+        kv
+    }
+
     fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf_node = self.node_store.get_leaf(leaf_id);
         self.set_cache(leaf_id, leaf_node.key_range());
         let (_, kv) = leaf_node.locate_slot(k);
-        kv.map(|kv| &kv.1)
+        kv.map(|kv| kv.1)
     }
 
     /// delete element identified by K
@@ -666,7 +678,13 @@ where
     /// Returns the leaf whose range contains `k`.
     /// User should query the leaf and check key existance.
     pub fn locate_leaf(&self, k: &S::K) -> Option<LeafNodeId> {
-        // todo: check cache first?
+        if let Some(cache) = self.leaf_cache.borrow().as_ref() {
+            if cache.0 <= *k && cache.1 >= *k {
+                // cache hit
+                return Some(cache.2);
+            }
+        }
+
         let leaf_id = match self.root? {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
@@ -713,7 +731,7 @@ where
     }
 
     /// Create an cursor for k
-    pub fn get_cursor(&self, k: &S::K) -> Option<Cursor<S::K>> {
+    pub fn get_cursor(&self, k: &S::K) -> Option<(Cursor<S::K>, Option<(&S::K, &S::V)>)> {
         let node_id = self.root?;
         let leaf_id = match node_id {
             NodeId::Inner(inner_id) => {
@@ -734,8 +752,8 @@ where
         }?;
 
         let leaf = self.node_store.get_leaf(leaf_id);
-        let (idx, _v) = leaf.locate_slot(k);
-        Some(Cursor::new(*k, leaf_id, idx))
+        let (idx, kv) = leaf.locate_slot(k);
+        Some((Cursor::new(*k, leaf_id, idx), kv))
     }
 
     #[cfg(test)]
@@ -912,7 +930,7 @@ pub trait LNode<K: Key, V: Value>: Clone + Default {
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
     ) -> Self;
-    fn locate_slot(&self, k: &K) -> (usize, Option<&(K, V)>);
+    fn locate_slot(&self, k: &K) -> (usize, Option<(&K, &V)>);
     fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>);
     fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V>;
     fn delete_at(&mut self, idx: usize) -> (K, V);
@@ -1487,7 +1505,7 @@ mod tests {
     fn test_cursor() {
         let (mut tree, _) = create_test_tree::<30>();
 
-        let cursor = tree.get_cursor(&10).unwrap();
+        let (cursor, _kv) = tree.get_cursor(&10).unwrap();
         assert_eq!(cursor.key().clone(), 10);
         assert_eq!(cursor.value(&tree).unwrap().clone(), 10);
 
@@ -1511,6 +1529,10 @@ mod tests {
             let next = cursor.next(&tree).unwrap();
             assert_eq!(next.key().clone(), 11);
         }
+
+        let (cursor, kv) = tree.get_cursor(&10).unwrap();
+        assert_eq!(cursor.key().clone(), 10);
+        assert!(kv.is_none());
     }
 
     pub fn create_test_tree<const N: usize>(

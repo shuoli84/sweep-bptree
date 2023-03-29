@@ -145,12 +145,12 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&(K, V)>) {
+    pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<(&K, &V)>) {
         match self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
-                (idx, self.slot_data[idx].as_ref())
+                (idx, self.slot_data[idx].as_ref().map(|kv| (&kv.0, &kv.1)))
             }
 
             Err(idx) => {
@@ -333,7 +333,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         self.slot_data[idx].as_ref()
     }
 
-    fn locate_slot(&self, k: &K) -> (usize, Option<&(K, V)>) {
+    fn locate_slot(&self, k: &K) -> (usize, Option<(&K, &V)>) {
         Self::locate_child(self, k)
     }
 
