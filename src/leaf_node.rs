@@ -377,11 +377,14 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Box::new(LeafNode::iter(self))
     }
 
-    fn key_range(&self) -> (K, K) {
-        (
+    fn key_range(&self) -> Option<(K, K)> {
+        if self.size == 0 {
+            return None;
+        }
+        Some((
             self.slot_data[0].as_ref().unwrap().0,
             self.slot_data[self.size - 1].as_ref().unwrap().0,
-        )
+        ))
     }
 }
 

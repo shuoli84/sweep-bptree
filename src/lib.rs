@@ -74,7 +74,7 @@ pub struct BPlusTree<S: NodeStore> {
     len: usize,
     node_store: S,
     /// store last accessed leaf, and it's key range
-    leaf_cache: RefCell<Option<(S::K, S::K, LeafNodeId)>>,
+    leaf_cache: RefCell<Option<CacheItem<S::K>>>,
 }
 
 impl<S> BPlusTree<S>
@@ -178,10 +178,10 @@ where
                         let slot_key: S::K = r_leaf.data_at(0).0;
 
                         if k >= slot_key {
-                            self.set_cache(new_leaf_id, r_leaf.key_range());
+                            self.set_cache(CacheItem::try_from(new_leaf_id, &r_leaf));
                         } else {
-                            let l_leaf_key = l_leaf.key_range();
-                            self.set_cache(leaf_id, l_leaf_key);
+                            let cache_item = CacheItem::try_from(leaf_id, l_leaf);
+                            self.set_cache(cache_item);
                         }
 
                         // fix r_leaf's next's prev
@@ -199,8 +199,9 @@ where
         }
     }
 
-    fn set_cache(&self, id: LeafNodeId, key_range: (S::K, S::K)) {
-        *self.leaf_cache.borrow_mut() = Some((key_range.0, key_range.1, id));
+    #[inline]
+    fn set_cache(&self, cache_item: Option<CacheItem<S::K>>) {
+        *self.leaf_cache.borrow_mut() = cache_item;
     }
 
     fn clear_cache(&self) {
@@ -209,9 +210,9 @@ where
 
     pub fn get(&self, k: &S::K) -> Option<&S::V> {
         if let Some(cache) = self.leaf_cache.borrow().as_ref() {
-            if cache.0 <= *k && cache.1 >= *k {
+            if cache.start <= *k && cache.end >= *k {
                 // cache hit
-                return self.find_in_leaf(cache.2, k);
+                return self.find_in_leaf(cache.leaf_id, k);
             }
         }
 
@@ -222,9 +223,9 @@ where
     pub fn get_mut(&mut self, k: &S::K) -> Option<&mut S::V> {
         let mut cache_leaf_id: Option<LeafNodeId> = None;
         if let Some(cache) = self.leaf_cache.borrow_mut().as_ref() {
-            if cache.0 <= *k && cache.1 >= *k {
+            if cache.start <= *k && cache.end >= *k {
                 // cache hit
-                cache_leaf_id = Some(cache.2);
+                cache_leaf_id = Some(cache.leaf_id);
             }
         }
 
@@ -275,16 +276,15 @@ where
         k: &S::K,
     ) -> Option<&mut S::V> {
         let leaf_node = self.node_store.get_mut_leaf(leaf_id);
-        let key_range = leaf_node.key_range();
-        *self.leaf_cache.borrow_mut() = Some((key_range.0, key_range.1, leaf_id));
+        *self.leaf_cache.borrow_mut() = CacheItem::try_from(leaf_id, leaf_node);
         let (_, kv) = leaf_node.locate_slot_mut(k);
         kv
     }
 
     fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
-        let leaf_node = self.node_store.get_leaf(leaf_id);
-        self.set_cache(leaf_id, leaf_node.key_range());
-        let (_, kv) = leaf_node.locate_slot(k);
+        let leaf = self.node_store.get_leaf(leaf_id);
+        self.set_cache(CacheItem::try_from(leaf_id, leaf));
+        let (_, kv) = leaf.locate_slot(k);
         kv.map(|kv| kv.1)
     }
 
@@ -295,10 +295,9 @@ where
             DeleteDescendResult::Done(kv) => Some(kv),
             DeleteDescendResult::None => None,
             DeleteDescendResult::LeafUnderSize(idx) => {
-                let item = self
-                    .node_store
-                    .get_mut_leaf(root_id.leaf_id().unwrap())
-                    .delete_at(idx);
+                let leaf_id = root_id.leaf_id().unwrap();
+                let leaf = self.node_store.get_mut_leaf(leaf_id);
+                let item = leaf.delete_at(idx);
                 Some(item)
             }
             DeleteDescendResult::InnerUnderSize(deleted_item) => {
@@ -315,8 +314,8 @@ where
             self.len -= 1;
         }
 
-        // clear cache for remove
         self.clear_cache();
+
         r.map(|kv| kv.1)
     }
 
@@ -679,9 +678,9 @@ where
     /// User should query the leaf and check key existance.
     pub fn locate_leaf(&self, k: &S::K) -> Option<LeafNodeId> {
         if let Some(cache) = self.leaf_cache.borrow().as_ref() {
-            if cache.0 <= *k && cache.1 >= *k {
+            if cache.start <= *k && cache.end >= *k {
                 // cache hit
-                return Some(cache.2);
+                return Some(cache.leaf_id);
             }
         }
 
@@ -779,6 +778,29 @@ where
             last_leaf_id = Some(leaf_id);
             leaf_id = n.unwrap();
         }
+    }
+}
+
+#[derive(Clone)]
+struct CacheItem<K> {
+    start: K,
+    end: K,
+    leaf_id: LeafNodeId,
+    // consider cache the item?
+}
+
+impl<K: Key> CacheItem<K> {
+    fn try_from<L: LNode<K, V>, V: Value>(id: LeafNodeId, leaf: &L) -> Option<Self> {
+        if leaf.len() == 0 {
+            return None;
+        }
+
+        let (start, end) = leaf.key_range()?;
+        Some(Self {
+            start,
+            end,
+            leaf_id: id,
+        })
     }
 }
 
@@ -919,7 +941,7 @@ pub trait LNode<K: Key, V: Value>: Clone + Default {
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]);
     fn data_at(&self, slot: usize) -> &(K, V);
     fn try_data_at(&self, idx: usize) -> Option<&(K, V)>;
-    fn key_range(&self) -> (K, K);
+    fn key_range(&self) -> Option<(K, K)>;
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
     fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V>;

@@ -186,13 +186,14 @@ impl<K: Key> Cursor<K> {
         }
     }
 
+    #[inline]
     fn locate_leaf<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(LeafNodeId, &'b S::LeafNode)> {
         let leaf_id = self.leaf_id_hint;
         if let Some(leaf) = tree.node_store.try_get_leaf(leaf_id) {
-            if range_contains(&leaf.key_range(), &self.k) {
+            if range_contains(&leaf.key_range().unwrap(), &self.k) {
                 return Some((leaf_id, leaf));
             }
         }
