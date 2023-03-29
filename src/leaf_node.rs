@@ -114,7 +114,6 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
                     .copy_from_slice(&self.slot_data[split_origin_size + insert_idx..N]);
             }
 
-            self.slot_data[split_origin_size..N].fill(None);
             self.next = Some(new_leaf_id);
             self.size = split_origin_size;
 
