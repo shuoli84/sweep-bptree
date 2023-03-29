@@ -90,6 +90,11 @@ where
         }
     }
 
+    /// Gets a reference to the `NodeStore` that this `BPlusTree` was created with.
+    pub fn node_store(&self) -> &S {
+        &self.node_store
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
@@ -349,10 +354,8 @@ where
                         }
                         let merge_slot = if child_idx > 0 {
                             child_idx - 1
-                        } else if child_idx < inner_node_size {
-                            child_idx
                         } else {
-                            return DeleteDescendResult::InnerUnderSize(deleted_item);
+                            child_idx
                         };
 
                         match Self::merge_inner_node(&mut self.node_store, inner_id, merge_slot) {
@@ -544,12 +547,10 @@ where
         }
 
         let parent = node_store.get_mut_inner(parent_id);
-        // the merge on inner, it could propagate
+
         match parent.merge_child(slot) {
-            InnerMergeResult::Done => {
-                return DeleteDescendResult::Done(kv);
-            }
-            InnerMergeResult::UnderSize => return DeleteDescendResult::InnerUnderSize(kv),
+            InnerMergeResult::Done => DeleteDescendResult::Done(kv),
+            InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
         }
     }
 
@@ -882,9 +883,8 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
         }
     }
 
-    fn print(&self) {
+    pub fn print(&self) {
         for (idx, inner) in self.inner_nodes.iter().enumerate() {
-            // dbg!(inner);
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?}",
                 inner.size(),
@@ -897,10 +897,10 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
             println!(
                 "leaf: {idx} p:{:?} n:{:?} items:{:?}",
                 leaf.prev()
-                    .map(|l| l.as_u32().to_string())
+                    .map(|l| l.as_usize().to_string())
                     .unwrap_or("-".to_string()),
                 leaf.next()
-                    .map(|l| l.as_u32().to_string())
+                    .map(|l| l.as_usize().to_string())
                     .unwrap_or("-".to_string()),
                 leaf.iter().map(|kv| kv.0).collect::<Vec<_>>()
             );
@@ -917,39 +917,39 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     type LeafNode = LeafNode<K, V, LN>;
 
     fn new_empty_inner(&mut self) -> InnerNodeId {
-        let id = InnerNodeId::from_u32(self.inner_nodes.len() as u32);
+        let id = InnerNodeId::from_usize(self.inner_nodes.len());
         let node = Self::InnerNode::default();
         self.inner_nodes.push(node);
         id
     }
 
     fn add_inner(&mut self, node: Self::InnerNode) -> InnerNodeId {
-        let id = InnerNodeId::from_u32(self.inner_nodes.len() as u32);
+        let id = InnerNodeId::from_usize(self.inner_nodes.len());
         self.inner_nodes.push(node);
         id
     }
 
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode {
-        &self.inner_nodes[id.as_u32() as usize]
+        &self.inner_nodes[id.as_usize()]
     }
 
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode {
-        &mut self.inner_nodes[id.as_u32() as usize]
+        &mut self.inner_nodes[id.as_usize()]
     }
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
-        let id = LeafNodeId::from_u32(self.leaf_nodes.len() as u32);
+        let id = LeafNodeId::from_u32(self.leaf_nodes.len());
         let node = Self::LeafNode::default();
         self.leaf_nodes.push(node);
-        (id, &mut self.leaf_nodes[id.as_u32() as usize])
+        (id, &mut self.leaf_nodes[id.as_usize()])
     }
 
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode {
-        &self.leaf_nodes[id.as_u32() as usize]
+        &self.leaf_nodes[id.as_usize()]
     }
 
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
-        let leaf_node = self.leaf_nodes.get(id.as_u32() as usize)?;
+        let leaf_node = self.leaf_nodes.get(id.as_usize())?;
         if leaf_node.len() == 0 {
             None
         } else {
@@ -958,7 +958,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     }
 
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode {
-        &mut self.leaf_nodes[id.as_u32() as usize]
+        &mut self.leaf_nodes[id.as_usize()]
     }
 
     fn debug(&self) {
@@ -966,11 +966,11 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     }
 
     fn take_leaf(&mut self, id: LeafNodeId) -> Self::LeafNode {
-        std::mem::take(&mut self.leaf_nodes[id.as_u32() as usize])
+        std::mem::take(&mut self.leaf_nodes[id.as_usize()])
     }
 
     fn take_inner(&mut self, id: InnerNodeId) -> Self::InnerNode {
-        std::mem::take(&mut self.inner_nodes[id.as_u32() as usize])
+        std::mem::take(&mut self.inner_nodes[id.as_usize()])
     }
 }
 

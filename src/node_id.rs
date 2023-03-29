@@ -1,25 +1,25 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct InnerNodeId(pub(crate) u32);
+pub struct InnerNodeId(pub(crate) usize);
 
 impl InnerNodeId {
-    pub fn from_u32(id: u32) -> Self {
+    pub fn from_usize(id: usize) -> Self {
         Self(id)
     }
 
-    pub fn as_u32(&self) -> u32 {
+    pub fn as_usize(&self) -> usize {
         self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct LeafNodeId(pub(crate) u32);
+pub struct LeafNodeId(pub(crate) usize);
 
 impl LeafNodeId {
-    pub fn from_u32(id: u32) -> Self {
+    pub fn from_u32(id: usize) -> Self {
         Self(id)
     }
 
-    pub fn as_u32(&self) -> u32 {
+    pub fn as_usize(&self) -> usize {
         self.0
     }
 }
