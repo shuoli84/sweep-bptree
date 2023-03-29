@@ -210,9 +210,6 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             new_child_ids[0] = Some(new_child_id);
         }
 
-        self.slot_key[split_origin_size..N].fill(None);
-        self.child_id[split_origin_size + 1..N + 1].fill(None);
-
         (
             new_key,
             Self {
