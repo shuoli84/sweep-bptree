@@ -2,11 +2,11 @@ use crate::*;
 
 #[derive(Debug, Clone)]
 pub struct LeafNode<K: Key, V: Value, const N: usize> {
-    pub(crate) prev: Option<LeafNodeId>,
-    pub(crate) next: Option<LeafNodeId>,
+    prev: Option<LeafNodeId>,
+    next: Option<LeafNodeId>,
     /// how many data items
-    pub(crate) size: usize,
-    pub(crate) slot_data: [Option<(K, V)>; N],
+    size: usize,
+    slot_data: [Option<(K, V)>; N],
 }
 
 impl<K: Key, V: Value, const N: usize> Default for LeafNode<K, V, N> {
