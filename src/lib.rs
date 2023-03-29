@@ -49,8 +49,8 @@ pub use iterator::*;
 ///     tree.insert(i, (i as f64, i as f64));
 /// }
 ///
-/// let cursor_0 = tree.cursor_first().unwrap();
-/// let cursor_1 = tree.cursor_first().unwrap();
+/// let mut cursor_0 = tree.cursor_first().unwrap();
+/// let mut cursor_1 = tree.cursor_first().unwrap();
 ///
 /// // remove the key 0
 /// tree.remove(&0);
@@ -59,7 +59,7 @@ pub use iterator::*;
 /// assert!(cursor_0.value(&tree).is_none());
 ///
 /// // move to next
-/// let cursor_next = cursor_0.next(&tree).unwrap();
+/// let mut cursor_next = cursor_0.next(&tree).unwrap();
 /// assert_eq!(*cursor_next.key(), 1);
 /// assert_eq!(cursor_next.value(&tree).unwrap().0, 1.);
 ///
