@@ -712,6 +712,32 @@ where
         Cursor::first(self).map(|c| c.0)
     }
 
+    /// Create an cursor for k
+    pub fn get_cursor(&self, k: &S::K) -> Option<Cursor<S::K>> {
+        let node_id = self.root?;
+        let leaf_id = match node_id {
+            NodeId::Inner(inner_id) => {
+                let mut result = None;
+                self.descend_visit_inner(inner_id, |inner_node| {
+                    let (_idx, node_id) = inner_node.locate_child(k);
+                    match node_id {
+                        NodeId::Inner(inner_node) => Some(inner_node),
+                        NodeId::Leaf(leaf_id) => {
+                            result = Some(leaf_id);
+                            None
+                        }
+                    }
+                });
+                result
+            }
+            NodeId::Leaf(leaf_id) => Some(leaf_id),
+        }?;
+
+        let leaf = self.node_store.get_leaf(leaf_id);
+        let (idx, _v) = leaf.locate_slot(k);
+        Some(Cursor::new(*k, leaf_id, idx))
+    }
+
     #[cfg(test)]
     fn validate(&self) {
         let Some(mut leaf_id) = self.first_leaf() else { return; };
@@ -1455,6 +1481,36 @@ mod tests {
         let v = tree.get_mut(&1).unwrap();
         *v = 100;
         assert_eq!(tree.get(&1).unwrap().clone(), 100);
+    }
+
+    #[test]
+    fn test_cursor() {
+        let (mut tree, _) = create_test_tree::<30>();
+
+        let cursor = tree.get_cursor(&10).unwrap();
+        assert_eq!(cursor.key().clone(), 10);
+        assert_eq!(cursor.value(&tree).unwrap().clone(), 10);
+
+        {
+            let prev = cursor.prev(&tree).unwrap();
+            assert_eq!(prev.key().clone(), 9);
+
+            let next = cursor.next(&tree).unwrap();
+            assert_eq!(next.key().clone(), 11);
+        }
+
+        tree.remove(&10);
+
+        {
+            assert_eq!(cursor.key().clone(), 10);
+            assert!(cursor.value(&tree).is_none());
+
+            let prev = cursor.prev(&tree).unwrap();
+            assert_eq!(prev.key().clone(), 9);
+
+            let next = cursor.next(&tree).unwrap();
+            assert_eq!(next.key().clone(), 11);
+        }
     }
 
     pub fn create_test_tree<const N: usize>(

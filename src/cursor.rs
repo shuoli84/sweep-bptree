@@ -11,18 +11,18 @@ pub struct Cursor<K: Key> {
     k: K,
     /// The leaf node id this cursor points to. This is a hint, which means it is possible the leaf
     /// for `k` is changed. In that case, the cursor will do a lookup first.
-    leaf_id_hint: Option<LeafNodeId>,
+    leaf_id_hint: LeafNodeId,
     /// The offset this cursor points to inside the leaf. This is a hint, if the underlying tree is
     /// modified, then the offset may be invalid.
     offset_hint: usize,
 }
 
 impl<K: Key> Cursor<K> {
-    pub fn new(k: K) -> Self {
+    pub(crate) fn new(k: K, leaf_id: LeafNodeId, offset: usize) -> Self {
         Self {
             k,
-            leaf_id_hint: None,
-            offset_hint: 0,
+            leaf_id_hint: leaf_id,
+            offset_hint: offset,
         }
     }
 
@@ -41,7 +41,7 @@ impl<K: Key> Cursor<K> {
         Some((
             Self {
                 k: kv.0.clone(),
-                leaf_id_hint: Some(leaf_id),
+                leaf_id_hint: leaf_id,
                 offset_hint: 0,
             },
             &kv.1,
@@ -58,7 +58,7 @@ impl<K: Key> Cursor<K> {
         Some((
             Self {
                 k: kv.0.clone(),
-                leaf_id_hint: Some(leaf_id),
+                leaf_id_hint: leaf_id,
                 offset_hint: leaf.len() - 1,
             },
             &kv.1,
@@ -67,14 +67,14 @@ impl<K: Key> Cursor<K> {
 
     /// Get the `Cursor` points to the prev key-value pair. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just under the deleted key.
-    pub fn prev<'a, 'b, S: NodeStore<K = K>>(&'a mut self, tree: &'b BPlusTree<S>) -> Option<Self> {
+    pub fn prev<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<Self> {
         self.prev_with_value(tree).map(|x| x.0)
     }
 
     /// Get the `Cursor` points to the prev key-value pair, also with a reference to the value.
     /// This is faster than first `prev`, then `value`.
     pub fn prev_with_value<'a, 'b, S: NodeStore<K = K>>(
-        &'a mut self,
+        &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(Self, &'b S::V)> {
         let (leaf_id, leaf) = self.locate_leaf(tree)?;
@@ -107,7 +107,7 @@ impl<K: Key> Cursor<K> {
         Some((
             Self {
                 k: kv.0,
-                leaf_id_hint: Some(leaf_id),
+                leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
             &kv.1,
@@ -116,13 +116,13 @@ impl<K: Key> Cursor<K> {
 
     /// Get the `Cursor` points to the next key-value pair. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just larger than the deleted key.
-    pub fn next<'a, 'b, S: NodeStore<K = K>>(&'a mut self, tree: &'b BPlusTree<S>) -> Option<Self> {
+    pub fn next<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<Self> {
         self.next_with_value(tree).map(|x| x.0)
     }
 
     /// Get the `Cursor` points to the next key-value pair, also with a reference to the value.
     pub fn next_with_value<'a, 'b, S: NodeStore<K = K>>(
-        &'a mut self,
+        &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(Self, &'b S::V)> {
         let (leaf_id, leaf) = self.locate_leaf(tree)?;
@@ -143,7 +143,7 @@ impl<K: Key> Cursor<K> {
             Some((
                 Self {
                     k: kv.0,
-                    leaf_id_hint: Some(leaf_id),
+                    leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
                 &kv.1,
@@ -156,7 +156,7 @@ impl<K: Key> Cursor<K> {
             Some((
                 Self {
                     k: kv.0,
-                    leaf_id_hint: Some(leaf_id),
+                    leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },
                 &kv.1,
@@ -171,7 +171,7 @@ impl<K: Key> Cursor<K> {
 
     /// get the value attached to cursor, if the underlying key is deleted, this returns None
     pub fn value<'a, 'b, S: NodeStore<K = K>>(
-        &'a mut self,
+        &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<&'b S::V> {
         let (_, leaf) = self.locate_leaf(tree)?;
@@ -187,20 +187,18 @@ impl<K: Key> Cursor<K> {
     }
 
     fn locate_leaf<'a, 'b, S: NodeStore<K = K>>(
-        &'a mut self,
+        &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(LeafNodeId, &'b S::LeafNode)> {
-        if let Some(leaf_id) = self.leaf_id_hint {
-            if let Some(leaf) = tree.node_store.try_get_leaf(leaf_id) {
-                if range_contains(&leaf.key_range(), &self.k) {
-                    return Some((leaf_id, leaf));
-                }
+        let leaf_id = self.leaf_id_hint;
+        if let Some(leaf) = tree.node_store.try_get_leaf(leaf_id) {
+            if range_contains(&leaf.key_range(), &self.k) {
+                return Some((leaf_id, leaf));
             }
         }
+
         // no hint or hint outdated, need to do a search by key
         let leaf_id = tree.locate_leaf(&self.k)?;
-        // update leaf hint
-        self.leaf_id_hint = Some(leaf_id);
 
         Some((leaf_id, tree.node_store.get_leaf(leaf_id)))
     }
@@ -231,13 +229,13 @@ mod tests {
 
         let (mut cursor_0, v_0) = Cursor::first(&tree).unwrap();
 
-        let (mut cursor_1, _) = Cursor::first(&tree).unwrap();
+        let (cursor_1, _) = Cursor::first(&tree).unwrap();
 
         assert_eq!(cursor_0.k, 0);
 
         let mut value = vec![v_0.clone()];
         let mut keys_deleted = BTreeSet::new();
-        while let Some((mut c, v)) = cursor_0.next_with_value(&tree) {
+        while let Some((c, v)) = cursor_0.next_with_value(&tree) {
             println!("\n-------------------");
             println!("cursor {:?}", c);
             tree.node_store.debug();
