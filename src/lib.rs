@@ -1069,12 +1069,12 @@ mod tests {
 
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.slot_key[1], Some(13));
+            assert_eq!(parent.key(1).clone(), 13);
         }
 
         {
             let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.size, 3);
+            assert_eq!(child_1.size(), 3);
             assert_eq!(
                 child_1.iter_key().cloned().collect::<Vec<_>>(),
                 vec![10, 11, 12]
@@ -1093,7 +1093,7 @@ mod tests {
         {
             let child_2 = node_store.get_inner(child_2);
 
-            assert_eq!(child_2.size, 3);
+            assert_eq!(child_2.size(), 3);
 
             assert_eq!(
                 child_2.iter_key().cloned().collect::<Vec<_>>(),
@@ -1124,42 +1124,26 @@ mod tests {
             .get_mut_inner(parent_id)
             .set_data([10, 30, 50], [child_0, child_1, child_2, child_3]);
 
-        {
-            let child_1 = node_store.get_mut_inner(child_1);
-            child_1.slot_key = [Some(10), Some(11), Some(12), None];
-            child_1.child_id = [
-                Some(LeafNodeId(1).into()),
-                Some(LeafNodeId(2).into()),
-                Some(LeafNodeId(3).into()),
-                Some(LeafNodeId(4).into()),
-                None,
-            ];
-            child_1.size = 3;
-        }
+        node_store.get_mut_inner(child_1).set_data(
+            [10, 11, 12],
+            [LeafNodeId(1), LeafNodeId(2), LeafNodeId(3), LeafNodeId(4)],
+        );
 
-        {
-            let child_2 = node_store.get_mut_inner(child_2);
-            child_2.slot_key = [Some(39), Some(40), Some(41), None];
-            child_2.child_id = [
-                Some(LeafNodeId(5).into()),
-                Some(LeafNodeId(6).into()),
-                Some(LeafNodeId(7).into()),
-                Some(LeafNodeId(8).into()),
-                None,
-            ];
-            child_2.size = 3;
-        }
+        node_store.get_mut_inner(child_2).set_data(
+            [39, 40, 41],
+            [LeafNodeId(5), LeafNodeId(6), LeafNodeId(7), LeafNodeId(8)],
+        );
 
         assert!(BPlusTree::try_rotate_left_for_inner_node(&mut node_store, parent_id, 1).is_some());
 
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.slot_key[1], Some(39));
+            assert_eq!(parent.key(1).clone(), 39);
         }
 
         {
             let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.size, 4);
+            assert_eq!(child_1.size(), 4);
             assert_eq!(
                 child_1.iter_key().cloned().collect::<Vec<_>>(),
                 vec![10, 11, 12, 30]
@@ -1179,7 +1163,7 @@ mod tests {
         {
             let child_2 = node_store.get_inner(child_2);
 
-            assert_eq!(child_2.size, 2);
+            assert_eq!(child_2.size(), 2);
 
             assert_eq!(
                 child_2.iter_key().cloned().collect::<Vec<_>>(),
@@ -1219,8 +1203,8 @@ mod tests {
 
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.size, 2);
-            assert_eq!(parent.slot_key[1], Some(50));
+            assert_eq!(parent.size(), 2);
+            assert_eq!(parent.key(1).clone(), 50);
             assert_eq!(
                 parent.iter_child().collect::<Vec<_>>(),
                 vec![child_0.into(), child_1.into(), child_3.into(),]
@@ -1229,7 +1213,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.size, 4);
+            assert_eq!(child_1.size(), 4);
             assert_eq!(
                 child_1.iter_key().cloned().collect::<Vec<_>>(),
                 vec![10, 11, 30, 40]
@@ -1248,7 +1232,7 @@ mod tests {
 
         {
             let child_2 = node_store.get_inner(child_2);
-            assert_eq!(child_2.size, 0);
+            assert_eq!(child_2.size(), 0);
         }
     }
 
@@ -1283,7 +1267,7 @@ mod tests {
 
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.slot_key[1], Some(13));
+            assert_eq!(parent.key(1).clone(), 13);
         }
 
         {
@@ -1331,7 +1315,7 @@ mod tests {
 
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.slot_key[1], Some(40));
+            assert_eq!(parent.key(1).clone(), 40);
         }
 
         {
@@ -1376,7 +1360,7 @@ mod tests {
         let _result = BPlusTree::merge_leaf_node_with_right(&mut node_store, parent_id, 1, 0);
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.slot_key[1], Some(50));
+            assert_eq!(parent.key(1).clone(), 50);
         }
 
         {
@@ -1416,7 +1400,7 @@ mod tests {
         let _result = BPlusTree::merge_leaf_node_left(&mut node_store, parent_id, 1, 0);
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.slot_key[1], Some(50));
+            assert_eq!(parent.key(1).clone(), 50);
         }
 
         {
