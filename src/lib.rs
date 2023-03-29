@@ -90,6 +90,11 @@ where
         }
     }
 
+    /// Gets a reference to the `NodeStore` that this `BPlusTree` was created with.
+    pub fn node_store(&self) -> &S {
+        &self.node_store
+    }
+
     pub fn len(&self) -> usize {
         self.len
     }
@@ -349,10 +354,8 @@ where
                         }
                         let merge_slot = if child_idx > 0 {
                             child_idx - 1
-                        } else if child_idx < inner_node_size {
-                            child_idx
                         } else {
-                            return DeleteDescendResult::InnerUnderSize(deleted_item);
+                            child_idx
                         };
 
                         match Self::merge_inner_node(&mut self.node_store, inner_id, merge_slot) {
@@ -544,12 +547,10 @@ where
         }
 
         let parent = node_store.get_mut_inner(parent_id);
-        // the merge on inner, it could propagate
+
         match parent.merge_child(slot) {
-            InnerMergeResult::Done => {
-                return DeleteDescendResult::Done(kv);
-            }
-            InnerMergeResult::UnderSize => return DeleteDescendResult::InnerUnderSize(kv),
+            InnerMergeResult::Done => DeleteDescendResult::Done(kv),
+            InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
         }
     }
 
@@ -882,9 +883,8 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
         }
     }
 
-    fn print(&self) {
+    pub fn print(&self) {
         for (idx, inner) in self.inner_nodes.iter().enumerate() {
-            // dbg!(inner);
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?}",
                 inner.size(),

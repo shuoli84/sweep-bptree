@@ -139,16 +139,7 @@ fn benchmark_bp_tree(c: &mut Criterion) {
         });
 
         c.bench_function(format!("bptree random_remove {count}").as_str(), |b| {
-            let node_store = NodeStoreBench::new();
-            let mut tree = BPlusTree::new(node_store);
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
+            let tree = create_tree(count);
 
             let mut keys = tree.iter().map(|(k, _v)| k).cloned().collect::<Vec<_>>();
             keys.shuffle(&mut rand::thread_rng());
@@ -290,15 +281,7 @@ fn benchmark_btree(c: &mut Criterion) {
         });
 
         c.bench_function(format!("btree random_remove {count}").as_str(), |b| {
-            let mut tree = BTreeMap::<Point, Value>::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
+            let tree = create_btree(count);
 
             let mut keys = tree.iter().map(|(k, _v)| k).cloned().collect::<Vec<_>>();
             keys.shuffle(&mut rand::thread_rng());
@@ -372,6 +355,41 @@ fn benchmark_btree(c: &mut Criterion) {
             });
         });
     }
+}
+
+fn create_tree(count: usize) -> BPlusTree<NodeStoreBench> {
+    let node_store = NodeStoreBench::new();
+    let mut tree = BPlusTree::new(node_store);
+
+    let mut keys = (0..count).collect::<Vec<_>>();
+    keys.shuffle(&mut rand::thread_rng());
+
+    for i in keys {
+        let k = Point {
+            x: i as f64,
+            y: i as f64,
+        };
+        tree.insert(k, Value::default());
+    }
+
+    tree
+}
+
+fn create_btree(count: usize) -> BTreeMap<Point, Value> {
+    let mut tree = BTreeMap::default();
+
+    let mut keys = (0..count).collect::<Vec<_>>();
+    keys.shuffle(&mut rand::thread_rng());
+
+    for i in keys {
+        let k = Point {
+            x: i as f64,
+            y: i as f64,
+        };
+        tree.insert(k, Value::default());
+    }
+
+    tree
 }
 
 criterion_group!(
