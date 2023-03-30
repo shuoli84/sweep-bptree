@@ -1,5 +1,6 @@
 use crate::*;
 use std::alloc::alloc;
+use std::slice::SliceIndex;
 use std::{
     alloc::Layout,
     mem::{self, MaybeUninit},
@@ -83,7 +84,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     /// returns the child index for k
     pub(crate) fn locate_child(&self, k: &K) -> (usize, NodeId) {
         if self.size > Self::binary_search_threshold() as u16 {
-            match self.slot_key[0..self.size as usize]
+            match unsafe { self.key_area(0..self.size as usize) }
                 .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
             {
                 Err(idx) => {
@@ -112,7 +113,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     pub(crate) fn iter_key(&self) -> impl Iterator<Item = &K> {
-        self.slot_key[0..self.size as usize]
+        unsafe { self.key_area(..self.size as usize) }
             .iter()
             .map(|s| unsafe { s.assume_init_ref() })
     }
@@ -131,16 +132,14 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     pub(crate) fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId) {
         debug_assert!(slot <= self.size());
 
-        // insert_at may insert right at last item
-        if slot < self.size() {
-            self.slot_key
-                .copy_within(slot..self.size as usize, slot + 1);
-            self.child_id
-                .copy_within(slot + 1..self.size as usize + 1, slot + 2);
-        }
+        let new_size = self.size as usize + 1;
+        let new_child_size = self.size as usize + 2;
 
-        self.slot_key[slot] = MaybeUninit::new(key);
-        self.child_id[slot + 1] = MaybeUninit::new(right_child);
+        unsafe { utils::slice_insert(self.key_area_mut(..new_size), slot, key) };
+        unsafe {
+            utils::slice_insert(self.child_area_mut(..new_child_size), slot + 1, right_child)
+        };
+
         self.size += 1;
     }
 
@@ -154,8 +153,6 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         let mut new_node = Self::empty();
         new_node.size = Self::split_new_size() as u16;
 
-        let new_slot_keys = &mut new_node.slot_key;
-        let new_child_ids = &mut new_node.child_id;
         let new_key: K;
 
         let split_origin_size = Self::split_origin_size();
@@ -172,19 +169,26 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             //     1, 2      4, 5
             //    a  b  n   c   d  e
 
-            new_key = unsafe { self.slot_key[split_origin_size - 1].assume_init_read() };
+            new_key = unsafe { self.key_area(split_origin_size - 1).assume_init_read() };
 
-            new_slot_keys[0..split_new_size].copy_from_slice(&self.slot_key[split_origin_size..N]);
-            new_child_ids[0..split_new_size + 1]
-                .copy_from_slice(&self.child_id[split_new_size..N + 1]);
+            unsafe {
+                utils::move_to_slice(
+                    self.key_area_mut(split_origin_size..N),
+                    new_node.key_area_mut(..split_new_size),
+                );
 
-            // assign the key to slot
-            self.slot_key
-                .copy_within(child_idx..self.size as usize, child_idx + 1);
-            self.slot_key[child_idx] = MaybeUninit::new(k);
-            self.child_id
-                .copy_within(child_idx + 1..self.size as usize + 2, child_idx + 2);
-            self.child_id[child_idx + 1] = MaybeUninit::new(new_child_id);
+                utils::move_to_slice(
+                    self.child_area_mut(split_new_size..N + 1),
+                    new_node.child_area_mut(..split_new_size + 1),
+                );
+
+                utils::slice_insert(self.key_area_mut(..self.size as usize + 1), child_idx, k);
+                utils::slice_insert(
+                    self.child_area_mut(..self.size as usize + 2),
+                    child_idx + 1,
+                    new_child_id,
+                );
+            };
         } else if child_idx > split_origin_size {
             // new key 4, new node n
             //      1, 2, 3, 5
@@ -194,24 +198,35 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             //    a  b  c   d   n  e
 
             let prompt_key_index = split_origin_size;
-            new_key = unsafe { self.slot_key[prompt_key_index].assume_init_read() };
+            new_key = unsafe { self.key_area(prompt_key_index).assume_init_read() };
 
             let new_slot_idx = child_idx - 1 - split_origin_size;
             let new_child_idx = child_idx - split_new_size;
 
-            new_slot_keys[0..new_slot_idx].copy_from_slice(
-                &self.slot_key[prompt_key_index + 1..prompt_key_index + new_slot_idx + 1],
-            );
-            new_child_ids[0..new_child_idx].copy_from_slice(
-                &self.child_id[split_new_size + 1..split_new_size + 1 + new_child_idx],
-            );
-            new_slot_keys[new_slot_idx] = MaybeUninit::new(k);
-            new_child_ids[new_child_idx] = MaybeUninit::new(new_child_id);
+            unsafe {
+                utils::move_to_slice(
+                    self.key_area_mut(prompt_key_index + 1..prompt_key_index + new_slot_idx + 1),
+                    new_node.key_area_mut(..new_slot_idx),
+                );
 
-            new_slot_keys[new_slot_idx + 1..split_new_size]
-                .copy_from_slice(&self.slot_key[prompt_key_index + new_slot_idx + 1..N]);
-            new_child_ids[new_child_idx + 1..split_new_size + 1]
-                .copy_from_slice(&self.child_id[split_new_size + 1 + new_child_idx..N + 1]);
+                utils::move_to_slice(
+                    self.child_area_mut(split_new_size + 1..split_new_size + 1 + new_child_idx),
+                    new_node.child_area_mut(0..new_child_idx),
+                );
+
+                *new_node.key_area_mut(new_slot_idx) = MaybeUninit::new(k);
+                *new_node.child_area_mut(new_child_idx) = MaybeUninit::new(new_child_id);
+
+                utils::move_to_slice(
+                    self.key_area_mut(prompt_key_index + new_slot_idx + 1..N),
+                    new_node.key_area_mut(new_slot_idx + 1..split_new_size),
+                );
+
+                utils::move_to_slice(
+                    self.child_area_mut(split_new_size + 1 + new_child_idx..N + 1),
+                    new_node.child_area_mut(new_child_idx + 1..split_new_size + 1),
+                );
+            };
         } else {
             // new key 3, new node n
             //      1, 2, 4, 5
@@ -221,10 +236,19 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             //    a  b  c   n   d  e
             new_key = k;
 
-            new_slot_keys[0..split_new_size].copy_from_slice(&self.slot_key[split_new_size..N]);
-            new_child_ids[1..split_new_size + 1]
-                .copy_from_slice(&self.child_id[split_new_size + 1..N + 1]);
-            new_child_ids[0] = MaybeUninit::new(new_child_id);
+            unsafe {
+                utils::move_to_slice(
+                    self.key_area_mut(split_new_size..N),
+                    new_node.key_area_mut(..split_new_size),
+                );
+
+                utils::move_to_slice(
+                    self.child_area_mut(split_new_size + 1..N + 1),
+                    new_node.child_area_mut(1..split_new_size + 1),
+                );
+
+                *new_node.child_area_mut(0) = MaybeUninit::new(new_child_id);
+            };
         }
 
         (new_key, new_node)
@@ -301,7 +325,47 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     fn key(&self, idx: usize) -> &K {
-        unsafe { self.slot_key[idx].assume_init_ref() }
+        unsafe { self.key_area(idx).assume_init_ref() }
+    }
+
+    unsafe fn key_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
+    where
+        I: SliceIndex<[MaybeUninit<K>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.slot_key.as_mut_slice().get_unchecked_mut(index) }
+    }
+
+    unsafe fn key_area<I, Output: ?Sized>(&self, index: I) -> &Output
+    where
+        I: SliceIndex<[MaybeUninit<K>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.slot_key.as_slice().get_unchecked(index) }
+    }
+
+    unsafe fn child_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
+    where
+        I: SliceIndex<[MaybeUninit<NodeId>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.child_id.as_mut_slice().get_unchecked_mut(index) }
+    }
+
+    unsafe fn child_area<I, Output: ?Sized>(&self, index: I) -> &Output
+    where
+        I: SliceIndex<[MaybeUninit<NodeId>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.child_id.as_slice().get_unchecked(index) }
     }
 }
 
