@@ -434,7 +434,7 @@ where
                 let leaf = self.node_store.get_mut_leaf(leaf_id);
                 match leaf.try_delete(k) {
                     LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
-                    LeafDeleteResult::None => DeleteDescendResult::None,
+                    LeafDeleteResult::NotFound => DeleteDescendResult::None,
                     LeafDeleteResult::UnderSize(idx) => DeleteDescendResult::LeafUnderSize(idx),
                 }
             }

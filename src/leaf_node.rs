@@ -119,21 +119,23 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     /// Delete an item from LeafNode
     pub(crate) fn delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {
-        let (idx, value) = self.locate_child(k);
-        // return if k not exists
-        if value.is_none() {
-            return LeafDeleteResult::None;
+        match self.locate_child_idx(k) {
+            Ok(idx) => {
+                if self.size > Self::split_origin_size() {
+                    let result = std::mem::take(&mut self.slot_data[idx]).unwrap();
+                    self.slot_data.copy_within(idx + 1..self.size, idx);
+                    self.size -= 1;
+                    LeafDeleteResult::Done(result)
+                } else {
+                    LeafDeleteResult::UnderSize(idx)
+                }
+            }
+            _ => LeafDeleteResult::NotFound,
         }
+    }
 
-        let split_origin_size = Self::split_origin_size();
-        if self.size > split_origin_size {
-            let result = self.slot_data[idx].unwrap();
-            self.slot_data.copy_within(idx + 1..self.size, idx);
-            self.size -= 1;
-            LeafDeleteResult::Done(result)
-        } else {
-            LeafDeleteResult::UnderSize(idx)
-        }
+    pub(crate) fn locate_child_idx(&self, k: &K) -> Result<usize, usize> {
+        self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0)
     }
 
     pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<(&K, &V)>) {
@@ -259,7 +261,7 @@ pub enum LeafUpsertResult<V> {
 
 pub enum LeafDeleteResult<K, V> {
     /// Item not exists
-    None,
+    NotFound,
     /// Succeeded deleted
     Done((K, V)),
     /// Item exists, but not able to delete because a merge is required
