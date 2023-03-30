@@ -2,11 +2,12 @@ use crate::*;
 
 #[derive(Debug, Clone)]
 pub struct LeafNode<K: Key, V: Value, const N: usize> {
-    prev: Option<LeafNodeId>,
-    next: Option<LeafNodeId>,
     /// how many data items
     size: usize,
     slot_data: [Option<(K, V)>; N],
+
+    prev: Option<LeafNodeId>,
+    next: Option<LeafNodeId>,
 }
 
 impl<K: Key, V: Value, const N: usize> Default for LeafNode<K, V, N> {
@@ -18,10 +19,11 @@ impl<K: Key, V: Value, const N: usize> Default for LeafNode<K, V, N> {
 impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     pub(crate) fn new() -> Self {
         LeafNode {
-            prev: None,
-            next: None,
             size: 0,
             slot_data: [None; N],
+
+            prev: None,
+            next: None,
         }
     }
 
@@ -82,10 +84,9 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
         let prev_next = self.next;
 
-        if insert_idx < split_origin_size {
-            // data insert to origin/left
-            let mut new_slot_data = [None; N];
-
+        // data insert to origin/left
+        let mut new_slot_data = [None; N];
+        let new_leaf_size = if insert_idx < split_origin_size {
             new_slot_data[..split_new_size].copy_from_slice(&self.slot_data[split_origin_size..N]);
 
             self.slot_data
@@ -94,17 +95,11 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
             self.size = split_origin_size + 1;
             self.next = Some(new_leaf_id);
 
-            Self {
-                prev: Some(self_leaf_id),
-                next: prev_next,
-                slot_data: new_slot_data,
-                size: split_new_size,
-            }
+            split_new_size
         } else {
             // data insert to new/right
             let insert_idx = insert_idx - split_origin_size;
 
-            let mut new_slot_data = [None; N];
             new_slot_data[0..insert_idx].copy_from_slice(
                 &self.slot_data[split_origin_size..split_origin_size + insert_idx],
             );
@@ -117,12 +112,14 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
             self.next = Some(new_leaf_id);
             self.size = split_origin_size;
 
-            Self {
-                prev: Some(self_leaf_id),
-                next: prev_next,
-                slot_data: new_slot_data,
-                size: N - split_origin_size + 1,
-            }
+            split_new_size + 1
+        };
+
+        Self {
+            prev: Some(self_leaf_id),
+            next: prev_next,
+            slot_data: new_slot_data,
+            size: new_leaf_size,
         }
     }
 
