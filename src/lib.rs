@@ -188,14 +188,14 @@ where
             LeafUpsertResult::Inserted => DescendInsertResult::Inserted,
             LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
             LeafUpsertResult::IsFull(idx) => {
-                let (new_id, _) = self.node_store.create_leaf();
+                let new_id = self.node_store.reserve_leaf();
 
                 let l_leaf = self.node_store.get_mut_leaf(id);
                 let r_leaf = l_leaf.split_new_leaf(idx, (k, v), new_id, id);
                 let slot_key: S::K = r_leaf.data_at(0).0;
 
                 if k >= slot_key {
-                    self.set_cache(CacheItem::try_from(new_id, &r_leaf));
+                    self.set_cache(CacheItem::try_from(new_id, r_leaf.as_ref()));
                 } else {
                     let cache_item = CacheItem::try_from(id, l_leaf);
                     self.set_cache(cache_item);
@@ -205,7 +205,7 @@ where
                 if let Some(next) = r_leaf.next() {
                     self.node_store.get_mut_leaf(next).set_prev(Some(new_id));
                 }
-                *self.node_store.get_mut_leaf(new_id) = r_leaf;
+                self.node_store.assign_leaf(new_id, r_leaf);
 
                 DescendInsertResult::Split(slot_key, NodeId::Leaf(new_id))
             }
@@ -896,11 +896,12 @@ pub trait NodeStore: Clone {
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
+    fn reserve_leaf(&mut self) -> LeafNodeId;
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode;
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode>;
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode;
-    /// take the LeafNode
     fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode>;
+    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>);
 }
 
 pub trait Key:
@@ -1008,7 +1009,7 @@ pub trait LNode<K: Key, V: Value> {
         item: (K, V),
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
-    ) -> Self;
+    ) -> Box<Self>;
     fn locate_slot(&self, k: &K) -> Result<usize, usize>;
     fn locate_slot_with_value(&self, k: &K) -> (usize, Option<(&K, &V)>);
 

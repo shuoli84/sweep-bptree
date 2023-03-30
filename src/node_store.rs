@@ -76,6 +76,12 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         self.inner_nodes[id.as_usize()].as_mut().unwrap()
     }
 
+    fn reserve_leaf(&mut self) -> LeafNodeId {
+        let id = LeafNodeId::from_u32(self.leaf_nodes.len());
+        self.leaf_nodes.push(None);
+        id
+    }
+
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
         let id = LeafNodeId::from_u32(self.leaf_nodes.len());
         let node = Self::LeafNode::new();
@@ -106,6 +112,10 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode> {
         std::mem::take(&mut self.leaf_nodes[id.as_usize()]).unwrap()
+    }
+
+    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>) {
+        self.leaf_nodes[id.as_usize()] = Some(leaf);
     }
 
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {

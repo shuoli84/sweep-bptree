@@ -84,14 +84,15 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         item: (K, V),
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
-    ) -> Self {
+    ) -> Box<Self> {
         let split_origin_size = Self::split_origin_size() as usize;
         let split_new_size = N - split_origin_size as usize;
 
-        let prev_next = self.next;
+        let mut new_node = Self::new();
+        new_node.prev = Some(self_leaf_id);
+        new_node.next = self.next;
+        let new_slot_data = &mut new_node.slot_data;
 
-        // data insert to origin/left
-        let mut new_slot_data: [MaybeUninit<(K, V)>; N] = [MaybeUninit::uninit(); N];
         new_slot_data[..split_new_size as usize]
             .copy_from_slice(&self.slot_data[split_origin_size..N]);
 
@@ -115,13 +116,9 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         };
 
         self.next = Some(new_leaf_id);
+        new_node.size = new_leaf_size as u16;
 
-        Self {
-            prev: Some(self_leaf_id),
-            next: prev_next,
-            slot_data: new_slot_data,
-            size: new_leaf_size as u16,
-        }
+        new_node
     }
 
     /// Delete an item from LeafNode
@@ -332,7 +329,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         item: (K, V),
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
-    ) -> Self {
+    ) -> Box<Self> {
         LeafNode::split_new_leaf(self, insert_idx, item, new_leaf_id, self_leaf_id)
     }
 
