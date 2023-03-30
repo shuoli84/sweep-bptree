@@ -3,7 +3,7 @@ use crate::*;
 #[derive(Debug, Clone)]
 pub struct LeafNode<K: Key, V: Value, const N: usize> {
     /// how many data items
-    size: usize,
+    size: u16,
     slot_data: [Option<(K, V)>; N],
 
     prev: Option<LeafNodeId>,
@@ -27,20 +27,20 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    const fn split_origin_size() -> usize {
-        N / 2
+    const fn split_origin_size() -> u16 {
+        (N / 2) as u16
     }
 
     pub fn is_full(&self) -> bool {
-        self.size == N
+        self.size == N as u16
     }
 
     pub fn able_to_lend(&self) -> bool {
-        self.size > Self::split_origin_size()
+        self.size > Self::split_origin_size() as u16
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(K, V)> {
-        self.slot_data[0..self.size]
+        self.slot_data[0..self.size as usize]
             .iter()
             .map(|item| item.as_ref().unwrap())
     }
@@ -52,7 +52,8 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
     pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
-        match self.slot_data[..self.size].binary_search_by_key(&k, |f| f.unwrap().0) {
+        let size = self.size as usize;
+        match self.slot_data[..size].binary_search_by_key(&k, |f| f.unwrap().0) {
             Ok(idx) => {
                 // update existing item
                 let prev_v = std::mem::replace(&mut self.slot_data[idx], Some((k, v)));
@@ -61,7 +62,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
             Err(idx) => {
                 if !self.is_full() {
-                    self.slot_data.copy_within(idx..self.size, idx + 1);
+                    self.slot_data.copy_within(idx..size, idx + 1);
                     self.slot_data[idx] = Some((k, v));
                     self.size += 1;
                     LeafUpsertResult::Inserted
@@ -79,20 +80,21 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
     ) -> Self {
-        let split_origin_size = Self::split_origin_size();
-        let split_new_size = N - split_origin_size;
+        let split_origin_size = Self::split_origin_size() as usize;
+        let split_new_size = N - split_origin_size as usize;
 
         let prev_next = self.next;
 
         // data insert to origin/left
         let mut new_slot_data = [None; N];
-        new_slot_data[..split_new_size].copy_from_slice(&self.slot_data[split_origin_size..N]);
+        new_slot_data[..split_new_size as usize]
+            .copy_from_slice(&self.slot_data[split_origin_size..N]);
 
         let new_leaf_size = if insert_idx < split_origin_size {
             self.slot_data
                 .copy_within(insert_idx..split_origin_size, insert_idx + 1);
             self.slot_data[insert_idx] = Some(item);
-            self.size = split_origin_size + 1;
+            self.size = (split_origin_size + 1) as u16;
 
             split_new_size
         } else {
@@ -102,7 +104,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
             new_slot_data.copy_within(insert_idx..split_new_size, insert_idx + 1);
             new_slot_data[insert_idx] = Some(item);
 
-            self.size = split_origin_size;
+            self.size = split_origin_size as u16;
 
             split_new_size + 1
         };
@@ -113,7 +115,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
             prev: Some(self_leaf_id),
             next: prev_next,
             slot_data: new_slot_data,
-            size: new_leaf_size,
+            size: new_leaf_size as u16,
         }
     }
 
@@ -123,7 +125,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
             Ok(idx) => {
                 if self.size > Self::split_origin_size() {
                     let result = std::mem::take(&mut self.slot_data[idx]).unwrap();
-                    self.slot_data.copy_within(idx + 1..self.size, idx);
+                    self.slot_data.copy_within(idx + 1..self.size as usize, idx);
                     self.size -= 1;
                     LeafDeleteResult::Done(result)
                 } else {
@@ -135,11 +137,11 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn locate_child_idx(&self, k: &K) -> Result<usize, usize> {
-        self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0)
+        self.slot_data[0..self.len()].binary_search_by_key(k, |f| f.unwrap().0)
     }
 
     pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<(&K, &V)>) {
-        match self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0) {
+        match self.slot_data[0..self.len()].binary_search_by_key(k, |f| f.unwrap().0) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -155,7 +157,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn locate_child_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
-        match self.slot_data[0..self.size].binary_search_by_key(k, |f| f.unwrap().0) {
+        match self.slot_data[0..self.len()].binary_search_by_key(k, |f| f.unwrap().0) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -173,7 +175,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     /// pop the last item, this is used when next sibling undersize
     pub(crate) fn pop(&mut self) -> (K, V) {
         assert!(self.size > Self::split_origin_size());
-        let result = std::mem::take(&mut self.slot_data[self.size - 1]).unwrap();
+        let result = std::mem::take(&mut self.slot_data[self.len() - 1]).unwrap();
         self.size -= 1;
         result
     }
@@ -182,7 +184,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         assert!(self.size > Self::split_origin_size());
 
         let result = self.slot_data[0].unwrap();
-        self.slot_data.copy_within(1..self.size, 0);
+        self.slot_data.copy_within(1..self.size as usize, 0);
         self.size -= 1;
         result
     }
@@ -190,8 +192,8 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     // delete the item at idx and append the item to last
     pub(crate) fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V) {
         let result = self.slot_data[idx].unwrap();
-        self.slot_data.copy_within(idx + 1..self.size, idx);
-        self.slot_data[self.size - 1] = Some(item);
+        self.slot_data.copy_within(idx + 1..self.size as usize, idx);
+        self.slot_data[self.len() - 1] = Some(item);
         result
     }
 
@@ -211,7 +213,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         idx: usize,
     ) -> (&[Option<(K, V)>], (K, V), &[Option<(K, V)>]) {
         let head = &self.slot_data[0..idx];
-        let tail = &self.slot_data[idx + 1..self.size];
+        let tail = &self.slot_data[idx + 1..self.len()];
         let kv = self.slot_data[idx].unwrap();
 
         (head, kv, tail)
@@ -237,17 +239,17 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn data(&self) -> &[Option<(K, V)>] {
-        &self.slot_data[0..self.size]
+        &self.slot_data[0..self.len()]
     }
 
     pub(crate) fn extend(&mut self, data: &[Option<(K, V)>]) {
-        self.slot_data[self.size..self.size + data.len()].copy_from_slice(data);
-        self.size += data.len();
+        self.slot_data[self.size as usize..self.size as usize + data.len()].copy_from_slice(data);
+        self.size += data.len() as u16;
     }
 
     pub(crate) fn delete_at(&mut self, idx: usize) -> (K, V) {
         let result = self.slot_data[idx].unwrap();
-        self.slot_data.copy_within(idx + 1..self.size, idx);
+        self.slot_data.copy_within(idx + 1..self.size as usize, idx);
         self.size -= 1;
         result
     }
@@ -270,7 +272,7 @@ pub enum LeafDeleteResult<K, V> {
 
 impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
     fn len(&self) -> usize {
-        self.size
+        self.size as usize
     }
 
     fn prev(&self) -> Option<LeafNodeId> {
@@ -287,7 +289,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
 
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
         assert!(N1 <= N);
-        self.size = N1;
+        self.size = N1 as u16;
         for i in 0..N1 {
             self.slot_data[i] = Some(data[i]);
         }
@@ -298,7 +300,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn is_full(&self) -> bool {
-        self.size == N
+        self.size == N as u16
     }
 
     fn able_to_lend(&self) -> bool {
@@ -320,7 +322,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn try_data_at(&self, idx: usize) -> Option<&(K, V)> {
-        if idx >= self.size {
+        if idx >= self.size as usize {
             return None;
         }
         self.slot_data[idx].as_ref()
@@ -380,7 +382,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         }
         Some((
             self.slot_data[0].as_ref().unwrap().0,
-            self.slot_data[self.size - 1].as_ref().unwrap().0,
+            self.slot_data[self.len() - 1].as_ref().unwrap().0,
         ))
     }
 }
