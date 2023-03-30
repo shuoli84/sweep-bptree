@@ -11,7 +11,7 @@ fn create_tree() -> BPlusTree<NodeStore> {
     let node_store = NodeStore::new();
     let mut tree = BPlusTree::new(node_store);
 
-    let mut keys = (0..1000).collect::<Vec<_>>();
+    let mut keys = (0..100000).collect::<Vec<_>>();
     keys.shuffle(&mut rand::thread_rng());
 
     for i in keys {

@@ -3,7 +3,7 @@ use crate::{INode, InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, Nod
 #[derive(Debug, Clone)]
 pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> {
     inner_nodes: Vec<InnerNode<K, IN, IC>>,
-    leaf_nodes: Vec<LeafNode<K, V, LN>>,
+    leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 }
 
 impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
@@ -27,7 +27,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
             );
         }
 
-        for (idx, leaf) in self.leaf_nodes.iter().enumerate() {
+        for (idx, leaf) in self.leaf_nodes.iter().flat_map(|t| t).enumerate() {
             println!(
                 "leaf: {idx} p:{:?} n:{:?} items:{:?}",
                 leaf.prev()
@@ -73,17 +73,17 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
         let id = LeafNodeId::from_u32(self.leaf_nodes.len());
-        let node = Self::LeafNode::default();
-        self.leaf_nodes.push(node);
-        (id, &mut self.leaf_nodes[id.as_usize()])
+        let node = Box::new(Self::LeafNode::default());
+        self.leaf_nodes.push(Some(node));
+        (id, self.get_mut_leaf(id))
     }
 
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode {
-        &self.leaf_nodes[id.as_usize()]
+        &self.leaf_nodes[id.as_usize()].as_ref().unwrap()
     }
 
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
-        let leaf_node = self.leaf_nodes.get(id.as_usize())?;
+        let leaf_node = self.leaf_nodes.get(id.as_usize())?.as_ref()?;
         if leaf_node.len() == 0 {
             None
         } else {
@@ -92,15 +92,15 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     }
 
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode {
-        &mut self.leaf_nodes[id.as_usize()]
+        self.leaf_nodes[id.as_usize()].as_mut().unwrap()
     }
 
     fn debug(&self) {
         self.print()
     }
 
-    fn take_leaf(&mut self, id: LeafNodeId) -> Self::LeafNode {
-        std::mem::take(&mut self.leaf_nodes[id.as_usize()])
+    fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode> {
+        std::mem::take(&mut self.leaf_nodes[id.as_usize()]).unwrap()
     }
 
     fn take_inner(&mut self, id: InnerNodeId) -> Self::InnerNode {

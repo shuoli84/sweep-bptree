@@ -899,7 +899,7 @@ pub trait NodeStore: Clone {
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode>;
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode;
     /// take the LeafNode
-    fn take_leaf(&mut self, id: LeafNodeId) -> Self::LeafNode;
+    fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode>;
 }
 
 pub trait Key:
@@ -987,7 +987,7 @@ pub trait INode<K: Key>: Clone + Default {
 }
 
 /// Leaf node trait
-pub trait LNode<K: Key, V: Value>: Clone + Default {
+pub trait LNode<K: Key, V: Value>: Default {
     /// Returns size of the leaf
     fn len(&self) -> usize;
 
@@ -1418,10 +1418,7 @@ mod tests {
             );
         }
 
-        {
-            let child_2 = node_store.get_leaf(child_2);
-            assert_eq!(child_2.len(), 0);
-        }
+        assert!(node_store.try_get_leaf(child_2).is_none());
     }
 
     #[test]
@@ -1458,10 +1455,7 @@ mod tests {
             );
         }
 
-        {
-            let child_2 = node_store.get_leaf(child_2);
-            assert_eq!(child_2.len(), 0);
-        }
+        assert!(node_store.try_get_leaf(child_2).is_none());
     }
 
     #[test]
