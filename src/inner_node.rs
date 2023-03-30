@@ -256,10 +256,10 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     /// merge child identified by `smaller_idx` and `smaller_idx + 1`
     pub(crate) fn merge_child(&mut self, slot: usize) -> InnerMergeResult {
-        self.slot_key
-            .copy_within(slot + 1..self.size as usize, slot);
-        self.child_id
-            .copy_within(slot + 2..self.size as usize + 1, slot + 1);
+        unsafe {
+            utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
+            utils::slice_remove(self.child_area_mut(..self.size as usize + 1), slot + 1);
+        };
         self.size -= 1;
 
         if self.size >= Self::split_origin_size() as u16 {
@@ -270,28 +270,31 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         }
     }
 
-    pub(crate) fn merge_next(&mut self, slot_key: K, right: &Self) {
-        self.slot_key[self.size as usize] = MaybeUninit::new(slot_key);
-        self.size += 1;
-        self.slot_key[self.size as usize..N].copy_from_slice(&right.slot_key[..right.size()]);
-        self.child_id[self.size as usize..N + 1]
-            .copy_from_slice(&right.child_id[..right.size() + 1]);
-        self.size += right.size;
-    }
+    pub(crate) fn merge_next(&mut self, slot_key: K, right: &mut Self) {
+        unsafe {
+            *self.key_area_mut(self.size as usize) = MaybeUninit::new(slot_key);
+            self.size += 1;
 
-    pub(crate) fn shift_left(&mut self) {
-        self.slot_key.copy_within(1..self.size as usize, 0);
-        self.child_id.copy_within(1..self.size as usize + 1, 0);
+            utils::move_to_slice(
+                right.key_area_mut(..right.size()),
+                self.key_area_mut(self.size as usize..N),
+            );
+            utils::move_to_slice(
+                right.child_area_mut(..right.size() + 1),
+                self.child_area_mut(self.size as usize..N + 1),
+            );
+            self.size += right.size;
+        }
     }
 
     /// pop the last key and right child
     pub(crate) fn pop(&mut self) -> (K, NodeId) {
         let k = std::mem::replace(
-            &mut self.slot_key[self.size as usize - 1],
+            unsafe { self.key_area_mut(self.size as usize - 1) },
             MaybeUninit::uninit(),
         );
         let child = std::mem::replace(
-            &mut self.child_id[self.size as usize],
+            unsafe { self.child_area_mut(self.size as usize) },
             MaybeUninit::uninit(),
         );
         self.size -= 1;
@@ -299,16 +302,21 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     pub(crate) fn pop_front(&mut self) -> (K, NodeId) {
-        let k = std::mem::replace(&mut self.slot_key[0], MaybeUninit::uninit());
-        let child = std::mem::replace(&mut self.child_id[0], MaybeUninit::uninit());
-        self.shift_left();
+        let (k, left_c) = unsafe {
+            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
+            let left_c = utils::slice_remove(self.child_area_mut(..self.size as usize + 1), 0);
+            (k, left_c)
+        };
         self.size -= 1;
-        unsafe { (k.assume_init_read(), child.assume_init_read()) }
+
+        (k, left_c)
     }
 
     pub fn push(&mut self, k: K, child: NodeId) {
-        self.slot_key[self.size()] = MaybeUninit::new(k);
-        self.child_id[self.size() + 1] = MaybeUninit::new(child);
+        unsafe {
+            *self.key_area_mut(self.size as usize) = MaybeUninit::new(k);
+            *self.child_area_mut(self.size as usize + 1) = MaybeUninit::new(child);
+        };
         self.size += 1;
     }
 
@@ -386,11 +394,13 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
     }
 
     fn set_key(&mut self, idx: usize, key: K) {
-        self.slot_key[idx] = MaybeUninit::new(key);
+        unsafe {
+            *self.key_area_mut(idx) = MaybeUninit::new(key);
+        }
     }
 
     fn child_id_at(&self, idx: usize) -> NodeId {
-        unsafe { self.child_id[idx].assume_init_read() }
+        unsafe { self.child_area(idx).assume_init_read() }
     }
 
     fn locate_child(&self, k: &K) -> (usize, NodeId) {
@@ -426,14 +436,14 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
     }
 
     fn push_front(&mut self, k: K, child: NodeId) {
-        self.slot_key.copy_within(0..self.size as usize, 1);
-        self.child_id.copy_within(0..self.size as usize + 1, 1);
-        self.slot_key[0] = MaybeUninit::new(k);
-        self.child_id[0] = MaybeUninit::new(child);
+        unsafe {
+            utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
+            utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
+        }
         self.size += 1;
     }
 
-    fn merge_next(&mut self, slot_key: K, right: &Self) {
+    fn merge_next(&mut self, slot_key: K, right: &mut Self) {
         Self::merge_next(self, slot_key, right)
     }
 

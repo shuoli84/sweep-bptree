@@ -542,13 +542,13 @@ where
         let slot_key = node.key(slot).clone();
 
         // merge right into left
-        let right = node_store.take_inner(right_child_id);
+        let mut right = node_store.take_inner(right_child_id);
         let left = node_store.get_mut_inner(left_child_id);
 
         debug_assert!(!right.able_to_lend());
         debug_assert!(!left.able_to_lend());
 
-        left.merge_next(slot_key, &right);
+        left.merge_next(slot_key, &mut right);
 
         let node = node_store.get_mut_inner(parent_id);
         node.merge_child(slot)
@@ -970,7 +970,7 @@ pub trait INode<K: Key> {
     fn push_front(&mut self, k: K, child: NodeId);
 
     /// Merge the key and its right child id at `slot` with its right sibling
-    fn merge_next(&mut self, slot_key: K, right: &Self);
+    fn merge_next(&mut self, slot_key: K, right: &mut Self);
 
     /// Merge children at slot
     fn merge_child(&mut self, slot: usize) -> InnerMergeResult;
