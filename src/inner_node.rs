@@ -7,7 +7,7 @@ use std::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct InnerNode<K: Key, const N: usize, const C: usize> {
-    size: usize,
+    size: u16,
 
     slot_key: [MaybeUninit<K>; N],
     child_id: [MaybeUninit<NodeId>; C],
@@ -56,7 +56,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     ) {
         assert!(N1 + 1 == C1);
         assert!(N1 <= N);
-        self.size = N1;
+        self.size = N1 as u16;
         for i in 0..N1 {
             self.slot_key[i] = MaybeUninit::new(slot_keys[i]);
         }
@@ -68,12 +68,12 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     /// whether this node is full, if yes, then the next insert need to split
     pub fn is_full(&self) -> bool {
-        self.size == N
+        self.size == N as u16
     }
 
     /// whether this node able to lend
     pub fn able_to_lend(&self) -> bool {
-        self.size > Self::split_origin_size()
+        self.size > Self::split_origin_size() as u16
     }
 
     const fn binary_search_threshold() -> usize {
@@ -82,8 +82,8 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     /// returns the child index for k
     pub(crate) fn locate_child(&self, k: &K) -> (usize, NodeId) {
-        if self.size > Self::binary_search_threshold() {
-            match self.slot_key[0..self.size]
+        if self.size > Self::binary_search_threshold() as u16 {
+            match self.slot_key[0..self.size as usize]
                 .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
             {
                 Err(idx) => {
@@ -98,28 +98,28 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 }
             }
         } else {
-            assert!(self.size <= N);
+            assert!(self.size <= N as u16);
 
-            for i in 0..self.size {
+            for i in 0..self.size as usize {
                 match self.key(i).cmp(k) {
                     std::cmp::Ordering::Less => continue,
                     std::cmp::Ordering::Equal => return (i + 1, self.child_id_at(i + 1)),
                     std::cmp::Ordering::Greater => return (i, self.child_id_at(i)),
                 }
             }
-            return (self.size, self.child_id_at(self.size));
+            return (self.size as usize, self.child_id_at(self.size as usize));
         }
     }
 
     pub(crate) fn iter_key(&self) -> impl Iterator<Item = &K> {
-        self.slot_key[0..self.size]
+        self.slot_key[0..self.size as usize]
             .iter()
             .map(|s| unsafe { s.assume_init_ref() })
     }
 
     pub(crate) fn iter_child(&self) -> impl Iterator<Item = NodeId> + '_ {
         let slice = if self.size > 0 {
-            &self.child_id[0..self.size + 1]
+            &self.child_id[0..self.size() + 1]
         } else {
             &self.child_id[..0]
         };
@@ -129,12 +129,14 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     /// Insert `key` and its `right_child` to `slot`
     pub(crate) fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId) {
-        debug_assert!(slot <= self.size);
+        debug_assert!(slot <= self.size());
 
         // insert_at may insert right at last item
-        if slot < self.size {
-            self.slot_key.copy_within(slot..self.size, slot + 1);
-            self.child_id.copy_within(slot + 1..self.size + 1, slot + 2);
+        if slot < self.size() {
+            self.slot_key
+                .copy_within(slot..self.size as usize, slot + 1);
+            self.child_id
+                .copy_within(slot + 1..self.size as usize + 1, slot + 2);
         }
 
         self.slot_key[slot] = MaybeUninit::new(key);
@@ -150,7 +152,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         debug_assert!(self.is_full());
 
         let mut new_node = Self::empty();
-        new_node.size = Self::split_new_size();
+        new_node.size = Self::split_new_size() as u16;
 
         let new_slot_keys = &mut new_node.slot_key;
         let new_child_ids = &mut new_node.child_id;
@@ -159,7 +161,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         let split_origin_size = Self::split_origin_size();
         let split_new_size = Self::split_new_size();
 
-        self.size = split_origin_size;
+        self.size = split_origin_size as u16;
 
         if child_idx < split_origin_size {
             // take node_size 4 as example
@@ -178,10 +180,10 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
             // assign the key to slot
             self.slot_key
-                .copy_within(child_idx..self.size, child_idx + 1);
+                .copy_within(child_idx..self.size as usize, child_idx + 1);
             self.slot_key[child_idx] = MaybeUninit::new(k);
             self.child_id
-                .copy_within(child_idx + 1..self.size + 2, child_idx + 2);
+                .copy_within(child_idx + 1..self.size as usize + 2, child_idx + 2);
             self.child_id[child_idx + 1] = MaybeUninit::new(new_child_id);
         } else if child_idx > split_origin_size {
             // new key 4, new node n
@@ -230,11 +232,13 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     /// merge child identified by `smaller_idx` and `smaller_idx + 1`
     pub(crate) fn merge_child(&mut self, slot: usize) -> InnerMergeResult {
-        self.slot_key.copy_within(slot + 1..self.size, slot);
-        self.child_id.copy_within(slot + 2..self.size + 1, slot + 1);
+        self.slot_key
+            .copy_within(slot + 1..self.size as usize, slot);
+        self.child_id
+            .copy_within(slot + 2..self.size as usize + 1, slot + 1);
         self.size -= 1;
 
-        if self.size >= Self::split_origin_size() {
+        if self.size >= Self::split_origin_size() as u16 {
             InnerMergeResult::Done
         } else {
             // the undersized inner node will be fixed by parent node
@@ -243,22 +247,29 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     pub(crate) fn merge_next(&mut self, slot_key: K, right: &Self) {
-        self.slot_key[self.size] = MaybeUninit::new(slot_key);
+        self.slot_key[self.size as usize] = MaybeUninit::new(slot_key);
         self.size += 1;
-        self.slot_key[self.size..N].copy_from_slice(&right.slot_key[..right.size]);
-        self.child_id[self.size..N + 1].copy_from_slice(&right.child_id[..right.size + 1]);
+        self.slot_key[self.size as usize..N].copy_from_slice(&right.slot_key[..right.size()]);
+        self.child_id[self.size as usize..N + 1]
+            .copy_from_slice(&right.child_id[..right.size() + 1]);
         self.size += right.size;
     }
 
     pub(crate) fn shift_left(&mut self) {
-        self.slot_key.copy_within(1..self.size, 0);
-        self.child_id.copy_within(1..self.size + 1, 0);
+        self.slot_key.copy_within(1..self.size as usize, 0);
+        self.child_id.copy_within(1..self.size as usize + 1, 0);
     }
 
     /// pop the last key and right child
     pub(crate) fn pop(&mut self) -> (K, NodeId) {
-        let k = std::mem::replace(&mut self.slot_key[self.size - 1], MaybeUninit::uninit());
-        let child = std::mem::replace(&mut self.child_id[self.size], MaybeUninit::uninit());
+        let k = std::mem::replace(
+            &mut self.slot_key[self.size as usize - 1],
+            MaybeUninit::uninit(),
+        );
+        let child = std::mem::replace(
+            &mut self.child_id[self.size as usize],
+            MaybeUninit::uninit(),
+        );
         self.size -= 1;
         unsafe { (k.assume_init_read(), child.assume_init_read()) }
     }
@@ -272,8 +283,8 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     pub fn push(&mut self, k: K, child: NodeId) {
-        self.slot_key[self.size] = MaybeUninit::new(k);
-        self.child_id[self.size + 1] = MaybeUninit::new(child);
+        self.slot_key[self.size()] = MaybeUninit::new(k);
+        self.child_id[self.size() + 1] = MaybeUninit::new(child);
         self.size += 1;
     }
 
@@ -303,7 +314,7 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
     }
 
     fn size(&self) -> usize {
-        self.size
+        self.size as usize
     }
 
     fn key(&self, idx: usize) -> &K {
@@ -351,8 +362,8 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
     }
 
     fn push_front(&mut self, k: K, child: NodeId) {
-        self.slot_key.copy_within(0..self.size, 1);
-        self.child_id.copy_within(0..self.size + 1, 1);
+        self.slot_key.copy_within(0..self.size as usize, 1);
+        self.child_id.copy_within(0..self.size as usize + 1, 1);
         self.slot_key[0] = MaybeUninit::new(k);
         self.child_id[0] = MaybeUninit::new(child);
         self.size += 1;
@@ -449,8 +460,8 @@ mod tests {
 
         // child_idx is 1
         let (k, new_node) = inner_node.split(4, 5, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(new_node.size, InnerNode::split_new_size());
-        assert_eq!(inner_node.size, InnerNode::split_origin_size());
+        assert_eq!(new_node.size(), InnerNode::split_new_size());
+        assert_eq!(inner_node.size(), InnerNode::split_origin_size());
         assert_eq!(k, 3);
         assert_eq!(inner_node.slot_key_vec(), vec![1, 2,]);
         assert_eq!(
@@ -489,8 +500,8 @@ mod tests {
 
         // child_idx is 1
         let (k, new_node) = inner_node.split(3, 4, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(inner_node.size, InnerNode::split_origin_size());
-        assert_eq!(new_node.size, InnerNode::split_new_size());
+        assert_eq!(inner_node.size(), InnerNode::split_origin_size());
+        assert_eq!(new_node.size(), InnerNode::split_new_size());
         assert_eq!(k, 3);
         assert_eq!(inner_node.slot_key_vec().as_slice(), &[1, 2]);
         assert_eq!(
@@ -529,7 +540,7 @@ mod tests {
 
         // child_idx is 1
         let (k, new_node) = inner_node.split(2, 3, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(inner_node.size, InnerNode::split_origin_size());
+        assert_eq!(inner_node.size(), InnerNode::split_origin_size());
         assert_eq!(k, 3);
         assert_eq!(inner_node.slot_key_vec().as_slice(), &[1, 2]);
         assert_eq!(
