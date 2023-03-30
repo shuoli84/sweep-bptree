@@ -78,7 +78,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
         let id = LeafNodeId::from_u32(self.leaf_nodes.len());
-        let node = Box::new(Self::LeafNode::default());
+        let node = Self::LeafNode::new();
         self.leaf_nodes.push(Some(node));
         (id, self.get_mut_leaf(id))
     }

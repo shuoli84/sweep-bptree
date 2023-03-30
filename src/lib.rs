@@ -988,7 +988,7 @@ pub trait INode<K: Key>: Default {
 }
 
 /// Leaf node trait
-pub trait LNode<K: Key, V: Value>: Default {
+pub trait LNode<K: Key, V: Value> {
     /// Returns size of the leaf
     fn len(&self) -> usize;
 
