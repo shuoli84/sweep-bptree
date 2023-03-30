@@ -407,9 +407,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_origin() {
-        let mut inner_node = InnerNode::empty();
-
-        inner_node.set_data(
+        let mut inner_node = InnerNode::new(
             [1, 3, 4, 5],
             [
                 InnerNodeId(10),
@@ -445,9 +443,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_new_last() {
-        let mut inner_node = InnerNode::empty();
-
-        inner_node.set_data(
+        let mut inner_node = InnerNode::new(
             [1, 2, 3, 4],
             [
                 InnerNodeId(10),
@@ -485,9 +481,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_new() {
-        let mut inner_node = InnerNode::empty();
-
-        inner_node.set_data(
+        let mut inner_node = InnerNode::new(
             [1, 2, 3, 5],
             [
                 InnerNodeId(10),
@@ -525,9 +519,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_is_the_prompt_key() {
-        let mut inner_node = InnerNode::empty();
-
-        inner_node.set_data(
+        let mut inner_node = InnerNode::new(
             [1, 2, 4, 5],
             [
                 InnerNodeId(10),
