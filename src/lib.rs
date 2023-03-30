@@ -81,6 +81,7 @@ impl<S> BPlusTree<S>
 where
     S: NodeStore,
 {
+    /// Create a new `BPlusTree` with the given `NodeStore`.
     pub fn new(node_store: S) -> Self {
         Self {
             root: None,
@@ -95,10 +96,12 @@ where
         &self.node_store
     }
 
+    /// Returns the number of elements in the tree.
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns true if the tree contains no elements.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -134,6 +137,36 @@ where
         result
     }
 
+    #[inline(never)]
+    fn descend_insert_inner(
+        &mut self,
+        id: InnerNodeId,
+        k: S::K,
+        v: S::V,
+    ) -> DescendInsertResult<S::K, S::V> {
+        let node = self.node_store.get_inner(id);
+        let (child_idx, child_id) = node.locate_child(&k);
+        match self.descend_insert(child_id, k, v) {
+            DescendInsertResult::Inserted => DescendInsertResult::Inserted,
+            DescendInsertResult::Split(key, right_child) => {
+                // child splited
+                let inner_node = self.node_store.get_mut_inner(id);
+
+                if !inner_node.is_full() {
+                    let slot = child_idx;
+                    inner_node.insert_at(slot, key, right_child);
+                    DescendInsertResult::Inserted
+                } else {
+                    let (prompt_k, new_node) = inner_node.split(child_idx, key, right_child);
+
+                    let new_node_id = self.node_store.add_inner(new_node);
+                    DescendInsertResult::Split(prompt_k, NodeId::Inner(new_node_id))
+                }
+            }
+            r => r,
+        }
+    }
+
     fn descend_insert(
         &mut self,
         node_id: NodeId,
@@ -141,60 +174,38 @@ where
         v: S::V,
     ) -> DescendInsertResult<S::K, S::V> {
         match node_id {
-            NodeId::Inner(node_id) => {
-                let node = self.node_store.get_inner(node_id);
-                let (child_idx, child_id) = node.locate_child(&k);
-                match self.descend_insert(child_id, k, v) {
-                    DescendInsertResult::Inserted => DescendInsertResult::Inserted,
-                    DescendInsertResult::Split(key, right_child) => {
-                        // child splited
-                        let inner_node = self.node_store.get_mut_inner(node_id);
+            NodeId::Inner(node_id) => self.descend_insert_inner(node_id, k, v),
+            NodeId::Leaf(leaf_id) => self.insert_leaf(leaf_id, k, v),
+        }
+    }
 
-                        if !inner_node.is_full() {
-                            let slot = child_idx;
-                            inner_node.insert_at(slot, key, right_child);
-                            DescendInsertResult::Inserted
-                        } else {
-                            let (prompt_k, new_node) =
-                                inner_node.split(child_idx, key, right_child);
+    #[inline(never)]
+    fn insert_leaf(&mut self, id: LeafNodeId, k: S::K, v: S::V) -> DescendInsertResult<S::K, S::V> {
+        let leaf_node = self.node_store.get_mut_leaf(id);
+        match leaf_node.try_upsert(k, v) {
+            LeafUpsertResult::Inserted => DescendInsertResult::Inserted,
+            LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
+            LeafUpsertResult::IsFull(idx) => {
+                let (new_id, _) = self.node_store.create_leaf();
 
-                            let new_node_id = self.node_store.add_inner(new_node);
-                            DescendInsertResult::Split(prompt_k, NodeId::Inner(new_node_id))
-                        }
-                    }
-                    r => r,
+                let l_leaf = self.node_store.get_mut_leaf(id);
+                let r_leaf = l_leaf.split_new_leaf(idx, (k, v), new_id, id);
+                let slot_key: S::K = r_leaf.data_at(0).0;
+
+                if k >= slot_key {
+                    self.set_cache(CacheItem::try_from(new_id, &r_leaf));
+                } else {
+                    let cache_item = CacheItem::try_from(id, l_leaf);
+                    self.set_cache(cache_item);
                 }
-            }
-            NodeId::Leaf(leaf_id) => {
-                let leaf_node = self.node_store.get_mut_leaf(leaf_id);
-                match leaf_node.try_upsert(k, v) {
-                    LeafUpsertResult::Inserted => DescendInsertResult::Inserted,
-                    LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
-                    LeafUpsertResult::IsFull(idx) => {
-                        let (new_leaf_id, _) = self.node_store.create_leaf();
 
-                        let l_leaf = self.node_store.get_mut_leaf(leaf_id);
-                        let r_leaf = l_leaf.split_new_leaf(idx, (k, v), new_leaf_id, leaf_id);
-                        let slot_key: S::K = r_leaf.data_at(0).0;
-
-                        if k >= slot_key {
-                            self.set_cache(CacheItem::try_from(new_leaf_id, &r_leaf));
-                        } else {
-                            let cache_item = CacheItem::try_from(leaf_id, l_leaf);
-                            self.set_cache(cache_item);
-                        }
-
-                        // fix r_leaf's next's prev
-                        if let Some(next) = r_leaf.next() {
-                            self.node_store
-                                .get_mut_leaf(next)
-                                .set_prev(Some(new_leaf_id));
-                        }
-                        *self.node_store.get_mut_leaf(new_leaf_id) = r_leaf;
-
-                        DescendInsertResult::Split(slot_key, NodeId::Leaf(new_leaf_id))
-                    }
+                // fix r_leaf's next's prev
+                if let Some(next) = r_leaf.next() {
+                    self.node_store.get_mut_leaf(next).set_prev(Some(new_id));
                 }
+                *self.node_store.get_mut_leaf(new_id) = r_leaf;
+
+                DescendInsertResult::Split(slot_key, NodeId::Leaf(new_id))
             }
         }
     }
@@ -204,10 +215,7 @@ where
         *self.leaf_cache.borrow_mut() = cache_item;
     }
 
-    fn clear_cache(&self) {
-        *self.leaf_cache.borrow_mut() = None;
-    }
-
+    /// Get reference to value identified by key.
     pub fn get(&self, k: &S::K) -> Option<&S::V> {
         if let Some(cache) = self.leaf_cache.borrow().as_ref() {
             if cache.start <= *k && cache.end >= *k {
@@ -314,8 +322,6 @@ where
             self.len -= 1;
         }
 
-        self.clear_cache();
-
         r.map(|kv| kv.1)
     }
 
@@ -333,30 +339,34 @@ where
                         // child not modified yet. Prefer lend from prev, pop_back operation is faster
                         // than pop_front
                         if child_idx > 0 {
-                            if let Some(deleted) = Self::try_rotate_right_for_leaf_node(
-                                &mut self.node_store,
-                                inner_id,
-                                child_idx - 1,
-                                key_idx_in_child,
-                            ) {
+                            if let Some((deleted, cache_item)) =
+                                Self::try_rotate_right_for_leaf_node(
+                                    &mut self.node_store,
+                                    inner_id,
+                                    child_idx - 1,
+                                    key_idx_in_child,
+                                )
+                            {
+                                self.set_cache(cache_item);
                                 return DeleteDescendResult::Done(deleted);
                             }
                         }
 
                         // try borrow from next
                         if child_idx < inner_node_size {
-                            if let Some(deleted) = Self::try_rotate_left_for_leaf_node(
+                            if let Some((deleted, cache_item)) = Self::try_rotate_left_for_leaf_node(
                                 &mut self.node_store,
                                 inner_id,
                                 child_idx,
                                 key_idx_in_child,
                             ) {
+                                self.set_cache(cache_item);
                                 return DeleteDescendResult::Done(deleted);
                             }
                         }
 
                         // neither prev nor next able to lend us, so merge
-                        if child_idx > 0 {
+                        let (result, cache_item) = if child_idx > 0 {
                             // merge with prev node
                             Self::merge_leaf_node_left(
                                 &mut self.node_store,
@@ -372,7 +382,10 @@ where
                                 child_idx,
                                 key_idx_in_child,
                             )
-                        }
+                        };
+
+                        self.set_cache(cache_item);
+                        result
                     }
                     DeleteDescendResult::InnerUnderSize(deleted_item) => {
                         if child_idx > 0 {
@@ -523,7 +536,7 @@ where
         parent_id: InnerNodeId,
         slot: usize,
         delete_idx: usize,
-    ) -> Option<(S::K, S::V)> {
+    ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
         let parent = node_store.get_inner(parent_id);
 
         let left_id = parent.child_id_at(slot).leaf_id().unwrap();
@@ -539,11 +552,13 @@ where
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
 
+        let cache_item = CacheItem::try_from(right_id, right);
+
         node_store
             .get_mut_inner(parent_id)
             .set_key(slot, new_slot_key);
 
-        Some(deleted)
+        Some((deleted, cache_item))
     }
 
     fn try_rotate_left_for_leaf_node(
@@ -551,7 +566,7 @@ where
         parent_id: InnerNodeId,
         slot: usize,
         delete_idx: usize,
-    ) -> Option<(S::K, S::V)> {
+    ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
         let parent = node_store.get_inner(parent_id);
 
         let left_id = parent.child_id_at(slot).leaf_id().unwrap();
@@ -567,11 +582,13 @@ where
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
 
+        let cache_item = CacheItem::try_from(left_id, left);
+
         node_store
             .get_mut_inner(parent_id)
             .set_key(slot, new_slot_key);
 
-        Some(deleted)
+        Some((deleted, cache_item))
     }
 
     fn merge_leaf_node_left(
@@ -579,7 +596,7 @@ where
         parent_id: InnerNodeId,
         slot: usize,
         delete_idx: usize,
-    ) -> DeleteDescendResult<S::K, S::V> {
+    ) -> (DeleteDescendResult<S::K, S::V>, Option<CacheItem<S::K>>) {
         let parent = node_store.get_inner(parent_id);
         let left_leaf_id = parent.child_id_at(slot).leaf_id().unwrap();
         let right_leaf_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
@@ -587,16 +604,22 @@ where
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.merge_right_delete_first(delete_idx, &mut right);
+
+        let cache_item = CacheItem::try_from(left_leaf_id, left);
+
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
         }
 
         let parent = node_store.get_mut_inner(parent_id);
 
-        match parent.merge_child(slot) {
-            InnerMergeResult::Done => DeleteDescendResult::Done(kv),
-            InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
-        }
+        (
+            match parent.merge_child(slot) {
+                InnerMergeResult::Done => DeleteDescendResult::Done(kv),
+                InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
+            },
+            cache_item,
+        )
     }
 
     fn merge_leaf_node_with_right(
@@ -604,7 +627,7 @@ where
         parent_id: InnerNodeId,
         slot: usize,
         delete_idx: usize,
-    ) -> DeleteDescendResult<S::K, S::V> {
+    ) -> (DeleteDescendResult<S::K, S::V>, Option<CacheItem<S::K>>) {
         let parent = node_store.get_inner(parent_id);
         let left_leaf_id = parent.child_id_at(slot).leaf_id().unwrap();
         let right_leaf_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
@@ -613,18 +636,23 @@ where
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.delete_at(delete_idx);
         left.merge_right(&right);
+
+        let cache_item = CacheItem::try_from(left_leaf_id, left);
+
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
         }
 
         let parent = node_store.get_mut_inner(parent_id);
+
         // the merge on inner, it could propagate
-        match parent.merge_child(slot) {
-            InnerMergeResult::Done => {
-                return DeleteDescendResult::Done(kv);
-            }
-            InnerMergeResult::UnderSize => return DeleteDescendResult::InnerUnderSize(kv),
-        }
+        (
+            match parent.merge_child(slot) {
+                InnerMergeResult::Done => DeleteDescendResult::Done(kv),
+                InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
+            },
+            cache_item,
+        )
     }
 
     /// get the first leaf_id if exists
@@ -1408,7 +1436,7 @@ mod tests {
 
         let result =
             BPlusTree::try_rotate_left_for_leaf_node(&mut node_store, parent_id, 1, 0).unwrap();
-        assert_eq!(result.0, 10);
+        assert_eq!(result.0 .0, 10);
 
         {
             let parent = node_store.get_inner(parent_id);
