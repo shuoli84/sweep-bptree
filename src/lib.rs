@@ -301,23 +301,29 @@ where
     /// delete element identified by K
     pub fn remove(&mut self, k: &S::K) -> Option<S::V> {
         let root_id = self.root?;
-        let r = match self.delete_descend(root_id, k) {
-            DeleteDescendResult::Done(kv) => Some(kv),
-            DeleteDescendResult::None => None,
-            DeleteDescendResult::LeafUnderSize(idx) => {
-                let leaf_id = root_id.leaf_id().unwrap();
-                let leaf = self.node_store.get_mut_leaf(leaf_id);
-                let item = leaf.delete_at(idx);
-                Some(item)
-            }
-            DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                let root = self.node_store.get_mut_inner(root_id.inner_id().unwrap());
-                if root.is_empty() {
-                    self.root = Some(root.child_id_at(0));
-                }
+        let r = match root_id {
+            NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
+                DeleteDescendResult::Done(kv) => Some(kv),
+                DeleteDescendResult::None => None,
+                DeleteDescendResult::InnerUnderSize(deleted_item) => {
+                    let root = self.node_store.get_mut_inner(root_id.inner_id().unwrap());
+                    if root.is_empty() {
+                        self.root = Some(root.child_id_at(0));
+                    }
 
-                Some(deleted_item)
-            }
+                    Some(deleted_item)
+                }
+            },
+            NodeId::Leaf(leaf_id) => match self.remove_leaf(leaf_id, k) {
+                DeleteDescendLeafResult::None => None,
+                DeleteDescendLeafResult::Done(item) => Some(item),
+                DeleteDescendLeafResult::LeafUnderSize(idx) => {
+                    let leaf_id = root_id.leaf_id().unwrap();
+                    let leaf = self.node_store.get_mut_leaf(leaf_id);
+                    let item = leaf.delete_at(idx);
+                    Some(item)
+                }
+            },
         };
 
         if r.is_some() {
@@ -327,120 +333,134 @@ where
         r.map(|kv| kv.1)
     }
 
-    fn delete_descend(&mut self, node_id: NodeId, k: &S::K) -> DeleteDescendResult<S::K, S::V> {
-        let r = match node_id {
-            NodeId::Inner(inner_id) => {
-                let inner_node = self.node_store.get_inner(inner_id);
-                let inner_node_size = inner_node.size();
-                debug_assert!(inner_node_size > 0);
+    fn remove_inner(&mut self, node_id: InnerNodeId, k: &S::K) -> DeleteDescendResult<S::K, S::V> {
+        let inner_node = self.node_store.get_inner(node_id);
+        let inner_node_size = inner_node.size();
+        debug_assert!(inner_node_size > 0);
 
-                let (child_idx, child_id) = inner_node.locate_child(k);
-                match self.delete_descend(child_id, k) {
-                    DeleteDescendResult::Done(kv) => DeleteDescendResult::Done(kv),
-                    DeleteDescendResult::LeafUnderSize(key_idx_in_child) => {
-                        // child not modified yet. Prefer lend from prev, pop_back operation is faster
-                        // than pop_front
-                        if child_idx > 0 {
-                            if let Some((deleted, cache_item)) =
-                                Self::try_rotate_right_for_leaf_node(
-                                    &mut self.node_store,
-                                    inner_id,
-                                    child_idx - 1,
-                                    key_idx_in_child,
-                                )
-                            {
-                                self.set_cache(cache_item);
-                                return DeleteDescendResult::Done(deleted);
-                            }
-                        }
-
-                        // try borrow from next
-                        if child_idx < inner_node_size {
-                            if let Some((deleted, cache_item)) = Self::try_rotate_left_for_leaf_node(
-                                &mut self.node_store,
-                                inner_id,
-                                child_idx,
-                                key_idx_in_child,
-                            ) {
-                                self.set_cache(cache_item);
-                                return DeleteDescendResult::Done(deleted);
-                            }
-                        }
-
-                        // neither prev nor next able to lend us, so merge
-                        let (result, cache_item) = if child_idx > 0 {
-                            // merge with prev node
-                            Self::merge_leaf_node_left(
-                                &mut self.node_store,
-                                inner_id,
-                                child_idx - 1,
-                                key_idx_in_child,
-                            )
-                        } else {
-                            // merge with next node
-                            Self::merge_leaf_node_with_right(
-                                &mut self.node_store,
-                                inner_id,
-                                child_idx,
-                                key_idx_in_child,
-                            )
-                        };
-
-                        self.set_cache(cache_item);
-                        result
-                    }
-                    DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                        if child_idx > 0 {
-                            if Self::try_rotate_right_for_inner_node(
-                                &mut self.node_store,
-                                inner_id,
-                                child_idx - 1,
-                            )
-                            .is_some()
-                            {
-                                return DeleteDescendResult::Done(deleted_item);
-                            }
-                        }
-                        if child_idx < inner_node_size {
-                            if Self::try_rotate_left_for_inner_node(
-                                &mut self.node_store,
-                                inner_id,
-                                child_idx,
-                            )
-                            .is_some()
-                            {
-                                return DeleteDescendResult::Done(deleted_item);
-                            }
-                        }
-                        let merge_slot = if child_idx > 0 {
-                            child_idx - 1
-                        } else {
-                            child_idx
-                        };
-
-                        match Self::merge_inner_node(&mut self.node_store, inner_id, merge_slot) {
-                            InnerMergeResult::Done => {
-                                return DeleteDescendResult::Done(deleted_item);
-                            }
-                            InnerMergeResult::UnderSize => {
-                                return DeleteDescendResult::InnerUnderSize(deleted_item)
-                            }
-                        }
-                    }
-                    DeleteDescendResult::None => DeleteDescendResult::None,
+        let (child_idx, child_id) = inner_node.locate_child(k);
+        match child_id {
+            NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
+                DeleteDescendResult::Done(kv) => DeleteDescendResult::Done(kv),
+                DeleteDescendResult::InnerUnderSize(deleted_item) => {
+                    self.handle_inner_under_size(node_id, child_idx, inner_node_size, deleted_item)
                 }
+                DeleteDescendResult::None => DeleteDescendResult::None,
+            },
+            NodeId::Leaf(leaf_id) => match self.remove_leaf(leaf_id, k) {
+                DeleteDescendLeafResult::None => DeleteDescendResult::None,
+                DeleteDescendLeafResult::Done(item) => DeleteDescendResult::Done(item),
+                DeleteDescendLeafResult::LeafUnderSize(key_idx_in_child) => self
+                    .handle_leaf_under_size(node_id, inner_node_size, child_idx, key_idx_in_child),
+            },
+        }
+    }
+
+    fn handle_inner_under_size(
+        &mut self,
+        node_id: InnerNodeId,
+        child_idx: usize,
+        inner_node_size: usize,
+        deleted_item: (S::K, S::V),
+    ) -> DeleteDescendResult<S::K, S::V> {
+        if child_idx > 0 {
+            if Self::try_rotate_right_for_inner_node(&mut self.node_store, node_id, child_idx - 1)
+                .is_some()
+            {
+                return DeleteDescendResult::Done(deleted_item);
             }
-            NodeId::Leaf(leaf_id) => {
-                let leaf = self.node_store.get_mut_leaf(leaf_id);
-                match leaf.try_delete(k) {
-                    LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
-                    LeafDeleteResult::NotFound => DeleteDescendResult::None,
-                    LeafDeleteResult::UnderSize(idx) => DeleteDescendResult::LeafUnderSize(idx),
-                }
+        }
+        if child_idx < inner_node_size {
+            if Self::try_rotate_left_for_inner_node(&mut self.node_store, node_id, child_idx)
+                .is_some()
+            {
+                return DeleteDescendResult::Done(deleted_item);
             }
+        }
+        let merge_slot = if child_idx > 0 {
+            child_idx - 1
+        } else {
+            child_idx
         };
 
-        r
+        match Self::merge_inner_node(&mut self.node_store, node_id, merge_slot) {
+            InnerMergeResult::Done => {
+                return DeleteDescendResult::Done(deleted_item);
+            }
+            InnerMergeResult::UnderSize => {
+                return DeleteDescendResult::InnerUnderSize(deleted_item);
+            }
+        }
+    }
+
+    fn handle_leaf_under_size(
+        &mut self,
+        node_id: InnerNodeId,
+        inner_node_size: usize,
+        child_idx: usize,
+        key_idx_in_child: usize,
+    ) -> DeleteDescendResult<<S as NodeStore>::K, <S as NodeStore>::V> {
+        // child not modified yet. Prefer lend from prev, pop_back operation is faster
+        // than pop_front
+        if child_idx > 0 {
+            if let Some((deleted, cache_item)) = Self::try_rotate_right_for_leaf_node(
+                &mut self.node_store,
+                node_id,
+                child_idx - 1,
+                key_idx_in_child,
+            ) {
+                self.set_cache(cache_item);
+                return DeleteDescendResult::Done(deleted);
+            }
+        }
+
+        // try borrow from next
+        if child_idx < inner_node_size {
+            if let Some((deleted, cache_item)) = Self::try_rotate_left_for_leaf_node(
+                &mut self.node_store,
+                node_id,
+                child_idx,
+                key_idx_in_child,
+            ) {
+                self.set_cache(cache_item);
+                return DeleteDescendResult::Done(deleted);
+            }
+        }
+
+        // neither prev nor next able to lend us, so merge
+        let (result, cache_item) = if child_idx > 0 {
+            // merge with prev node
+            Self::merge_leaf_node_left(
+                &mut self.node_store,
+                node_id,
+                child_idx - 1,
+                key_idx_in_child,
+            )
+        } else {
+            // merge with next node
+            Self::merge_leaf_node_with_right(
+                &mut self.node_store,
+                node_id,
+                child_idx,
+                key_idx_in_child,
+            )
+        };
+
+        self.set_cache(cache_item);
+        result
+    }
+
+    fn remove_leaf(
+        &mut self,
+        leaf_id: LeafNodeId,
+        k: &S::K,
+    ) -> DeleteDescendLeafResult<S::K, S::V> {
+        let leaf = self.node_store.get_mut_leaf(leaf_id);
+        match leaf.try_delete(k) {
+            LeafDeleteResult::Done(kv) => DeleteDescendLeafResult::Done(kv),
+            LeafDeleteResult::NotFound => DeleteDescendLeafResult::None,
+            LeafDeleteResult::UnderSize(idx) => DeleteDescendLeafResult::LeafUnderSize(idx),
+        }
     }
 
     fn try_rotate_right_for_inner_node(
@@ -847,10 +867,16 @@ enum DescendInsertResult<K, V> {
 enum DeleteDescendResult<K, V> {
     None,
     Done((K, V)),
-    /// Leaf under size
-    LeafUnderSize(usize),
     /// Inner node under size, the index and node_id to remove
     InnerUnderSize((K, V)),
+}
+
+#[derive(Debug)]
+enum DeleteDescendLeafResult<K, V> {
+    None,
+    Done((K, V)),
+    /// Leaf under size
+    LeafUnderSize(usize),
 }
 
 pub trait NodeStore: Clone {
