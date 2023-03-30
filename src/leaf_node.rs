@@ -41,7 +41,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &(K, V)> {
-        self.slot_data[0..self.size as usize]
+        unsafe { self.data_area(..self.size as usize) }
             .iter()
             .map(|item| unsafe { item.assume_init_ref() })
     }
@@ -54,22 +54,21 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
     pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
         let size = self.size as usize;
-        match self.slot_data[..size].binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() }.0)
+        match unsafe { self.data_area(..size) }
+            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() }.0)
         {
             Ok(idx) => {
                 // update existing item
-                let prev_v = std::mem::replace(
-                    unsafe { self.slot_data.as_mut_slice().get_unchecked_mut(idx) },
-                    MaybeUninit::new((k, v)),
-                );
+                let prev_v =
+                    std::mem::replace(unsafe { self.data_area_mut(idx) }, MaybeUninit::new((k, v)));
                 LeafUpsertResult::Updated(unsafe { prev_v.assume_init() }.1)
             }
 
             Err(idx) => {
                 if !self.is_full() {
-                    self.slot_data.copy_within(idx..size, idx + 1);
-                    self.slot_data[idx] = MaybeUninit::new((k, v));
-                    self.size += 1;
+                    let new_len = self.len() + 1;
+                    unsafe { utils::slice_insert(self.data_area_mut(..new_len), idx, (k, v)) };
+                    self.size = new_len as u16;
                     LeafUpsertResult::Inserted
                 } else {
                     LeafUpsertResult::IsFull(idx)
@@ -92,32 +91,37 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         let mut new_node = Self::new();
         new_node.prev = Some(self_leaf_id);
         new_node.next = self.next;
-        let new_slot_data = &mut new_node.slot_data;
 
-        new_slot_data[..split_new_size as usize]
-            .copy_from_slice(&self.slot_data[split_origin_size..N]);
+        unsafe {
+            utils::move_to_slice(
+                self.data_area_mut(split_origin_size..N),
+                new_node.data_area_mut(..split_new_size as usize),
+            )
+        };
 
-        let new_leaf_size = if insert_idx < split_origin_size {
-            self.slot_data
-                .copy_within(insert_idx..split_origin_size, insert_idx + 1);
-            self.slot_data[insert_idx] = MaybeUninit::new(item);
-            self.size = (split_origin_size + 1) as u16;
+        if insert_idx < split_origin_size {
+            let new_size = split_origin_size as usize + 1;
+            unsafe { utils::slice_insert(self.data_area_mut(..new_size), insert_idx, item) };
+            self.size = new_size as u16;
 
-            split_new_size
+            new_node.size = split_new_size as u16;
         } else {
             // data insert to new/right
             let insert_idx = insert_idx - split_origin_size;
 
-            new_slot_data.copy_within(insert_idx..split_new_size, insert_idx + 1);
-            new_slot_data[insert_idx] = MaybeUninit::new(item);
+            unsafe {
+                utils::slice_insert(
+                    new_node.data_area_mut(..split_new_size + 1),
+                    insert_idx,
+                    item,
+                );
+            }
 
             self.size = split_origin_size as u16;
-
-            split_new_size + 1
+            new_node.size = split_new_size as u16 + 1;
         };
 
         self.next = Some(new_leaf_id);
-        new_node.size = new_leaf_size as u16;
 
         new_node
     }
@@ -141,18 +145,19 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn locate_child_idx(&self, k: &K) -> Result<usize, usize> {
-        self.slot_data[0..self.len()].binary_search_by_key(k, |f| unsafe { f.assume_init_ref() }.0)
+        unsafe { self.data_area(..self.len()) }
+            .binary_search_by_key(k, |f| unsafe { f.assume_init_ref() }.0)
     }
 
     pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<(&K, &V)>) {
-        match self.slot_data[0..self.len()]
+        match unsafe { self.data_area(..self.len()) }
             .binary_search_by_key(k, |f| unsafe { f.assume_init_ref() }.0)
         {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
                 (idx, {
-                    let kv = unsafe { self.slot_data[idx].assume_init_ref() };
+                    let kv = unsafe { self.data_area(idx).assume_init_ref() };
                     Some((&kv.0, &kv.1))
                 })
             }
@@ -166,7 +171,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn locate_child_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
-        match self.slot_data[0..self.len()]
+        match unsafe { self.data_area(..self.len()) }
             .binary_search_by_key(k, |f| unsafe { f.assume_init_ref() }.0)
         {
             Ok(idx) => {
@@ -174,7 +179,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
                 // if the child split, then the new key should inserted idx + 1
                 (
                     idx,
-                    Some(unsafe { &mut self.slot_data[idx].assume_init_mut().1 }),
+                    Some(unsafe { &mut self.data_area_mut(idx).assume_init_mut().1 }),
                 )
             }
 
@@ -189,7 +194,8 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     /// pop the last item, this is used when next sibling undersize
     pub(crate) fn pop(&mut self) -> (K, V) {
         debug_assert!(self.size > Self::split_origin_size());
-        let result = unsafe { self.slot_data[self.len() - 1].assume_init_read() };
+        let last_idx = self.size as usize - 1;
+        let result = unsafe { utils::slice_remove(self.data_area_mut(..self.len()), last_idx) };
         self.size -= 1;
         result
     }
@@ -204,7 +210,9 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     // delete the item at idx and append the item to last
     pub(crate) fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V) {
         let result = unsafe { utils::slice_remove(self.data_area_mut(..self.size as usize), idx) };
-        self.slot_data[self.size as usize - 1] = MaybeUninit::new(item);
+        unsafe {
+            *self.data_area_mut(self.size as usize - 1) = MaybeUninit::new(item);
+        }
         result
     }
 
@@ -214,6 +222,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         debug_assert!(self.size == Self::split_origin_size());
 
         let result = std::mem::replace(&mut self.slot_data[idx], MaybeUninit::uninit());
+
         self.slot_data.copy_within(0..idx, 1);
         self.slot_data[0] = MaybeUninit::new(item);
         unsafe { result.assume_init() }
@@ -223,9 +232,9 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         &mut self,
         idx: usize,
     ) -> (&[MaybeUninit<(K, V)>], (K, V), &[MaybeUninit<(K, V)>]) {
-        let kv = std::mem::replace(&mut self.slot_data[idx], MaybeUninit::uninit());
-        let head = &self.slot_data[0..idx];
-        let tail = &self.slot_data[idx + 1..self.len()];
+        let kv = std::mem::replace(unsafe { self.data_area_mut(idx) }, MaybeUninit::uninit());
+        let head = unsafe { self.data_area(0..idx) };
+        let tail = unsafe { self.data_area(idx + 1..self.len()) };
 
         (head, unsafe { kv.assume_init() }, tail)
     }
@@ -250,11 +259,12 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn data(&self) -> &[MaybeUninit<(K, V)>] {
-        &self.slot_data[0..self.len()]
+        unsafe { self.data_area(..self.len()) }
     }
 
     pub(crate) fn extend(&mut self, data: &[MaybeUninit<(K, V)>]) {
-        self.slot_data[self.size as usize..self.size as usize + data.len()].copy_from_slice(data);
+        unsafe { self.data_area_mut(self.size as usize..self.size as usize + data.len()) }
+            .copy_from_slice(data);
         self.size += data.len() as u16;
     }
 
@@ -272,6 +282,16 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         // until the key slice reference is dropped, as we have unique access
         // for the lifetime of the borrow.
         unsafe { self.slot_data.as_mut_slice().get_unchecked_mut(index) }
+    }
+
+    unsafe fn data_area<I, Output: ?Sized>(&self, index: I) -> &Output
+    where
+        I: SliceIndex<[MaybeUninit<(K, V)>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.slot_data.as_slice().get_unchecked(index) }
     }
 }
 
@@ -311,12 +331,12 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         assert!(N1 <= N);
         self.size = N1 as u16;
         for i in 0..N1 {
-            self.slot_data[i] = MaybeUninit::new(data[i]);
+            unsafe { *self.data_area_mut(i) = MaybeUninit::new(data[i]) };
         }
     }
 
     fn data_at(&self, slot: usize) -> &(K, V) {
-        unsafe { self.slot_data[slot].assume_init_ref() }
+        unsafe { self.data_area(slot).assume_init_ref() }
     }
 
     fn is_full(&self) -> bool {
@@ -345,7 +365,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         if idx >= self.size as usize {
             return None;
         }
-        Some(unsafe { self.slot_data[idx].assume_init_ref() })
+        Some(unsafe { self.data_area(idx).assume_init_ref() })
     }
 
     fn locate_slot_with_value(&self, k: &K) -> (usize, Option<(&K, &V)>) {
@@ -401,8 +421,8 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
             return None;
         }
         Some((
-            unsafe { self.slot_data[0].assume_init_ref() }.0,
-            unsafe { self.slot_data[self.len() - 1].assume_init_ref() }.0,
+            unsafe { self.data_area(0).assume_init_ref() }.0,
+            unsafe { self.data_area(self.len() - 1).assume_init_ref() }.0,
         ))
     }
 }
