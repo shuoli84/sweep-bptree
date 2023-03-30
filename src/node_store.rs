@@ -77,13 +77,13 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     }
 
     fn reserve_leaf(&mut self) -> LeafNodeId {
-        let id = LeafNodeId::from_u32(self.leaf_nodes.len());
+        let id = LeafNodeId::from_usize(self.leaf_nodes.len());
         self.leaf_nodes.push(None);
         id
     }
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
-        let id = LeafNodeId::from_u32(self.leaf_nodes.len());
+        let id = LeafNodeId::from_usize(self.leaf_nodes.len());
         let node = Self::LeafNode::new();
         self.leaf_nodes.push(Some(node));
         (id, self.get_mut_leaf(id))

@@ -307,7 +307,8 @@ where
                 DeleteDescendResult::Done(kv) => Some(kv),
                 DeleteDescendResult::None => None,
                 DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                    let root = self.node_store.get_mut_inner(root_id.inner_id().unwrap());
+                    let root = self.node_store.get_mut_inner(inner_id);
+
                     if root.is_empty() {
                         self.root = Some(root.child_id_at(0));
                     }
@@ -319,7 +320,6 @@ where
                 DeleteDescendLeafResult::None => None,
                 DeleteDescendLeafResult::Done(item) => Some(item),
                 DeleteDescendLeafResult::LeafUnderSize(idx) => {
-                    let leaf_id = root_id.leaf_id().unwrap();
                     let leaf = self.node_store.get_mut_leaf(leaf_id);
                     let item = leaf.delete_at(idx);
                     Some(item)

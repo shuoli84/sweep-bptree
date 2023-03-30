@@ -2,10 +2,12 @@
 pub struct InnerNodeId(pub(crate) usize);
 
 impl InnerNodeId {
+    #[inline(always)]
     pub fn from_usize(id: usize) -> Self {
         Self(id)
     }
 
+    #[inline(always)]
     pub fn as_usize(&self) -> usize {
         self.0
     }
@@ -15,10 +17,12 @@ impl InnerNodeId {
 pub struct LeafNodeId(pub(crate) usize);
 
 impl LeafNodeId {
-    pub fn from_u32(id: usize) -> Self {
+    #[inline(always)]
+    pub fn from_usize(id: usize) -> Self {
         Self(id)
     }
 
+    #[inline(always)]
     pub fn as_usize(&self) -> usize {
         self.0
     }
@@ -31,6 +35,7 @@ pub enum NodeId {
 }
 
 impl NodeId {
+    #[inline(always)]
     pub fn leaf_id(&self) -> Option<LeafNodeId> {
         match self {
             NodeId::Leaf(id) => Some(*id),
@@ -38,6 +43,7 @@ impl NodeId {
         }
     }
 
+    #[inline(always)]
     pub fn inner_id(&self) -> Option<InnerNodeId> {
         match self {
             NodeId::Inner(id) => Some(*id),

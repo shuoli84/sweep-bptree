@@ -18,6 +18,7 @@ pub struct Cursor<K: Key> {
 }
 
 impl<K: Key> Cursor<K> {
+    #[inline(always)]
     pub(crate) fn new(k: K, leaf_id: LeafNodeId, offset: usize) -> Self {
         Self {
             k,
@@ -27,6 +28,7 @@ impl<K: Key> Cursor<K> {
     }
 
     /// Get the key of the cursor.
+    #[inline(always)]
     pub fn key(&self) -> &K {
         &self.k
     }
