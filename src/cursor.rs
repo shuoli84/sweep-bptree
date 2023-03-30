@@ -91,7 +91,11 @@ impl<K: Key> Cursor<K> {
                 }
             }
             _ => {
-                let (offset, _value) = leaf.locate_slot(&self.k);
+                let offset = match leaf.locate_slot(&self.k) {
+                    Ok(offset) => offset,
+                    Err(offset) => offset,
+                };
+
                 if offset > 0 {
                     (offset - 1, leaf)
                 } else if let Some(prev_id) = leaf.prev() {
@@ -130,7 +134,7 @@ impl<K: Key> Cursor<K> {
         let next_offset = match leaf.try_data_at(self.offset_hint) {
             Some(kv) if kv.0.eq(&self.k) => self.offset_hint + 1,
             _ => {
-                let (offset, value) = leaf.locate_slot(&self.k);
+                let (offset, value) = leaf.locate_slot_with_value(&self.k);
                 match value {
                     Some(_) => offset + 1,
                     None => offset,
@@ -180,7 +184,7 @@ impl<K: Key> Cursor<K> {
             Some(kv) if kv.0.eq(&self.k) => Some(&kv.1),
             _ => {
                 // todo: consider update self?
-                let (_, value) = leaf.locate_slot(&self.k);
+                let (_, value) = leaf.locate_slot_with_value(&self.k);
                 value.map(|kv| kv.1)
             }
         }

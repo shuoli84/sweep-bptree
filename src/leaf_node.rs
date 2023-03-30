@@ -326,8 +326,12 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         self.slot_data[idx].as_ref()
     }
 
-    fn locate_slot(&self, k: &K) -> (usize, Option<(&K, &V)>) {
+    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<(&K, &V)>) {
         Self::locate_child(self, k)
+    }
+
+    fn locate_slot(&self, k: &K) -> Result<usize, usize> {
+        Self::locate_child_idx(&self, k)
     }
 
     fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {

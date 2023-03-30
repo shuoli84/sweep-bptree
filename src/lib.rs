@@ -259,7 +259,7 @@ where
 
     fn find_in_leaf(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf_node = self.node_store.get_leaf(leaf_id);
-        let (_, kv) = leaf_node.locate_slot(k);
+        let (_, kv) = leaf_node.locate_slot_with_value(k);
         kv.map(|kv| kv.1)
     }
 
@@ -294,7 +294,7 @@ where
     fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf = self.node_store.get_leaf(leaf_id);
         self.set_cache(CacheItem::try_from(leaf_id, leaf));
-        let (_, kv) = leaf.locate_slot(k);
+        let (_, kv) = leaf.locate_slot_with_value(k);
         kv.map(|kv| kv.1)
     }
 
@@ -781,7 +781,7 @@ where
         }?;
 
         let leaf = self.node_store.get_leaf(leaf_id);
-        let (idx, kv) = leaf.locate_slot(k);
+        let (idx, kv) = leaf.locate_slot_with_value(k);
         Some((Cursor::new(*k, leaf_id, idx), kv))
     }
 
@@ -982,7 +982,9 @@ pub trait LNode<K: Key, V: Value>: Clone + Default {
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
     ) -> Self;
-    fn locate_slot(&self, k: &K) -> (usize, Option<(&K, &V)>);
+    fn locate_slot(&self, k: &K) -> Result<usize, usize>;
+    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<(&K, &V)>);
+
     fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>);
     fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V>;
     fn delete_at(&mut self, idx: usize) -> (K, V);
