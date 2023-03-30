@@ -2,6 +2,7 @@ use crate::*;
 use std::{
     alloc::{alloc, Layout},
     mem::{self, MaybeUninit},
+    slice::SliceIndex,
 };
 
 #[derive(Debug, Clone)]
@@ -126,10 +127,11 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 if self.size > Self::split_origin_size() {
-                    let result = std::mem::replace(&mut self.slot_data[idx], MaybeUninit::uninit());
-                    self.slot_data.copy_within(idx + 1..self.size as usize, idx);
+                    let result = unsafe {
+                        utils::slice_remove(self.data_area_mut(..self.size as usize), idx)
+                    };
                     self.size -= 1;
-                    LeafDeleteResult::Done(unsafe { result.assume_init() })
+                    LeafDeleteResult::Done(result)
                 } else {
                     LeafDeleteResult::UnderSize(idx)
                 }
@@ -186,27 +188,24 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     /// pop the last item, this is used when next sibling undersize
     pub(crate) fn pop(&mut self) -> (K, V) {
-        assert!(self.size > Self::split_origin_size());
-        let result = std::mem::replace(&mut self.slot_data[self.len() - 1], MaybeUninit::uninit());
+        debug_assert!(self.size > Self::split_origin_size());
+        let result = unsafe { self.slot_data[self.len() - 1].assume_init_read() };
         self.size -= 1;
-        unsafe { result.assume_init() }
+        result
     }
 
     pub(crate) fn pop_front(&mut self) -> (K, V) {
-        assert!(self.size > Self::split_origin_size());
-
-        let result = std::mem::replace(&mut self.slot_data[0], MaybeUninit::uninit());
-        self.slot_data.copy_within(1..self.size as usize, 0);
+        debug_assert!(self.size > Self::split_origin_size());
+        let result = unsafe { utils::slice_remove(self.data_area_mut(..self.size as usize), 0) };
         self.size -= 1;
-        unsafe { result.assume_init() }
+        result
     }
 
     // delete the item at idx and append the item to last
     pub(crate) fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V) {
-        let result = std::mem::replace(&mut self.slot_data[idx], MaybeUninit::uninit());
-        self.slot_data.copy_within(idx + 1..self.size as usize, idx);
-        self.slot_data[self.len() - 1] = MaybeUninit::new(item);
-        unsafe { result.assume_init() }
+        let result = unsafe { utils::slice_remove(self.data_area_mut(..self.size as usize), idx) };
+        self.slot_data[self.size as usize - 1] = MaybeUninit::new(item);
+        result
     }
 
     // delete the item at idx and append the item to last
@@ -260,10 +259,19 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn delete_at(&mut self, idx: usize) -> (K, V) {
-        let result = std::mem::replace(&mut self.slot_data[idx], MaybeUninit::uninit());
-        self.slot_data.copy_within(idx + 1..self.size as usize, idx);
+        let result = unsafe { utils::slice_remove(self.data_area_mut(..self.size as usize), idx) };
         self.size -= 1;
-        unsafe { result.assume_init() }
+        result
+    }
+
+    unsafe fn data_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
+    where
+        I: SliceIndex<[MaybeUninit<(K, V)>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.slot_data.as_mut_slice().get_unchecked_mut(index) }
     }
 }
 
