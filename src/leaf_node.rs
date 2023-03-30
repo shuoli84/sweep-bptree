@@ -86,34 +86,28 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
         // data insert to origin/left
         let mut new_slot_data = [None; N];
-        let new_leaf_size = if insert_idx < split_origin_size {
-            new_slot_data[..split_new_size].copy_from_slice(&self.slot_data[split_origin_size..N]);
+        new_slot_data[..split_new_size].copy_from_slice(&self.slot_data[split_origin_size..N]);
 
+        let new_leaf_size = if insert_idx < split_origin_size {
             self.slot_data
                 .copy_within(insert_idx..split_origin_size, insert_idx + 1);
             self.slot_data[insert_idx] = Some(item);
             self.size = split_origin_size + 1;
-            self.next = Some(new_leaf_id);
 
             split_new_size
         } else {
             // data insert to new/right
             let insert_idx = insert_idx - split_origin_size;
 
-            new_slot_data[0..insert_idx].copy_from_slice(
-                &self.slot_data[split_origin_size..split_origin_size + insert_idx],
-            );
+            new_slot_data.copy_within(insert_idx..split_new_size, insert_idx + 1);
             new_slot_data[insert_idx] = Some(item);
-            if insert_idx < split_new_size {
-                new_slot_data[insert_idx + 1..split_new_size + 1]
-                    .copy_from_slice(&self.slot_data[split_origin_size + insert_idx..N]);
-            }
 
-            self.next = Some(new_leaf_id);
             self.size = split_origin_size;
 
             split_new_size + 1
         };
+
+        self.next = Some(new_leaf_id);
 
         Self {
             prev: Some(self_leaf_id),
