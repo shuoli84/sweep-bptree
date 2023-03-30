@@ -2,7 +2,7 @@ use crate::{INode, InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, Nod
 
 #[derive(Debug, Clone)]
 pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> {
-    inner_nodes: Vec<InnerNode<K, IN, IC>>,
+    inner_nodes: Vec<Option<Box<InnerNode<K, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 }
 
@@ -18,7 +18,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
     }
 
     pub fn print(&self) {
-        for (idx, inner) in self.inner_nodes.iter().enumerate() {
+        for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?}",
                 inner.size(),
@@ -27,7 +27,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
             );
         }
 
-        for (idx, leaf) in self.leaf_nodes.iter().flat_map(|t| t).enumerate() {
+        for (idx, leaf) in self.leaf_nodes.iter().flatten().enumerate() {
             println!(
                 "leaf: {idx} p:{:?} n:{:?} items:{:?}",
                 leaf.prev()
@@ -52,23 +52,28 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn new_empty_inner(&mut self) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
-        let node = Self::InnerNode::default();
-        self.inner_nodes.push(node);
+        let node = Box::new(Self::InnerNode::default());
+        self.inner_nodes.push(Some(node));
         id
     }
 
-    fn add_inner(&mut self, node: Self::InnerNode) -> InnerNodeId {
+    fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
-        self.inner_nodes.push(node);
+        self.inner_nodes.push(Some(node));
         id
     }
 
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode {
-        &self.inner_nodes[id.as_usize()]
+        &self.inner_nodes[id.as_usize()].as_ref().unwrap()
+    }
+
+    fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode> {
+        let node = self.inner_nodes.get(id.as_usize())?.as_ref()?;
+        Some(node)
     }
 
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode {
-        &mut self.inner_nodes[id.as_usize()]
+        self.inner_nodes[id.as_usize()].as_mut().unwrap()
     }
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
@@ -103,7 +108,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         std::mem::take(&mut self.leaf_nodes[id.as_usize()]).unwrap()
     }
 
-    fn take_inner(&mut self, id: InnerNodeId) -> Self::InnerNode {
-        std::mem::take(&mut self.inner_nodes[id.as_usize()])
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
+        std::mem::take(&mut self.inner_nodes[id.as_usize()]).unwrap()
     }
 }

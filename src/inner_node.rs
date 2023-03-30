@@ -134,11 +134,14 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     /// modified node, it contains smaller half
     /// new node, it contains larger half
     /// new key, it is the key need to propagate to parent
-    pub(crate) fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Self) {
+    pub(crate) fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Box<Self>) {
         debug_assert!(self.is_full());
 
-        let mut new_slot_keys = [None; N];
-        let mut new_child_ids = [None; C];
+        let mut new_node = Box::new(Self::default());
+        new_node.size = Self::split_new_size();
+
+        let new_slot_keys = &mut new_node.slot_key;
+        let new_child_ids = &mut new_node.child_id;
         let new_key: K;
 
         let split_origin_size = Self::split_origin_size();
@@ -210,14 +213,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             new_child_ids[0] = Some(new_child_id);
         }
 
-        (
-            new_key,
-            Self {
-                slot_key: new_slot_keys,
-                child_id: new_child_ids,
-                size: Self::split_new_size(),
-            },
-        )
+        (new_key, new_node)
     }
 
     /// merge child identified by `smaller_idx` and `smaller_idx + 1`
@@ -322,7 +318,7 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
         Self::insert_at(self, slot, key, right_child)
     }
 
-    fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Self) {
+    fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Box<Self>) {
         Self::split(self, child_idx, k, new_child_id)
     }
 

@@ -114,7 +114,7 @@ where
                 DescendInsertResult::Inserted => None,
                 DescendInsertResult::Updated(prev_v) => Some(prev_v),
                 DescendInsertResult::Split(k, new_child_id) => {
-                    let new_root = S::InnerNode::new([k], [node_id, new_child_id]);
+                    let new_root = Box::new(S::InnerNode::new([k], [node_id, new_child_id]));
                     let new_root_id = self.node_store.add_inner(new_root);
                     self.root = Some(new_root_id.into());
                     None
@@ -889,10 +889,11 @@ pub trait NodeStore: Clone {
     fn debug(&self);
 
     fn new_empty_inner(&mut self) -> InnerNodeId;
-    fn add_inner(&mut self, node: Self::InnerNode) -> InnerNodeId;
+    fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId;
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode;
+    fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode;
-    fn take_inner(&mut self, id: InnerNodeId) -> Self::InnerNode;
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode;
@@ -915,7 +916,7 @@ pub trait Value: std::fmt::Debug + Copy + Clone {}
 impl<T> Value for T where T: std::fmt::Debug + Copy + Clone {}
 
 /// Inner node trait
-pub trait INode<K: Key>: Clone + Default {
+pub trait INode<K: Key>: Default {
     /// Create a new inner node with `slot_keys` and `child_id`.
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
@@ -952,7 +953,7 @@ pub trait INode<K: Key>: Clone + Default {
     fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId);
 
     /// Split the node at `child_idx` and return the key to be inserted to parent
-    fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Self);
+    fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Box<Self>);
 
     /// Remove the last key and its right child id
     fn pop(&mut self) -> (K, NodeId);
@@ -1281,8 +1282,7 @@ mod tests {
         }
 
         {
-            let child_2 = node_store.get_inner(child_2);
-            assert_eq!(child_2.size(), 0);
+            assert!(node_store.try_get_inner(child_2).is_none());
         }
     }
 
