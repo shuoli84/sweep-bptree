@@ -114,7 +114,7 @@ where
                 DescendInsertResult::Inserted => None,
                 DescendInsertResult::Updated(prev_v) => Some(prev_v),
                 DescendInsertResult::Split(k, new_child_id) => {
-                    let new_root = Box::new(S::InnerNode::new([k], [node_id, new_child_id]));
+                    let new_root = S::InnerNode::new([k], [node_id, new_child_id]);
                     let new_root_id = self.node_store.add_inner(new_root);
                     self.root = Some(new_root_id.into());
                     None
@@ -916,12 +916,12 @@ pub trait Value: std::fmt::Debug + Copy + Clone {}
 impl<T> Value for T where T: std::fmt::Debug + Copy + Clone {}
 
 /// Inner node trait
-pub trait INode<K: Key>: Default {
+pub trait INode<K: Key> {
     /// Create a new inner node with `slot_keys` and `child_id`.
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
-    ) -> Self;
+    ) -> Box<Self>;
 
     /// Get the number of keys
     fn size(&self) -> usize;

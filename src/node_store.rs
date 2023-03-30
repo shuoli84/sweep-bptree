@@ -52,7 +52,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn new_empty_inner(&mut self) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
-        let node = Box::new(Self::InnerNode::default());
+        let node = Self::InnerNode::empty();
         self.inner_nodes.push(Some(node));
         id
     }
