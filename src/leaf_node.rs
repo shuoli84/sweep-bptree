@@ -55,10 +55,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
     pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
-        let size = self.size as usize;
-        match unsafe { self.key_area(..size) }
-            .binary_search_by_key(&&k, |f| unsafe { f.assume_init_ref() })
-        {
+        match self.locate_child_idx(&k) {
             Ok(idx) => {
                 // update existing item
                 let prev_v =
@@ -161,15 +158,14 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
+    #[inline]
     pub(crate) fn locate_child_idx(&self, k: &K) -> Result<usize, usize> {
         unsafe { self.key_area(..self.len()) }
             .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
     }
 
     pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&V>) {
-        match unsafe { self.key_area(..self.len()) }
-            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
-        {
+        match self.locate_child_idx(k) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -188,9 +184,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn locate_child_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
-        match unsafe { self.key_area(..self.len()) }
-            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
-        {
+        match self.locate_child_idx(k) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
