@@ -165,7 +165,6 @@ fn benchmark_bp_tree(c: &mut Criterion) {
             }
 
             b.iter(|| {
-                let tree = tree.clone();
                 for i in 0..count {
                     let k = Point {
                         x: i as f64,
@@ -306,7 +305,6 @@ fn benchmark_btree(c: &mut Criterion) {
             }
 
             b.iter(|| {
-                let tree = tree.clone();
                 for i in 0..count {
                     let k = Point {
                         x: i as f64,
