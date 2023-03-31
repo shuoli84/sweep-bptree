@@ -121,4 +121,8 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
         std::mem::take(&mut self.inner_nodes[id.as_usize()]).unwrap()
     }
+
+    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>) {
+        self.inner_nodes[id.as_usize()] = Some(node);
+    }
 }

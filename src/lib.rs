@@ -78,6 +78,8 @@ pub struct BPlusTree<S: NodeStore> {
     node_store: S,
     /// store last accessed leaf, and it's key range
     leaf_cache: RefCell<Option<CacheItem<S::K>>>,
+
+    st: Statistic,
 }
 
 impl<S> BPlusTree<S>
@@ -91,6 +93,8 @@ where
             node_store,
             leaf_cache: RefCell::new(None),
             len: 0,
+
+            st: Statistic::default(),
         }
     }
 
@@ -138,6 +142,10 @@ where
         }
 
         result
+    }
+
+    pub fn statistic(&self) -> &Statistic {
+        &self.st
     }
 
     #[inline(never)]
@@ -335,56 +343,61 @@ where
     }
 
     fn remove_inner(&mut self, node_id: InnerNodeId, k: &S::K) -> DeleteDescendResult<S::K, S::V> {
-        let inner_node = self.node_store.get_inner(node_id);
-        let inner_node_size = inner_node.size();
-        debug_assert!(inner_node_size > 0);
+        let mut inner_node = self.node_store.take_inner(node_id);
 
         let (child_idx, child_id) = inner_node.locate_child(k);
-        match child_id {
+        let r = match child_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
                 DeleteDescendResult::Done(kv) => DeleteDescendResult::Done(kv),
                 DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                    self.handle_inner_under_size(node_id, child_idx, inner_node_size, deleted_item)
+                    self.handle_inner_under_size(&mut inner_node, child_idx, deleted_item)
                 }
                 DeleteDescendResult::None => DeleteDescendResult::None,
             },
             NodeId::Leaf(leaf_id) => match self.remove_leaf(leaf_id, k) {
                 DeleteDescendLeafResult::None => DeleteDescendResult::None,
                 DeleteDescendLeafResult::Done(item) => DeleteDescendResult::Done(item),
-                DeleteDescendLeafResult::LeafUnderSize(key_idx_in_child) => self
-                    .handle_leaf_under_size(node_id, inner_node_size, child_idx, key_idx_in_child),
+                DeleteDescendLeafResult::LeafUnderSize(key_idx_in_child) => {
+                    self.handle_leaf_under_size(&mut inner_node, child_idx, key_idx_in_child)
+                }
             },
-        }
+        };
+
+        self.node_store.put_back_inner(node_id, inner_node);
+        r
     }
 
     fn handle_inner_under_size(
         &mut self,
-        node_id: InnerNodeId,
+        node: &mut S::InnerNode,
         child_idx: usize,
-        inner_node_size: usize,
         deleted_item: (S::K, S::V),
     ) -> DeleteDescendResult<S::K, S::V> {
         if child_idx > 0 {
-            if Self::try_rotate_right_for_inner_node(&mut self.node_store, node_id, child_idx - 1)
+            if Self::try_rotate_right_for_inner_node(&mut self.node_store, node, child_idx - 1)
                 .is_some()
             {
+                self.st.rotate_right_inner += 1;
                 return DeleteDescendResult::Done(deleted_item);
             }
         }
-        if child_idx < inner_node_size {
-            if Self::try_rotate_left_for_inner_node(&mut self.node_store, node_id, child_idx)
-                .is_some()
+        if child_idx < node.size() {
+            if Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some()
             {
+                self.st.rotate_left_inner += 1;
                 return DeleteDescendResult::Done(deleted_item);
             }
         }
+
         let merge_slot = if child_idx > 0 {
+            self.st.merge_with_left_inner += 1;
             child_idx - 1
         } else {
+            self.st.merge_with_right_inner += 1;
             child_idx
         };
 
-        match Self::merge_inner_node(&mut self.node_store, node_id, merge_slot) {
+        match Self::merge_inner_node(&mut self.node_store, node, merge_slot) {
             InnerMergeResult::Done => {
                 return DeleteDescendResult::Done(deleted_item);
             }
@@ -396,59 +409,113 @@ where
 
     fn handle_leaf_under_size(
         &mut self,
-        node_id: InnerNodeId,
-        inner_node_size: usize,
+        node: &mut S::InnerNode,
         child_idx: usize,
         key_idx_in_child: usize,
     ) -> DeleteDescendResult<<S as NodeStore>::K, <S as NodeStore>::V> {
-        // child not modified yet. Prefer lend from prev, pop_back operation is faster
-        // than pop_front
-        if child_idx > 0 {
-            if let Some((deleted, cache_item)) = Self::try_rotate_right_for_leaf_node(
-                &mut self.node_store,
-                node_id,
-                child_idx - 1,
-                key_idx_in_child,
-            ) {
-                self.set_cache(cache_item);
-                return DeleteDescendResult::Done(deleted);
-            }
-        }
-
-        // try borrow from next
-        if child_idx < inner_node_size {
-            if let Some((deleted, cache_item)) = Self::try_rotate_left_for_leaf_node(
-                &mut self.node_store,
-                node_id,
-                child_idx,
-                key_idx_in_child,
-            ) {
-                self.set_cache(cache_item);
-                return DeleteDescendResult::Done(deleted);
-            }
-        }
-
-        // neither prev nor next able to lend us, so merge
-        let (result, cache_item) = if child_idx > 0 {
-            // merge with prev node
-            Self::merge_leaf_node_left(
-                &mut self.node_store,
-                node_id,
-                child_idx - 1,
-                key_idx_in_child,
+        let prev_sibling = if child_idx > 0 {
+            Some(
+                self.node_store
+                    .get_leaf(node.child_id_at(child_idx - 1).leaf_id().unwrap()),
             )
         } else {
-            // merge with next node
-            Self::merge_leaf_node_with_right(
-                &mut self.node_store,
-                node_id,
-                child_idx,
-                key_idx_in_child,
+            None
+        };
+        let next_sibling = if child_idx < node.size() {
+            Some(
+                self.node_store
+                    .get_leaf(node.child_id_at(child_idx + 1).leaf_id().unwrap()),
             )
+        } else {
+            None
         };
 
-        self.set_cache(cache_item);
-        result
+        let action: FixAction = match (prev_sibling, next_sibling) {
+            (Some(p), Some(n)) => {
+                if p.able_to_lend() {
+                    if n.able_to_lend() {
+                        if p.len() > n.len() {
+                            FixAction::RotateRight
+                        } else {
+                            FixAction::RotateLeft
+                        }
+                    } else {
+                        FixAction::RotateRight
+                    }
+                } else if n.able_to_lend() {
+                    FixAction::RotateLeft
+                } else {
+                    FixAction::MergeLeft
+                }
+            }
+            (Some(p), None) => {
+                if p.able_to_lend() {
+                    FixAction::RotateRight
+                } else {
+                    FixAction::MergeLeft
+                }
+            }
+            (None, Some(n)) => {
+                if n.able_to_lend() {
+                    FixAction::RotateLeft
+                } else {
+                    FixAction::MergeRight
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        match action {
+            FixAction::RotateRight => {
+                let (deleted, cache_item) = Self::try_rotate_right_for_leaf_node(
+                    &mut self.node_store,
+                    node,
+                    child_idx - 1,
+                    key_idx_in_child,
+                )
+                .unwrap();
+                self.st.rotate_right_leaf += 1;
+                self.set_cache(cache_item);
+                return DeleteDescendResult::Done(deleted);
+            }
+            FixAction::RotateLeft => {
+                let (deleted, cache_item) = Self::try_rotate_left_for_leaf_node(
+                    &mut self.node_store,
+                    node,
+                    child_idx,
+                    key_idx_in_child,
+                )
+                .unwrap();
+                self.st.rotate_left_leaf += 1;
+                self.set_cache(cache_item);
+                return DeleteDescendResult::Done(deleted);
+            }
+            FixAction::MergeLeft => {
+                self.st.merge_with_left_leaf += 1;
+                // merge with prev node
+                let (result, cache_item) = Self::merge_leaf_node_left(
+                    &mut self.node_store,
+                    node,
+                    child_idx - 1,
+                    key_idx_in_child,
+                );
+                self.set_cache(cache_item);
+                result
+            }
+            FixAction::MergeRight => {
+                self.st.merge_with_right_leaf += 1;
+                // merge with next node
+                let (result, cache_item) = Self::merge_leaf_node_with_right(
+                    &mut self.node_store,
+                    node,
+                    child_idx,
+                    key_idx_in_child,
+                );
+
+                self.set_cache(cache_item);
+                result
+            }
+        }
     }
 
     fn remove_leaf(
@@ -466,7 +533,7 @@ where
 
     fn try_rotate_right_for_inner_node(
         node_store: &mut S,
-        parent_node_id: InnerNodeId,
+        node: &mut S::InnerNode,
         slot: usize,
     ) -> Option<()> {
         //     1    3  5
@@ -474,7 +541,6 @@ where
         // rotate right
         //     1 2     5
         //     ..  3,4
-        let node = node_store.get_inner(parent_node_id);
         let right_child_id = node.child_id_at(slot + 1).inner_id().unwrap();
         let left_child_id = node.child_id_at(slot).inner_id().unwrap();
         let slot_key = *node.key(slot);
@@ -485,7 +551,6 @@ where
             let child = node_store.get_mut_inner(right_child_id);
             child.push_front(slot_key, c);
 
-            let node = node_store.get_mut_inner(parent_node_id);
             node.set_key(slot, k);
 
             Some(())
@@ -496,7 +561,7 @@ where
 
     fn try_rotate_left_for_inner_node(
         node_store: &mut S,
-        parent_node_id: InnerNodeId,
+        node: &mut S::InnerNode,
         slot: usize,
     ) -> Option<()> {
         //     1  3  5
@@ -504,7 +569,6 @@ where
         // rotate right
         //     1   4   5
         //      2,3  ..
-        let node = node_store.get_inner(parent_node_id);
         let right_child_id = node.child_id_at(slot + 1).inner_id().unwrap();
         let left_child_id = node.child_id_at(slot).inner_id().unwrap();
         let slot_key = node.key(slot).clone();
@@ -515,7 +579,6 @@ where
             let left = node_store.get_mut_inner(left_child_id);
             left.push(slot_key, c);
 
-            let node = node_store.get_mut_inner(parent_node_id);
             node.set_key(slot, k);
 
             Some(())
@@ -526,7 +589,7 @@ where
 
     fn merge_inner_node(
         node_store: &mut S,
-        parent_id: InnerNodeId,
+        node: &mut S::InnerNode,
         slot: usize,
     ) -> InnerMergeResult {
         //     1  3  5
@@ -534,7 +597,6 @@ where
         //  merge 3
         //     1        5
         //       2,3,4
-        let node = node_store.get_inner(parent_id);
         debug_assert!(slot < node.size());
 
         let left_child_id = node.child_id_at(slot).inner_id().unwrap();
@@ -550,20 +612,17 @@ where
 
         left.merge_next(slot_key, &mut right);
 
-        let node = node_store.get_mut_inner(parent_id);
         node.merge_child(slot)
     }
 
     fn try_rotate_right_for_leaf_node(
         node_store: &mut S,
-        parent_id: InnerNodeId,
+        node: &mut S::InnerNode,
         slot: usize,
         delete_idx: usize,
     ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
-        let parent = node_store.get_inner(parent_id);
-
-        let left_id = parent.child_id_at(slot).leaf_id().unwrap();
-        let right_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
+        let left_id = node.child_id_at(slot).leaf_id().unwrap();
+        let right_id = node.child_id_at(slot + 1).leaf_id().unwrap();
 
         let left = node_store.get_mut_leaf(left_id);
         if !left.able_to_lend() {
@@ -577,21 +636,17 @@ where
 
         let cache_item = CacheItem::try_from(right_id, right);
 
-        node_store
-            .get_mut_inner(parent_id)
-            .set_key(slot, new_slot_key);
+        node.set_key(slot, new_slot_key);
 
         Some((deleted, cache_item))
     }
 
     fn try_rotate_left_for_leaf_node(
         node_store: &mut S,
-        parent_id: InnerNodeId,
+        parent: &mut S::InnerNode,
         slot: usize,
         delete_idx: usize,
     ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
-        let parent = node_store.get_inner(parent_id);
-
         let left_id = parent.child_id_at(slot).leaf_id().unwrap();
         let right_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
 
@@ -607,20 +662,17 @@ where
 
         let cache_item = CacheItem::try_from(left_id, left);
 
-        node_store
-            .get_mut_inner(parent_id)
-            .set_key(slot, new_slot_key);
+        parent.set_key(slot, new_slot_key);
 
         Some((deleted, cache_item))
     }
 
     fn merge_leaf_node_left(
         node_store: &mut S,
-        parent_id: InnerNodeId,
+        parent: &mut S::InnerNode,
         slot: usize,
         delete_idx: usize,
     ) -> (DeleteDescendResult<S::K, S::V>, Option<CacheItem<S::K>>) {
-        let parent = node_store.get_inner(parent_id);
         let left_leaf_id = parent.child_id_at(slot).leaf_id().unwrap();
         let right_leaf_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
 
@@ -634,8 +686,6 @@ where
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
         }
 
-        let parent = node_store.get_mut_inner(parent_id);
-
         (
             match parent.merge_child(slot) {
                 InnerMergeResult::Done => DeleteDescendResult::Done(kv),
@@ -647,11 +697,10 @@ where
 
     fn merge_leaf_node_with_right(
         node_store: &mut S,
-        parent_id: InnerNodeId,
+        parent: &mut S::InnerNode,
         slot: usize,
         delete_idx: usize,
     ) -> (DeleteDescendResult<S::K, S::V>, Option<CacheItem<S::K>>) {
-        let parent = node_store.get_inner(parent_id);
         let left_leaf_id = parent.child_id_at(slot).leaf_id().unwrap();
         let right_leaf_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
 
@@ -665,8 +714,6 @@ where
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
         }
-
-        let parent = node_store.get_mut_inner(parent_id);
 
         // the merge on inner, it could propagate
         (
@@ -832,6 +879,21 @@ where
     }
 }
 
+#[derive(Default, Clone, Copy, Debug)]
+pub struct Statistic {
+    pub rotate_right_inner: u64,
+    pub rotate_left_inner: u64,
+
+    pub merge_with_left_inner: u64,
+    pub merge_with_right_inner: u64,
+
+    pub rotate_right_leaf: u64,
+    pub rotate_left_leaf: u64,
+
+    pub merge_with_left_leaf: u64,
+    pub merge_with_right_leaf: u64,
+}
+
 #[derive(Clone)]
 struct CacheItem<K> {
     start: K,
@@ -853,6 +915,13 @@ impl<K: Key> CacheItem<K> {
             leaf_id: id,
         })
     }
+}
+
+enum FixAction {
+    RotateRight,
+    RotateLeft,
+    MergeLeft,
+    MergeRight,
 }
 
 enum DescendInsertResult<K, V> {
@@ -895,6 +964,7 @@ pub trait NodeStore: Clone {
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode;
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
+    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>);
 
     fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
     fn reserve_leaf(&mut self) -> LeafNodeId;
@@ -1116,9 +1186,11 @@ mod tests {
             .get_mut_inner(child_2)
             .set_data([40, 41], [LeafNodeId(6), LeafNodeId(7), LeafNodeId(8)]);
 
+        let mut parent = node_store.take_inner(parent_id);
         assert!(
-            BPlusTree::try_rotate_right_for_inner_node(&mut node_store, parent_id, 1).is_some()
+            BPlusTree::try_rotate_right_for_inner_node(&mut node_store, &mut parent, 1).is_some()
         );
+        node_store.put_back_inner(parent_id, parent);
 
         {
             let parent = node_store.get_inner(parent_id);
@@ -1187,7 +1259,11 @@ mod tests {
             [LeafNodeId(5), LeafNodeId(6), LeafNodeId(7), LeafNodeId(8)],
         );
 
-        assert!(BPlusTree::try_rotate_left_for_inner_node(&mut node_store, parent_id, 1).is_some());
+        let mut parent = node_store.take_inner(parent_id);
+        assert!(
+            BPlusTree::try_rotate_left_for_inner_node(&mut node_store, &mut parent, 1).is_some()
+        );
+        node_store.put_back_inner(parent_id, parent);
 
         {
             let parent = node_store.get_inner(parent_id);
@@ -1252,7 +1328,9 @@ mod tests {
             .get_mut_inner(child_2)
             .set_data([40], [LeafNodeId(5), LeafNodeId(6)]);
 
-        let _result = BPlusTree::merge_inner_node(&mut node_store, parent_id, 1);
+        let mut parent = node_store.take_inner(parent_id);
+        let _result = BPlusTree::merge_inner_node(&mut node_store, &mut parent, 1);
+        node_store.put_back_inner(parent_id, parent);
 
         {
             let parent = node_store.get_inner(parent_id);
@@ -1309,9 +1387,11 @@ mod tests {
             .get_mut_leaf(child_2)
             .set_data([(40, 1), (41, 1)]);
 
+        let mut parent = node_store.take_inner(parent_id);
         assert!(
-            BPlusTree::try_rotate_right_for_leaf_node(&mut node_store, parent_id, 1, 0).is_some()
+            BPlusTree::try_rotate_right_for_leaf_node(&mut node_store, &mut parent, 1, 0).is_some()
         );
+        node_store.put_back_inner(parent_id, parent);
 
         {
             let parent = node_store.get_inner(parent_id);
@@ -1357,8 +1437,10 @@ mod tests {
             .get_mut_leaf(child_2)
             .set_data([(39, 1), (40, 1), (41, 1)]);
 
+        let mut parent = node_store.take_inner(parent_id);
         let result =
-            BPlusTree::try_rotate_left_for_leaf_node(&mut node_store, parent_id, 1, 0).unwrap();
+            BPlusTree::try_rotate_left_for_leaf_node(&mut node_store, &mut parent, 1, 0).unwrap();
+        node_store.put_back_inner(parent_id, parent);
         assert_eq!(result.0 .0, 10);
 
         {
@@ -1405,7 +1487,9 @@ mod tests {
             .get_mut_leaf(child_2)
             .set_data([(39, 1), (40, 1)]);
 
-        let _result = BPlusTree::merge_leaf_node_with_right(&mut node_store, parent_id, 1, 0);
+        let mut parent = node_store.take_inner(parent_id);
+        let _result = BPlusTree::merge_leaf_node_with_right(&mut node_store, &mut parent, 1, 0);
+        node_store.put_back_inner(parent_id, parent);
         {
             let parent = node_store.get_inner(parent_id);
             assert_eq!(parent.key(1).clone(), 50);
@@ -1442,7 +1526,9 @@ mod tests {
             .get_mut_leaf(child_2)
             .set_data([(39, 1), (40, 1)]);
 
-        let _result = BPlusTree::merge_leaf_node_left(&mut node_store, parent_id, 1, 0);
+        let mut parent = node_store.take_inner(parent_id);
+        let _result = BPlusTree::merge_leaf_node_left(&mut node_store, &mut parent, 1, 0);
+        node_store.put_back_inner(parent_id, parent);
         {
             let parent = node_store.get_inner(parent_id);
             assert_eq!(parent.key(1).clone(), 50);

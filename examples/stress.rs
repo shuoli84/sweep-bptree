@@ -1,10 +1,11 @@
 mod utils;
-use rand::seq::SliceRandom;
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use utils::*;
 
 use sweep_bptree::{BPlusTree, NodeStoreVec};
 
 type NodeStore = NodeStoreVec<Point, Value, 64, 65, 64>;
+const RAND_SEED: u64 = 123;
 
 #[inline(never)]
 fn create_tree() -> BPlusTree<NodeStore> {
@@ -29,12 +30,14 @@ fn create_tree() -> BPlusTree<NodeStore> {
 #[inline(never)]
 fn delete_tree(tree: &mut BPlusTree<NodeStore>) {
     let mut keys = tree.iter().map(|(k, _)| k).cloned().collect::<Vec<_>>();
-    keys.shuffle(&mut rand::thread_rng());
+    let mut r = StdRng::seed_from_u64(RAND_SEED);
+    keys.shuffle(&mut r);
 
     for k in keys.iter() {
         tree.remove(k);
     }
     println!("{}", tree.len());
+    println!("{:#?}", tree.statistic());
 }
 
 fn main() {
