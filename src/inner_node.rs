@@ -99,13 +99,14 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 }
             }
         } else {
-            assert!(self.size <= N as u16);
-
             for i in 0..self.size as usize {
-                match self.key(i).cmp(k) {
-                    std::cmp::Ordering::Less => continue,
-                    std::cmp::Ordering::Equal => return (i + 1, self.child_id_at(i + 1)),
-                    std::cmp::Ordering::Greater => return (i, self.child_id_at(i)),
+                let cmp = self.key(i).cmp(k);
+                if cmp == std::cmp::Ordering::Less {
+                    continue;
+                } else if cmp == std::cmp::Ordering::Equal {
+                    return (i + 1, self.child_id_at(i + 1));
+                } else {
+                    return (i, self.child_id_at(i));
                 }
             }
             return (self.size as usize, self.child_id_at(self.size as usize));
