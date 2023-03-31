@@ -13,88 +13,6 @@ const COUNTS: [usize; 2] = [1000, 10000];
 
 type NodeStoreBench = NodeStoreVec<Point, Value, 64, 65, 64>;
 
-fn benchmark_sorted_vec(c: &mut Criterion) {
-    for count in COUNTS {
-        c.bench_function(format!("vec insert {count}").as_str(), |b| {
-            b.iter(|| {
-                let mut tree = SortedVec::new();
-
-                for i in 0..count {
-                    let k = Point {
-                        x: i as f64,
-                        y: i as f64,
-                    };
-                    tree.insert(k, Value::default());
-                }
-            });
-        });
-
-        c.bench_function(format!("vec remove {count}").as_str(), |b| {
-            let mut tree = SortedVec::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let mut tree = tree.clone();
-
-                for i in 0..count {
-                    let k = Point {
-                        x: i as f64,
-                        y: i as f64,
-                    };
-                    tree.remove(&k);
-                }
-            });
-        });
-
-        c.bench_function(format!("vec get {count}").as_str(), |b| {
-            let mut tree = SortedVec::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let tree = tree.clone();
-                for i in 0..count {
-                    let k = Point {
-                        x: i as f64,
-                        y: i as f64,
-                    };
-                    tree.get(&k);
-                }
-            });
-        });
-
-        c.bench_function(format!("vec iter {count}").as_str(), |b| {
-            let mut tree = SortedVec::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let c = tree.iter().fold(0, |a, _i| a + black_box(1));
-                assert_eq!(c, tree.len());
-            });
-        });
-    }
-}
-
 fn benchmark_bp_tree(c: &mut Criterion) {
     for count in COUNTS {
         c.bench_function(format!("bptree insert {count}").as_str(), |b| {
@@ -111,9 +29,14 @@ fn benchmark_bp_tree(c: &mut Criterion) {
                 }
             });
         });
-    }
 
-    for count in COUNTS {
+        c.bench_function(format!("bptree clone {count}").as_str(), |b| {
+            let tree = create_tree(count);
+            b.iter(|| {
+                black_box(tree.clone());
+            });
+        });
+
         c.bench_function(format!("bptree ordered_remove {count}").as_str(), |b| {
             let node_store = NodeStoreBench::new();
             let mut tree = BPlusTree::new(node_store);
@@ -256,6 +179,13 @@ fn benchmark_btree(c: &mut Criterion) {
             });
         });
 
+        c.bench_function(format!("btree clone {count}").as_str(), |b| {
+            let tree = create_btree(count);
+            b.iter(|| {
+                black_box(tree.clone());
+            });
+        });
+
         c.bench_function(format!("btree ordered_remove {count}").as_str(), |b| {
             let mut tree = BTreeMap::<Point, Value>::new();
 
@@ -388,6 +318,88 @@ fn create_btree(count: usize) -> BTreeMap<Point, Value> {
     }
 
     tree
+}
+
+fn benchmark_sorted_vec(c: &mut Criterion) {
+    for count in COUNTS {
+        c.bench_function(format!("vec insert {count}").as_str(), |b| {
+            b.iter(|| {
+                let mut tree = SortedVec::new();
+
+                for i in 0..count {
+                    let k = Point {
+                        x: i as f64,
+                        y: i as f64,
+                    };
+                    tree.insert(k, Value::default());
+                }
+            });
+        });
+
+        c.bench_function(format!("vec remove {count}").as_str(), |b| {
+            let mut tree = SortedVec::new();
+
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                tree.insert(k, Value::default());
+            }
+
+            b.iter(|| {
+                let mut tree = tree.clone();
+
+                for i in 0..count {
+                    let k = Point {
+                        x: i as f64,
+                        y: i as f64,
+                    };
+                    tree.remove(&k);
+                }
+            });
+        });
+
+        c.bench_function(format!("vec get {count}").as_str(), |b| {
+            let mut tree = SortedVec::new();
+
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                tree.insert(k, Value::default());
+            }
+
+            b.iter(|| {
+                let tree = tree.clone();
+                for i in 0..count {
+                    let k = Point {
+                        x: i as f64,
+                        y: i as f64,
+                    };
+                    tree.get(&k);
+                }
+            });
+        });
+
+        c.bench_function(format!("vec iter {count}").as_str(), |b| {
+            let mut tree = SortedVec::new();
+
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                tree.insert(k, Value::default());
+            }
+
+            b.iter(|| {
+                let c = tree.iter().fold(0, |a, _i| a + black_box(1));
+                assert_eq!(c, tree.len());
+            });
+        });
+    }
 }
 
 criterion_group!(
