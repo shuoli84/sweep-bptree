@@ -6,6 +6,7 @@ use std::{
 };
 
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct LeafNode<K: Key, V: Value, const N: usize> {
     /// how many data items
     size: u16,
