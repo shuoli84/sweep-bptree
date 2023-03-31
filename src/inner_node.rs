@@ -7,6 +7,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct InnerNode<K: Key, const N: usize, const C: usize> {
     size: u16,
 

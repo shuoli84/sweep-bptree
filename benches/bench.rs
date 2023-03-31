@@ -10,6 +10,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sweep_bptree::{BPlusTree, NodeStoreVec};
 
 const COUNTS: [usize; 2] = [1000, 10000];
+const LARGE_COUNTS: [usize; 1] = [262144];
 const RAND_SEED: u64 = 123;
 
 type NodeStoreBench = NodeStoreVec<Point, Value, 64, 65, 64>;
@@ -27,6 +28,28 @@ fn benchmark_bp_tree(c: &mut Criterion) {
                         y: i as f64,
                     };
                     tree.insert(k, Value::default());
+                }
+            });
+        });
+
+        c.bench_function(format!("bptree random_insert {count}").as_str(), |b| {
+            let mut keys = vec![];
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                keys.push(k);
+            }
+
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
+            keys.shuffle(&mut r);
+            b.iter(|| {
+                let node_store = NodeStoreBench::new();
+                let mut tree = BPlusTree::new(node_store);
+
+                for k in &keys {
+                    tree.insert(*k, Value::default());
                 }
             });
         });
@@ -160,6 +183,27 @@ fn benchmark_btree(c: &mut Criterion) {
                         y: i as f64,
                     };
                     tree.insert(k, Value::default());
+                }
+            });
+        });
+
+        c.bench_function(format!("btree random_insert {count}").as_str(), |b| {
+            let mut keys = vec![];
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                keys.push(k);
+            }
+
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
+            keys.shuffle(&mut r);
+            b.iter(|| {
+                let mut tree = BTreeMap::new();
+
+                for k in &keys {
+                    tree.insert(*k, Value::default());
                 }
             });
         });
@@ -321,6 +365,27 @@ fn benchmark_sorted_vec(c: &mut Criterion) {
                         y: i as f64,
                     };
                     tree.insert(k, Value::default());
+                }
+            });
+        });
+
+        c.bench_function(format!("vec random_insert {count}").as_str(), |b| {
+            let mut keys = vec![];
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                keys.push(k);
+            }
+
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
+            keys.shuffle(&mut r);
+            b.iter(|| {
+                let mut tree = SortedVec::new();
+
+                for k in &keys {
+                    tree.insert(*k, Value::default());
                 }
             });
         });
