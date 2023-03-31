@@ -201,7 +201,7 @@ where
 
                 let l_leaf = self.node_store.get_mut_leaf(id);
                 let r_leaf = l_leaf.split_new_leaf(idx, (k, v), new_id, id);
-                let slot_key: S::K = r_leaf.data_at(0).0;
+                let slot_key: S::K = *r_leaf.data_at(0).0;
 
                 if k >= slot_key {
                     self.set_cache(CacheItem::try_from(new_id, r_leaf.as_ref()));
@@ -269,7 +269,7 @@ where
     fn find_in_leaf(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf_node = self.node_store.get_leaf(leaf_id);
         let (_, kv) = leaf_node.locate_slot_with_value(k);
-        kv.map(|kv| kv.1)
+        kv
     }
 
     fn find_descend_mut(&mut self, node_id: NodeId, k: &S::K) -> Option<&mut S::V> {
@@ -285,8 +285,8 @@ where
 
     fn find_in_leaf_mut(&mut self, leaf_id: LeafNodeId, k: &S::K) -> Option<&mut S::V> {
         let leaf_node = self.node_store.get_mut_leaf(leaf_id);
-        let (_, kv) = leaf_node.locate_slot_mut(k);
-        kv
+        let (_, v) = leaf_node.locate_slot_mut(k);
+        v
     }
 
     fn find_in_leaf_mut_and_cache_it(
@@ -303,8 +303,8 @@ where
     fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf = self.node_store.get_leaf(leaf_id);
         self.set_cache(CacheItem::try_from(leaf_id, leaf));
-        let (_, kv) = leaf.locate_slot_with_value(k);
-        kv.map(|kv| kv.1)
+        let (_, v) = leaf.locate_slot_with_value(k);
+        v
     }
 
     /// delete element identified by K
@@ -656,7 +656,7 @@ where
         }
 
         let kv = right.pop_front();
-        let new_slot_key = right.data_at(0).0;
+        let new_slot_key = *right.data_at(0).0;
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
 
@@ -828,7 +828,7 @@ where
     }
 
     /// Create an cursor for k
-    pub fn get_cursor(&self, k: &S::K) -> Option<(Cursor<S::K>, Option<(&S::K, &S::V)>)> {
+    pub fn get_cursor(&self, k: &S::K) -> Option<(Cursor<S::K>, Option<&S::V>)> {
         let node_id = self.root?;
         let leaf_id = match node_id {
             NodeId::Inner(inner_id) => {
@@ -849,8 +849,8 @@ where
         }?;
 
         let leaf = self.node_store.get_leaf(leaf_id);
-        let (idx, kv) = leaf.locate_slot_with_value(k);
-        Some((Cursor::new(*k, leaf_id, idx), kv))
+        let (idx, v) = leaf.locate_slot_with_value(k);
+        Some((Cursor::new(*k, leaf_id, idx), v))
     }
 
     #[cfg(test)]
@@ -1068,8 +1068,8 @@ pub trait LNode<K: Key, V: Value> {
     fn set_prev(&mut self, id: Option<LeafNodeId>);
     fn next(&self) -> Option<LeafNodeId>;
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]);
-    fn data_at(&self, slot: usize) -> &(K, V);
-    fn try_data_at(&self, idx: usize) -> Option<&(K, V)>;
+    fn data_at(&self, slot: usize) -> (&K, &V);
+    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
     fn key_range(&self) -> Option<(K, K)>;
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
@@ -1082,7 +1082,7 @@ pub trait LNode<K: Key, V: Value> {
         self_leaf_id: LeafNodeId,
     ) -> Box<Self>;
     fn locate_slot(&self, k: &K) -> Result<usize, usize>;
-    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<(&K, &V)>);
+    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<&V>);
 
     fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>);
     fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V>;
@@ -1094,7 +1094,7 @@ pub trait LNode<K: Key, V: Value> {
     fn pop(&mut self) -> (K, V);
     fn pop_front(&mut self) -> (K, V);
 
-    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &(K, V)> + 'a>;
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (&K, &V)> + 'a>;
 }
 
 #[cfg(test)]
@@ -1156,7 +1156,7 @@ mod tests {
 
         let first_leaf_id = tree.first_leaf().unwrap();
         let first_leaf = tree.node_store.get_leaf(first_leaf_id);
-        assert_eq!(first_leaf.data_at(0).0, 0);
+        assert_eq!(first_leaf.data_at(0).0.clone(), 0);
     }
 
     #[test]
@@ -1401,20 +1401,14 @@ mod tests {
         {
             let child_1 = node_store.get_leaf(child_1);
             assert_eq!(child_1.len(), 3);
-            assert_eq!(
-                child_1.iter().cloned().collect::<Vec<_>>(),
-                vec![(10, 1), (11, 1), (12, 1)]
-            );
+            assert_eq!(child_1.data_vec(), vec![(10, 1), (11, 1), (12, 1)]);
         }
 
         {
             let child_2 = node_store.get_leaf(child_2);
             assert_eq!(child_2.len(), 2);
 
-            assert_eq!(
-                child_2.iter().cloned().collect::<Vec<_>>(),
-                vec![(13, 1), (41, 1)]
-            );
+            assert_eq!(child_2.data_vec(), vec![(13, 1), (41, 1)]);
         }
     }
 
@@ -1451,20 +1445,14 @@ mod tests {
         {
             let child_1 = node_store.get_leaf(child_1);
             assert_eq!(child_1.len(), 3);
-            assert_eq!(
-                child_1.iter().cloned().collect::<Vec<_>>(),
-                vec![(11, 1), (12, 1), (39, 1),]
-            );
+            assert_eq!(child_1.data_vec(), vec![(11, 1), (12, 1), (39, 1),]);
         }
 
         {
             let child_2 = node_store.get_leaf(child_2);
             assert_eq!(child_2.len(), 2);
 
-            assert_eq!(
-                child_2.iter().cloned().collect::<Vec<_>>(),
-                vec![(40, 1), (41, 1)]
-            );
+            assert_eq!(child_2.data_vec(), vec![(40, 1), (41, 1)]);
         }
     }
 
@@ -1498,10 +1486,7 @@ mod tests {
         {
             let child_1 = node_store.get_leaf(child_1);
             assert_eq!(child_1.len(), 3);
-            assert_eq!(
-                child_1.iter().cloned().collect::<Vec<_>>(),
-                vec![(11, 1), (39, 1), (40, 1),]
-            );
+            assert_eq!(child_1.data_vec(), vec![(11, 1), (39, 1), (40, 1),]);
         }
 
         assert!(node_store.try_get_leaf(child_2).is_none());
@@ -1537,10 +1522,7 @@ mod tests {
         {
             let child_1 = node_store.get_leaf(child_1);
             assert_eq!(child_1.len(), 3);
-            assert_eq!(
-                child_1.iter().cloned().collect::<Vec<_>>(),
-                vec![(10, 1), (11, 1), (40, 1),]
-            );
+            assert_eq!(child_1.data_vec(), vec![(10, 1), (11, 1), (40, 1),]);
         }
 
         assert!(node_store.try_get_leaf(child_2).is_none());

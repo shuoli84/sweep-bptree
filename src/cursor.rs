@@ -112,7 +112,7 @@ impl<K: Key> Cursor<K> {
         let kv = leaf.data_at(offset);
         Some((
             Self {
-                k: kv.0,
+                k: *kv.0,
                 leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
@@ -148,7 +148,7 @@ impl<K: Key> Cursor<K> {
             let kv = leaf.data_at(next_offset);
             Some((
                 Self {
-                    k: kv.0,
+                    k: *kv.0,
                     leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
@@ -161,7 +161,7 @@ impl<K: Key> Cursor<K> {
 
             Some((
                 Self {
-                    k: kv.0,
+                    k: *kv.0,
                     leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },
@@ -187,7 +187,7 @@ impl<K: Key> Cursor<K> {
             _ => {
                 // todo: consider update self?
                 let (_, value) = leaf.locate_slot_with_value(&self.k);
-                value.map(|kv| kv.1)
+                value
             }
         }
     }
