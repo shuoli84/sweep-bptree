@@ -1,5 +1,5 @@
 mod sorted_vec;
-use rand::seq::SliceRandom;
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use sorted_vec::SortedVec;
 mod models;
 use models::*;
@@ -10,6 +10,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sweep_bptree::{BPlusTree, NodeStoreVec};
 
 const COUNTS: [usize; 2] = [1000, 10000];
+const RAND_SEED: u64 = 123;
 
 type NodeStoreBench = NodeStoreVec<Point, Value, 64, 65, 64>;
 
@@ -65,7 +66,8 @@ fn benchmark_bp_tree(c: &mut Criterion) {
             let tree = create_tree(count);
 
             let mut keys = tree.iter().map(|(k, _v)| k).cloned().collect::<Vec<_>>();
-            keys.shuffle(&mut rand::thread_rng());
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
+            keys.shuffle(&mut r);
 
             b.iter(|| {
                 let mut tree = tree.clone();
@@ -76,16 +78,7 @@ fn benchmark_bp_tree(c: &mut Criterion) {
         });
 
         c.bench_function(format!("bptree ordered_get {count}").as_str(), |b| {
-            let node_store = NodeStoreBench::new();
-            let mut tree = BPlusTree::new(node_store);
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
+            let tree = create_tree(count);
 
             b.iter(|| {
                 for i in 0..count {
@@ -99,19 +92,11 @@ fn benchmark_bp_tree(c: &mut Criterion) {
         });
 
         c.bench_function(format!("bptree random_get {count}").as_str(), |b| {
-            let node_store = NodeStoreBench::new();
-            let mut tree = BPlusTree::new(node_store);
+            let tree = create_tree(count);
 
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
             let mut keys = tree.iter().map(|(k, _v)| k).cloned().collect::<Vec<_>>();
-            keys.shuffle(&mut rand::thread_rng());
+            keys.shuffle(&mut r);
 
             b.iter(|| {
                 for k in keys.iter() {
@@ -213,7 +198,8 @@ fn benchmark_btree(c: &mut Criterion) {
             let tree = create_btree(count);
 
             let mut keys = tree.iter().map(|(k, _v)| k).cloned().collect::<Vec<_>>();
-            keys.shuffle(&mut rand::thread_rng());
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
+            keys.shuffle(&mut r);
 
             b.iter(|| {
                 let mut tree = tree.clone();
@@ -257,7 +243,8 @@ fn benchmark_btree(c: &mut Criterion) {
             }
 
             let mut keys = tree.iter().map(|(k, _v)| k).cloned().collect::<Vec<_>>();
-            keys.shuffle(&mut rand::thread_rng());
+            let mut r = StdRng::seed_from_u64(RAND_SEED);
+            keys.shuffle(&mut r);
 
             b.iter(|| {
                 for k in keys.iter() {
@@ -290,7 +277,8 @@ fn create_tree(count: usize) -> BPlusTree<NodeStoreBench> {
     let mut tree = BPlusTree::new(node_store);
 
     let mut keys = (0..count).collect::<Vec<_>>();
-    keys.shuffle(&mut rand::thread_rng());
+    let mut r = StdRng::seed_from_u64(RAND_SEED);
+    keys.shuffle(&mut r);
 
     for i in keys {
         let k = Point {
@@ -307,7 +295,8 @@ fn create_btree(count: usize) -> BTreeMap<Point, Value> {
     let mut tree = BTreeMap::default();
 
     let mut keys = (0..count).collect::<Vec<_>>();
-    keys.shuffle(&mut rand::thread_rng());
+    let mut r = StdRng::seed_from_u64(RAND_SEED);
+    keys.shuffle(&mut r);
 
     for i in keys {
         let k = Point {
