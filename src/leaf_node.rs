@@ -33,12 +33,27 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         (N / 2) as u16
     }
 
+    /// the minimum size for Leaf Node, if the node size lower than this, then
+    /// it is under sized
+    const fn minimum_size() -> u16 {
+        let s = (N / 4) as u16;
+        if s == 0 {
+            1
+        } else {
+            s
+        }
+    }
+
     pub fn is_full(&self) -> bool {
         self.size == N as u16
     }
 
     pub fn able_to_lend(&self) -> bool {
-        self.size > Self::split_origin_size() as u16
+        self.size > Self::minimum_size()
+    }
+
+    pub fn is_size_minimum(&self) -> bool {
+        self.size == Self::minimum_size()
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
@@ -77,8 +92,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    // todo: Self => Box
-    pub(crate) fn split_new_leaf(
+    fn split_new_leaf(
         &mut self,
         insert_idx: usize,
         item: (K, V),
@@ -142,7 +156,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     pub(crate) fn delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {
         match self.locate_child_idx(k) {
             Ok(idx) => {
-                if self.size > Self::split_origin_size() {
+                if self.able_to_lend() {
                     let result = unsafe {
                         let k = utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
                         let v = utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
@@ -204,7 +218,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     /// pop the last item, this is used when next sibling undersize
     pub(crate) fn pop(&mut self) -> (K, V) {
-        debug_assert!(self.size > Self::split_origin_size());
+        debug_assert!(self.able_to_lend());
         let last_idx = self.size as usize - 1;
         let result = unsafe {
             let k = utils::slice_remove(self.key_area_mut(..self.len()), last_idx);
@@ -216,7 +230,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub(crate) fn pop_front(&mut self) -> (K, V) {
-        debug_assert!(self.size > Self::split_origin_size());
+        debug_assert!(self.able_to_lend());
         let result = unsafe {
             let k = utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
             let v = utils::slice_remove(self.value_area_mut(..self.size as usize), 0);
@@ -242,9 +256,6 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     // delete the item at idx and append the item to last
     pub(crate) fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V) {
-        // only called when this node is fit
-        debug_assert!(self.size == Self::split_origin_size());
-
         let k = std::mem::replace(&mut self.slot_key[idx], MaybeUninit::uninit());
         let v = std::mem::replace(&mut self.slot_value[idx], MaybeUninit::uninit());
 
@@ -415,11 +426,11 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn is_full(&self) -> bool {
-        self.size == N as u16
+        LeafNode::is_full(self)
     }
 
     fn able_to_lend(&self) -> bool {
-        self.size > Self::split_origin_size()
+        LeafNode::able_to_lend(self)
     }
 
     fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {

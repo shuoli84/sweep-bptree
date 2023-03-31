@@ -23,6 +23,23 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         N - Self::split_origin_size()
     }
 
+    const fn minimum_size() -> usize {
+        if N / 4 == 0 {
+            1
+        } else {
+            N / 4
+        }
+    }
+
+    pub fn able_to_lend(&self) -> bool {
+        self.size > Self::minimum_size() as u16
+    }
+
+    /// whether this node is full, if yes, then the next insert need to split
+    pub fn is_full(&self) -> bool {
+        self.size == N as u16
+    }
+
     pub(crate) fn empty() -> Box<Self> {
         // not sure how to do a constrain in compile time, just put a debug assert here.
         debug_assert!(C == N + 1);
@@ -65,16 +82,6 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         for c in 0..C1 {
             self.child_id[c] = MaybeUninit::new(child_id[c].into());
         }
-    }
-
-    /// whether this node is full, if yes, then the next insert need to split
-    pub fn is_full(&self) -> bool {
-        self.size == N as u16
-    }
-
-    /// whether this node able to lend
-    pub fn able_to_lend(&self) -> bool {
-        self.size > Self::split_origin_size() as u16
     }
 
     const fn binary_search_threshold() -> usize {
@@ -263,7 +270,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         };
         self.size -= 1;
 
-        if self.size >= Self::split_origin_size() as u16 {
+        if self.size >= Self::minimum_size() as u16 {
             InnerMergeResult::Done
         } else {
             // the undersized inner node will be fixed by parent node
@@ -276,13 +283,18 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             *self.key_area_mut(self.size as usize) = MaybeUninit::new(slot_key);
             self.size += 1;
 
+            let self_size = self.size as usize;
+            let right_size = right.size();
+
+            debug_assert!(self.size() + right_size <= N);
+
             utils::move_to_slice(
-                right.key_area_mut(..right.size()),
-                self.key_area_mut(self.size as usize..N),
+                right.key_area_mut(..right_size),
+                self.key_area_mut(self_size..self_size + right_size),
             );
             utils::move_to_slice(
-                right.child_area_mut(..right.size() + 1),
-                self.child_area_mut(self.size as usize..N + 1),
+                right.child_area_mut(..right_size + 1),
+                self.child_area_mut(self_size..self_size + right_size + 1),
             );
             self.size += right.size;
         }

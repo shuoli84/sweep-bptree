@@ -607,9 +607,6 @@ where
         let mut right = node_store.take_inner(right_child_id);
         let left = node_store.get_mut_inner(left_child_id);
 
-        debug_assert!(!right.able_to_lend());
-        debug_assert!(!left.able_to_lend());
-
         left.merge_next(slot_key, &mut right);
 
         node.merge_child(slot)
