@@ -90,6 +90,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     /// returns the child index for k
+    #[inline]
     pub(crate) fn locate_child(&self, k: &K) -> (usize, NodeId) {
         if self.size > Self::binary_search_threshold() as u16 {
             match unsafe { self.key_area(0..self.size as usize) }
@@ -107,17 +108,20 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 }
             }
         } else {
-            for i in 0..self.size as usize {
-                let cmp = self.key(i).cmp(k);
-                if cmp == std::cmp::Ordering::Less {
-                    continue;
-                } else if cmp == std::cmp::Ordering::Equal {
-                    return (i + 1, self.child_id_at(i + 1));
-                } else {
-                    return (i, self.child_id_at(i));
-                }
-            }
-            return (self.size as usize, self.child_id_at(self.size as usize));
+            unsafe { self.key_area(..self.size()) }
+                .iter()
+                .enumerate()
+                .find_map(|(i, s)| {
+                    let cmp = unsafe { s.assume_init_ref() }.cmp(k);
+                    if cmp == std::cmp::Ordering::Less {
+                        None
+                    } else if cmp == std::cmp::Ordering::Greater {
+                        Some((i, self.child_id_at(i)))
+                    } else {
+                        Some((i + 1, self.child_id_at(i + 1)))
+                    }
+                })
+                .unwrap_or_else(|| (self.size as usize, self.child_id_at(self.size as usize)))
         }
     }
 
