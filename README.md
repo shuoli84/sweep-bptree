@@ -2,7 +2,7 @@
 
 In memory locality aware b+ tree, faster for ordered access.
 
-# Motivation
+## Motivation
 
 While developing [poly2tri-rs](https://github.com/shuoli84/poly2tri-rs), I need a better datastructure to maintain "Sweeping Front/Advancing Front". It should:
 
@@ -10,25 +10,25 @@ While developing [poly2tri-rs](https://github.com/shuoli84/poly2tri-rs), I need 
 2. performant for query, and the query pattern is more local than random. That means the query is more likely to be close to the last accessed node.
 3. Provide floating cursor support, so I can keep a cursor around and modify the tree underlying.
 
-**Why not splaytree**
+### Why not splaytree
 
 Splaytree is binary tree, so it has relative large number of nodes, which is bad for cache locality.
 
-**Why not std btree**
+### Why not std btree
 
 std::collections::BTreeMap's Cursor support is not stablized yet.
 
 Also I couldn't come up a proper cache mechanism for BTree. BTree's value is stored in all nodes, that makes cache invalidate more frequently.
 
-# Features
+## Features
 
 * Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
 * Plugable NodeStore, how to alloc or reuse Node is customizable.
 
-# Example
+## Example
 
-## crud
+### crud
 
 ```rust
 use sweep_bptree::{BPlusTree, NodeStoreVec};
@@ -49,7 +49,7 @@ assert_eq!(tree.remove(&3).unwrap(), (1.0, 1.0));
 assert!(tree.is_empty());
 ```
 
-## Create multiple owned cursors
+### Create multiple owned cursors
 
 ``` rust
 use sweep_bptree::{BPlusTree, NodeStoreVec};
@@ -81,12 +81,12 @@ tree.insert(0, (100., 100.));
 assert_eq!(cursor_1.value(&tree).unwrap().0, 100.);
 ```
 
-# Benchmark
+## Benchmark
 
 Data collected on macbook pro m1.
 NOTE: The underlying code didn't tuned yet, there is a big space to improve.
 
-## Highlight
+### Highlight
 
 * bptree ordered_get is way faster than random_get, also way faster than btree's ordered_get
 * bptree iter's faster than btree iter by around 50%.
