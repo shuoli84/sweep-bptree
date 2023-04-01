@@ -86,7 +86,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 
     const fn binary_search_threshold() -> usize {
-        128 / std::mem::size_of::<K>()
+        6
     }
 
     /// returns the child index for k
