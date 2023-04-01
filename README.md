@@ -95,22 +95,24 @@ NOTE: The underlying code didn't tuned yet, there is a big space to improve.
 ```bash
 group                          base                                   new
 -----                          ----                                   ---
-bptree clone 1000              1.00      3.2±0.04µs        ? ?/sec    1.00      3.2±0.04µs        ? ?/sec
-bptree clone 10000             1.00     32.8±0.54µs        ? ?/sec    1.00     32.8±0.54µs        ? ?/sec
-bptree cursor 1000             1.00      4.5±0.09µs        ? ?/sec    1.00      4.5±0.09µs        ? ?/sec
-bptree cursor 10000            1.00     46.4±0.41µs        ? ?/sec    1.00     46.4±0.41µs        ? ?/sec
-bptree insert 1000             1.00     21.9±0.25µs        ? ?/sec    1.00     21.9±0.25µs        ? ?/sec
-bptree insert 10000            1.00    316.3±2.63µs        ? ?/sec    1.00    316.3±2.63µs        ? ?/sec
-bptree iter 1000               1.00    338.2±2.57ns        ? ?/sec    1.00    338.2±2.57ns        ? ?/sec
-bptree iter 10000              1.00      3.5±0.07µs        ? ?/sec    1.00      3.5±0.07µs        ? ?/sec
-bptree ordered_get 1000        1.00     11.2±0.10µs        ? ?/sec    1.00     11.2±0.10µs        ? ?/sec
-bptree ordered_get 10000       1.00    118.7±0.80µs        ? ?/sec    1.00    118.7±0.80µs        ? ?/sec
-bptree ordered_remove 1000     1.00     65.4±0.60µs        ? ?/sec    1.00     65.4±0.60µs        ? ?/sec
-bptree ordered_remove 10000    1.00    736.2±9.56µs        ? ?/sec    1.00    736.2±9.56µs        ? ?/sec
-bptree random_get 1000         1.00     20.6±1.93µs        ? ?/sec    1.00     20.6±1.93µs        ? ?/sec
-bptree random_get 10000        1.00  1062.6±11.90µs        ? ?/sec    1.00  1062.6±11.90µs        ? ?/sec
-bptree random_remove 1000      1.00     58.0±1.02µs        ? ?/sec    1.00     58.0±1.02µs        ? ?/sec
-bptree random_remove 10000     1.00  1267.6±13.76µs        ? ?/sec    1.00  1267.6±13.76µs        ? ?/sec
+bptree clone 1000              1.00      3.5±0.03µs        ? ?/sec    1.00      3.5±0.03µs        ? ?/sec
+bptree clone 10000             1.00     37.9±3.42µs        ? ?/sec    1.00     37.9±3.42µs        ? ?/sec
+bptree cursor 1000             1.00      4.4±0.04µs        ? ?/sec    1.00      4.4±0.04µs        ? ?/sec
+bptree cursor 10000            1.00     46.3±0.30µs        ? ?/sec    1.00     46.3±0.30µs        ? ?/sec
+bptree insert 1000             1.00     20.9±0.13µs        ? ?/sec    1.00     20.9±0.13µs        ? ?/sec
+bptree insert 10000            1.00    306.1±2.77µs        ? ?/sec    1.00    306.1±2.77µs        ? ?/sec
+bptree iter 1000               1.00    337.9±1.19ns        ? ?/sec    1.00    337.9±1.19ns        ? ?/sec
+bptree iter 10000              1.00      3.3±0.02µs        ? ?/sec    1.00      3.3±0.02µs        ? ?/sec
+bptree ordered_get 1000        1.00     11.3±0.28µs        ? ?/sec    1.00     11.3±0.28µs        ? ?/sec
+bptree ordered_get 10000       1.00    117.9±0.30µs        ? ?/sec    1.00    117.9±0.30µs        ? ?/sec
+bptree ordered_remove 1000     1.00     58.4±0.37µs        ? ?/sec    1.00     58.4±0.37µs        ? ?/sec
+bptree ordered_remove 10000    1.00   682.3±10.80µs        ? ?/sec    1.00   682.3±10.80µs        ? ?/sec
+bptree random_get 1000         1.00     19.3±2.32µs        ? ?/sec    1.00     19.3±2.32µs        ? ?/sec
+bptree random_get 10000        1.00    990.1±6.85µs        ? ?/sec    1.00    990.1±6.85µs        ? ?/sec
+bptree random_insert 1000      1.00     70.2±0.60µs        ? ?/sec    1.00     70.2±0.60µs        ? ?/sec
+bptree random_insert 10000     1.00  1331.9±12.50µs        ? ?/sec    1.00  1331.9±12.50µs        ? ?/sec
+bptree random_remove 1000      1.00     59.0±1.33µs        ? ?/sec    1.00     59.0±1.33µs        ? ?/sec
+bptree random_remove 10000     1.00   1221.1±7.52µs        ? ?/sec    1.00   1221.1±7.52µs        ? ?/sec
 btree clone 1000               1.00     12.5±0.14µs        ? ?/sec    1.00     12.5±0.14µs        ? ?/sec
 btree clone 10000              1.00    134.3±1.79µs        ? ?/sec    1.00    134.3±1.79µs        ? ?/sec
 btree insert 1000              1.00     51.3±1.07µs        ? ?/sec    1.00     51.3±1.07µs        ? ?/sec
