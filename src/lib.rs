@@ -88,7 +88,7 @@ where
 {
     /// Create a new `BPlusTree` with the given `NodeStore`.
     pub fn new(mut node_store: S) -> Self {
-        let (root_id, _) = node_store.create_leaf();
+        let (root_id, _) = node_store.new_empty_leaf();
         Self {
             root: NodeId::Leaf(root_id),
             node_store,
@@ -949,6 +949,7 @@ pub trait NodeStore: Clone {
     #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId;
 
+    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
     fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId;
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode;
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
@@ -956,7 +957,6 @@ pub trait NodeStore: Clone {
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
     fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>);
 
-    fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
     fn reserve_leaf(&mut self) -> LeafNodeId;
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode;
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode>;
@@ -1360,10 +1360,10 @@ mod tests {
     fn test_rotate_right_for_leaf() {
         let mut node_store = NodeStoreVec::<i64, i64, 4, 5, 4>::new();
         let parent_id = node_store.new_empty_inner();
-        let (child_0, _) = node_store.create_leaf();
-        let (child_1, _) = node_store.create_leaf();
-        let (child_2, _) = node_store.create_leaf();
-        let (child_3, _) = node_store.create_leaf();
+        let (child_0, _) = node_store.new_empty_leaf();
+        let (child_1, _) = node_store.new_empty_leaf();
+        let (child_2, _) = node_store.new_empty_leaf();
+        let (child_3, _) = node_store.new_empty_leaf();
 
         node_store
             .get_mut_inner(parent_id)
@@ -1406,10 +1406,10 @@ mod tests {
     fn test_rotate_left_for_leaf() {
         let mut node_store = NodeStoreVec::<i64, i64, 4, 5, 4>::new();
         let parent_id = node_store.new_empty_inner();
-        let (child_0, _) = node_store.create_leaf();
-        let (child_1, _) = node_store.create_leaf();
-        let (child_2, _) = node_store.create_leaf();
-        let (child_3, _) = node_store.create_leaf();
+        let (child_0, _) = node_store.new_empty_leaf();
+        let (child_1, _) = node_store.new_empty_leaf();
+        let (child_2, _) = node_store.new_empty_leaf();
+        let (child_3, _) = node_store.new_empty_leaf();
 
         node_store
             .get_mut_inner(parent_id)
@@ -1450,10 +1450,10 @@ mod tests {
     fn test_merge_leaf_with_right() {
         let mut node_store = NodeStoreVec::<i64, i64, 4, 5, 4>::new();
         let parent_id = node_store.new_empty_inner();
-        let (child_0, _) = node_store.create_leaf();
-        let (child_1, _) = node_store.create_leaf();
-        let (child_2, _) = node_store.create_leaf();
-        let (child_3, _) = node_store.create_leaf();
+        let (child_0, _) = node_store.new_empty_leaf();
+        let (child_1, _) = node_store.new_empty_leaf();
+        let (child_2, _) = node_store.new_empty_leaf();
+        let (child_3, _) = node_store.new_empty_leaf();
 
         node_store
             .get_mut_inner(parent_id)
@@ -1486,10 +1486,10 @@ mod tests {
     fn test_merge_leaf_with_left() {
         let mut node_store = NodeStoreVec::<i64, i64, 4, 5, 4>::new();
         let parent_id = node_store.new_empty_inner();
-        let (child_0, _) = node_store.create_leaf();
-        let (child_1, _) = node_store.create_leaf();
-        let (child_2, _) = node_store.create_leaf();
-        let (child_3, _) = node_store.create_leaf();
+        let (child_0, _) = node_store.new_empty_leaf();
+        let (child_1, _) = node_store.new_empty_leaf();
+        let (child_2, _) = node_store.new_empty_leaf();
+        let (child_3, _) = node_store.new_empty_leaf();
 
         node_store
             .get_mut_inner(parent_id)

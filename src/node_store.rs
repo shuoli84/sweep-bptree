@@ -54,11 +54,23 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     type LeafNode = LeafNode<K, V, LN>;
 
     #[cfg(test)]
+    fn debug(&self) {
+        self.print()
+    }
+
+    #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
         let node = Self::InnerNode::empty();
         self.inner_nodes.push(Some(node));
         id
+    }
+
+    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
+        let id = LeafNodeId::from_usize(self.leaf_nodes.len());
+        let node = Self::LeafNode::new();
+        self.leaf_nodes.push(Some(node));
+        (id, self.get_mut_leaf(id))
     }
 
     fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId {
@@ -82,17 +94,18 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         self.inner_nodes[id.as_usize()].as_mut().unwrap()
     }
 
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
+        std::mem::take(&mut self.inner_nodes[id.as_usize()]).unwrap()
+    }
+
+    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>) {
+        self.inner_nodes[id.as_usize()] = Some(node);
+    }
+
     fn reserve_leaf(&mut self) -> LeafNodeId {
         let id = LeafNodeId::from_usize(self.leaf_nodes.len());
         self.leaf_nodes.push(None);
         id
-    }
-
-    fn create_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
-        let id = LeafNodeId::from_usize(self.leaf_nodes.len());
-        let node = Self::LeafNode::new();
-        self.leaf_nodes.push(Some(node));
-        (id, self.get_mut_leaf(id))
     }
 
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode {
@@ -112,24 +125,11 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         self.leaf_nodes[id.as_usize()].as_mut().unwrap()
     }
 
-    #[cfg(test)]
-    fn debug(&self) {
-        self.print()
-    }
-
     fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode> {
         std::mem::take(&mut self.leaf_nodes[id.as_usize()]).unwrap()
     }
 
     fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>) {
         self.leaf_nodes[id.as_usize()] = Some(leaf);
-    }
-
-    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
-        std::mem::take(&mut self.inner_nodes[id.as_usize()]).unwrap()
-    }
-
-    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>) {
-        self.inner_nodes[id.as_usize()] = Some(node);
     }
 }
