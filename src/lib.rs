@@ -141,7 +141,6 @@ where
         &self.st
     }
 
-    #[inline(never)]
     fn descend_insert_inner(
         &mut self,
         id: InnerNodeId,
@@ -183,7 +182,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn insert_leaf(&mut self, id: LeafNodeId, k: S::K, v: S::V) -> DescendInsertResult<S::K, S::V> {
         let leaf_node = self.node_store.get_mut_leaf(id);
         match leaf_node.try_upsert(k, v) {
