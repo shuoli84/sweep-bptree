@@ -73,7 +73,7 @@ pub use node_store::NodeStoreVec;
 /// ```
 #[derive(Clone)]
 pub struct BPlusTree<S: NodeStore> {
-    root: Option<NodeId>,
+    root: NodeId,
     len: usize,
     node_store: S,
     /// store last accessed leaf, and it's key range
@@ -87,9 +87,10 @@ where
     S: NodeStore,
 {
     /// Create a new `BPlusTree` with the given `NodeStore`.
-    pub fn new(node_store: S) -> Self {
+    pub fn new(mut node_store: S) -> Self {
+        let (root_id, _) = node_store.create_leaf();
         Self {
-            root: None,
+            root: NodeId::Leaf(root_id),
             node_store,
             leaf_cache: RefCell::new(None),
             len: 0,
@@ -114,22 +115,14 @@ where
     }
 
     pub fn insert(&mut self, k: S::K, v: S::V) -> Option<S::V> {
-        let result = match self.root {
-            Some(node_id) => match self.descend_insert(node_id, k, v) {
-                DescendInsertResult::Inserted => None,
-                DescendInsertResult::Updated(prev_v) => Some(prev_v),
-                DescendInsertResult::Split(k, new_child_id) => {
-                    let new_root = S::InnerNode::new([k], [node_id, new_child_id]);
-                    let new_root_id = self.node_store.add_inner(new_root);
-                    self.root = Some(new_root_id.into());
-                    None
-                }
-            },
-            None => {
-                // empty tree, create new leaf as root
-                let (id, node) = self.node_store.create_leaf();
-                node.set_data([(k, v)]);
-                self.root = Some(NodeId::Leaf(id));
+        let node_id = self.root;
+        let result = match self.descend_insert(node_id, k, v) {
+            DescendInsertResult::Inserted => None,
+            DescendInsertResult::Updated(prev_v) => Some(prev_v),
+            DescendInsertResult::Split(k, new_child_id) => {
+                let new_root = S::InnerNode::new([k], [node_id, new_child_id]);
+                let new_root_id = self.node_store.add_inner(new_root);
+                self.root = new_root_id.into();
                 None
             }
         };
@@ -235,7 +228,7 @@ where
             }
         }
 
-        self.find_descend(self.root?, k)
+        self.find_descend(self.root, k)
     }
 
     /// Get mutable reference to value identified by key.
@@ -252,7 +245,7 @@ where
             return self.find_in_leaf_mut(leaf_id, k);
         }
 
-        self.find_descend_mut(self.root?, k)
+        self.find_descend_mut(self.root, k)
     }
 
     fn find_descend(&self, node_id: NodeId, k: &S::K) -> Option<&S::V> {
@@ -309,7 +302,7 @@ where
 
     /// delete element identified by K
     pub fn remove(&mut self, k: &S::K) -> Option<S::V> {
-        let root_id = self.root?;
+        let root_id = self.root;
         let r = match root_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
                 DeleteDescendResult::Done(kv) => Some(kv),
@@ -318,7 +311,7 @@ where
                     let root = self.node_store.get_mut_inner(inner_id);
 
                     if root.is_empty() {
-                        self.root = Some(root.child_id_at(0));
+                        self.root = root.child_id_at(0);
                     }
 
                     Some(deleted_item)
@@ -724,7 +717,7 @@ where
 
     /// get the first leaf_id if exists
     pub fn first_leaf(&self) -> Option<LeafNodeId> {
-        match self.root? {
+        match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
 
@@ -747,7 +740,7 @@ where
 
     /// get the last leaf_id if exists
     pub fn last_leaf(&self) -> Option<LeafNodeId> {
-        match self.root? {
+        match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
 
@@ -779,7 +772,7 @@ where
             }
         }
 
-        let leaf_id = match self.root? {
+        let leaf_id = match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
                 self.descend_visit_inner(inner_id, |inner_node| {
@@ -826,7 +819,7 @@ where
 
     /// Create an cursor for k
     pub fn get_cursor(&self, k: &S::K) -> Option<(Cursor<S::K>, Option<&S::V>)> {
-        let node_id = self.root?;
+        let node_id = self.root;
         let leaf_id = match node_id {
             NodeId::Inner(inner_id) => {
                 let mut result = None;

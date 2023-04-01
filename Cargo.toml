@@ -8,6 +8,9 @@ keywords = ["btree", "datastructure"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+bench = false
+
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
 rand = "0.8"
