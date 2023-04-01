@@ -1,4 +1,4 @@
-use crate::{INode, InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, NodeStore, Value};
+use crate::{InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, NodeStore, Value};
 
 #[derive(Debug, Clone)]
 pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> {
@@ -17,7 +17,10 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
         }
     }
 
+    #[cfg(test)]
     pub fn print(&self) {
+        use crate::INode;
+
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?}",
@@ -50,6 +53,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     type InnerNode = InnerNode<K, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
 
+    #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
         let node = Self::InnerNode::empty();
@@ -64,7 +68,9 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     }
 
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode {
-        &self.inner_nodes[id.as_usize()].as_ref().unwrap()
+        unsafe { self.inner_nodes.get_unchecked(id.as_usize()) }
+            .as_ref()
+            .unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() })
     }
 
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode> {
@@ -106,6 +112,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         self.leaf_nodes[id.as_usize()].as_mut().unwrap()
     }
 
+    #[cfg(test)]
     fn debug(&self) {
         self.print()
     }

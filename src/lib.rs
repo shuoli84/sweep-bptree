@@ -946,9 +946,11 @@ pub trait NodeStore: Clone {
     type InnerNode: INode<Self::K>;
     type LeafNode: LNode<Self::K, Self::V>;
 
+    #[cfg(test)]
     fn debug(&self);
-
+    #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId;
+
     fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId;
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode;
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
