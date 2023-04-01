@@ -409,7 +409,7 @@ where
         let prev_sibling = if child_idx > 0 {
             Some(
                 self.node_store
-                    .get_leaf(node.child_id_at(child_idx - 1).leaf_id().unwrap()),
+                    .get_leaf(unsafe { node.child_id_at(child_idx - 1).leaf_id_unchecked() }),
             )
         } else {
             None
@@ -417,7 +417,7 @@ where
         let next_sibling = if child_idx < node.size() {
             Some(
                 self.node_store
-                    .get_leaf(node.child_id_at(child_idx + 1).leaf_id().unwrap()),
+                    .get_leaf(unsafe { node.child_id_at(child_idx + 1).leaf_id_unchecked() }),
             )
         } else {
             None
@@ -534,8 +534,8 @@ where
         // rotate right
         //     1 2     5
         //     ..  3,4
-        let right_child_id = node.child_id_at(slot + 1).inner_id().unwrap();
-        let left_child_id = node.child_id_at(slot).inner_id().unwrap();
+        let right_child_id = unsafe { node.child_id_at(slot + 1).inner_id_unchecked() };
+        let left_child_id = unsafe { node.child_id_at(slot).inner_id_unchecked() };
         let slot_key = *node.key(slot);
 
         let prev_node = node_store.get_mut_inner(left_child_id);
@@ -562,8 +562,8 @@ where
         // rotate right
         //     1   4   5
         //      2,3  ..
-        let right_child_id = node.child_id_at(slot + 1).inner_id().unwrap();
-        let left_child_id = node.child_id_at(slot).inner_id().unwrap();
+        let right_child_id = unsafe { node.child_id_at(slot + 1).inner_id_unchecked() };
+        let left_child_id = unsafe { node.child_id_at(slot).inner_id_unchecked() };
         let slot_key = node.key(slot).clone();
 
         let right = node_store.get_mut_inner(right_child_id);
@@ -592,8 +592,8 @@ where
         //       2,3,4
         debug_assert!(slot < node.size());
 
-        let left_child_id = node.child_id_at(slot).inner_id().unwrap();
-        let right_child_id = node.child_id_at(slot + 1).inner_id().unwrap();
+        let left_child_id = unsafe { node.child_id_at(slot).inner_id_unchecked() };
+        let right_child_id = unsafe { node.child_id_at(slot + 1).inner_id_unchecked() };
         let slot_key = node.key(slot).clone();
 
         // merge right into left
@@ -611,8 +611,8 @@ where
         slot: usize,
         delete_idx: usize,
     ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
-        let left_id = node.child_id_at(slot).leaf_id().unwrap();
-        let right_id = node.child_id_at(slot + 1).leaf_id().unwrap();
+        let left_id = unsafe { node.child_id_at(slot).leaf_id_unchecked() };
+        let right_id = unsafe { node.child_id_at(slot + 1).leaf_id_unchecked() };
 
         let left = node_store.get_mut_leaf(left_id);
         if !left.able_to_lend() {
@@ -637,8 +637,8 @@ where
         slot: usize,
         delete_idx: usize,
     ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
-        let left_id = parent.child_id_at(slot).leaf_id().unwrap();
-        let right_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
+        let left_id = unsafe { parent.child_id_at(slot).leaf_id_unchecked() };
+        let right_id = unsafe { parent.child_id_at(slot + 1).leaf_id_unchecked() };
 
         let right = node_store.get_mut_leaf(right_id);
         if !right.able_to_lend() {
@@ -663,8 +663,8 @@ where
         slot: usize,
         delete_idx: usize,
     ) -> (DeleteDescendResult<S::K, S::V>, Option<CacheItem<S::K>>) {
-        let left_leaf_id = parent.child_id_at(slot).leaf_id().unwrap();
-        let right_leaf_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
+        let left_leaf_id = unsafe { parent.child_id_at(slot).leaf_id_unchecked() };
+        let right_leaf_id = unsafe { parent.child_id_at(slot + 1).leaf_id_unchecked() };
 
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
@@ -691,8 +691,8 @@ where
         slot: usize,
         delete_idx: usize,
     ) -> (DeleteDescendResult<S::K, S::V>, Option<CacheItem<S::K>>) {
-        let left_leaf_id = parent.child_id_at(slot).leaf_id().unwrap();
-        let right_leaf_id = parent.child_id_at(slot + 1).leaf_id().unwrap();
+        let left_leaf_id = unsafe { parent.child_id_at(slot).leaf_id_unchecked() };
+        let right_leaf_id = unsafe { parent.child_id_at(slot + 1).leaf_id_unchecked() };
 
         let right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);

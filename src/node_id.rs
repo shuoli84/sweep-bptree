@@ -44,10 +44,26 @@ impl NodeId {
     }
 
     #[inline(always)]
+    pub unsafe fn leaf_id_unchecked(&self) -> LeafNodeId {
+        match self {
+            NodeId::Leaf(id) => *id,
+            _ => unsafe { std::hint::unreachable_unchecked() },
+        }
+    }
+
+    #[inline(always)]
     pub fn inner_id(&self) -> Option<InnerNodeId> {
         match self {
             NodeId::Inner(id) => Some(*id),
             _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub unsafe fn inner_id_unchecked(&self) -> InnerNodeId {
+        match self {
+            NodeId::Inner(id) => *id,
+            _ => unsafe { std::hint::unreachable_unchecked() },
         }
     }
 }
