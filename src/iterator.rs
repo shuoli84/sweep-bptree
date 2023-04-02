@@ -65,9 +65,7 @@ impl<S: NodeStore> IntoIter<S> {
         let first_leaf_id = tree.first_leaf().unwrap();
         let last_leaf_id = tree.last_leaf().unwrap();
 
-        let BPlusTree {
-            len, node_store, ..
-        } = tree;
+        let (node_store, _root_id, len) = tree.into_parts();
 
         let last_leaf_size = node_store.get_leaf(last_leaf_id).len();
 
@@ -126,6 +124,13 @@ impl<S: NodeStore> Iterator for IntoIter<S> {
     }
 }
 
+impl<S: NodeStore> Drop for IntoIter<S> {
+    fn drop(&mut self) {
+        // drop all the remaining items
+        while self.next().is_some() {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -161,7 +166,47 @@ mod tests {
 
     #[test]
     fn test_into_iter() {
-        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
-        let mut tree = BPlusTree::new(node_store);
+        {
+            // test collect and drop
+            let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+            let mut tree = BPlusTree::new(node_store);
+            let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+            for i in 0..10 {
+                tree.insert(i, TestValue::new(counter.clone()));
+            }
+            let iter = IntoIter::new(tree);
+            let items = iter.collect::<Vec<_>>();
+            assert_eq!(items.len(), 10);
+            drop(items);
+
+            assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+        }
+
+        {
+            // test drop
+            let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+            let mut tree = BPlusTree::new(node_store);
+            let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+            for i in 0..10 {
+                tree.insert(i, TestValue::new(counter.clone()));
+            }
+            let iter = IntoIter::new(tree);
+            drop(iter);
+
+            assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+        }
+
+        {
+            // test drop
+            let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+            let mut tree = BPlusTree::new(node_store);
+            let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+            for i in 0..10 {
+                tree.insert(i, TestValue::new(counter.clone()));
+            }
+            drop(tree);
+
+            assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+        }
     }
 }

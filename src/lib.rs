@@ -1,6 +1,6 @@
 mod inner_node;
 mod utils;
-use std::cell::RefCell;
+use std::{borrow::BorrowMut, cell::RefCell, mem::ManuallyDrop};
 
 pub use inner_node::*;
 mod leaf_node;
@@ -75,7 +75,7 @@ pub use node_stores::*;
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
     len: usize,
-    node_store: S,
+    node_store: ManuallyDrop<S>,
     /// store last accessed leaf, and it's key range
     leaf_cache: RefCell<Option<CacheItem<S::K>>>,
 
@@ -91,7 +91,7 @@ where
         let (root_id, _) = node_store.new_empty_leaf();
         Self {
             root: NodeId::Leaf(root_id),
-            node_store,
+            node_store: ManuallyDrop::new(node_store),
             leaf_cache: RefCell::new(None),
             len: 0,
 
@@ -135,6 +135,16 @@ where
         }
 
         result
+    }
+
+    fn into_parts(self) -> (S, NodeId, usize) {
+        let mut me = ManuallyDrop::new(self);
+        let _ = me.leaf_cache;
+        (
+            unsafe { ManuallyDrop::take(&mut me.node_store) },
+            me.root,
+            me.len,
+        )
     }
 
     pub fn statistic(&self) -> &Statistic {
@@ -796,6 +806,10 @@ where
         iterator::Iter::new(self)
     }
 
+    pub fn into_iter(self) -> iterator::IntoIter<S> {
+        iterator::IntoIter::new(self)
+    }
+
     /// Create an cursor from first elem
     pub fn cursor_first(&self) -> Option<Cursor<S::K>> {
         Cursor::first(self).map(|c| c.0)
@@ -850,6 +864,12 @@ where
             last_leaf_id = Some(leaf_id);
             leaf_id = n.unwrap();
         }
+    }
+}
+
+impl<S: NodeStore> Drop for BPlusTree<S> {
+    fn drop(&mut self) {
+        unsafe { drop(std::ptr::read(self).into_iter()) }
     }
 }
 
