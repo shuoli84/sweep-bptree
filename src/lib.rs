@@ -11,8 +11,8 @@ mod cursor;
 pub use cursor::*;
 mod iterator;
 pub use iterator::*;
-mod node_store;
-pub use node_store::NodeStoreVec;
+mod node_stores;
+pub use node_stores::*;
 
 /// B plus tree implementation, with following considerations:
 ///
@@ -892,10 +892,6 @@ struct CacheItem<K> {
 
 impl<K: Key> CacheItem<K> {
     fn try_from<L: LNode<K, V>, V: Value>(id: LeafNodeId, leaf: &L) -> Option<Self> {
-        if leaf.len() == 0 {
-            return None;
-        }
-
         let (start, end) = leaf.key_range()?;
         Some(Self {
             start,
@@ -945,11 +941,7 @@ pub trait NodeStore: Clone {
     type LeafNode: LNode<Self::K, Self::V>;
 
     #[cfg(test)]
-    fn debug(&self);
-    #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId;
-
-    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
     fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId;
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode;
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
@@ -957,12 +949,16 @@ pub trait NodeStore: Clone {
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
     fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>);
 
+    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
     fn reserve_leaf(&mut self) -> LeafNodeId;
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode;
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode>;
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode;
     fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode>;
     fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>);
+
+    #[cfg(test)]
+    fn debug(&self);
 }
 
 pub trait Key:
