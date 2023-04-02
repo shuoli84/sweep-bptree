@@ -1,6 +1,4 @@
-mod sorted_vec;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-use sorted_vec::SortedVec;
 mod models;
 use models::*;
 
@@ -9,8 +7,7 @@ use std::collections::BTreeMap;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sweep_bptree::{BPlusTree, NodeStoreVec};
 
-const COUNTS: [usize; 2] = [1000, 10000];
-const LARGE_COUNTS: [usize; 1] = [262144];
+const COUNTS: [usize; 3] = [1000, 10000, 10_0000];
 const RAND_SEED: u64 = 123;
 
 type NodeStoreBench = NodeStoreVec<Point, Value, 64, 65, 64>;
@@ -353,113 +350,5 @@ fn create_btree(count: usize) -> BTreeMap<Point, Value> {
     tree
 }
 
-fn benchmark_sorted_vec(c: &mut Criterion) {
-    for count in COUNTS {
-        c.bench_function(format!("vec insert {count}").as_str(), |b| {
-            b.iter(|| {
-                let mut tree = SortedVec::new();
-
-                for i in 0..count {
-                    let k = Point {
-                        x: i as f64,
-                        y: i as f64,
-                    };
-                    tree.insert(k, Value::default());
-                }
-            });
-        });
-
-        c.bench_function(format!("vec random_insert {count}").as_str(), |b| {
-            let mut keys = vec![];
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                keys.push(k);
-            }
-
-            let mut r = StdRng::seed_from_u64(RAND_SEED);
-            keys.shuffle(&mut r);
-            b.iter(|| {
-                let mut tree = SortedVec::new();
-
-                for k in &keys {
-                    tree.insert(*k, Value::default());
-                }
-            });
-        });
-
-        c.bench_function(format!("vec remove {count}").as_str(), |b| {
-            let mut tree = SortedVec::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let mut tree = tree.clone();
-
-                for i in 0..count {
-                    let k = Point {
-                        x: i as f64,
-                        y: i as f64,
-                    };
-                    tree.remove(&k);
-                }
-            });
-        });
-
-        c.bench_function(format!("vec get {count}").as_str(), |b| {
-            let mut tree = SortedVec::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let tree = tree.clone();
-                for i in 0..count {
-                    let k = Point {
-                        x: i as f64,
-                        y: i as f64,
-                    };
-                    tree.get(&k);
-                }
-            });
-        });
-
-        c.bench_function(format!("vec iter {count}").as_str(), |b| {
-            let mut tree = SortedVec::new();
-
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let c = tree.iter().fold(0, |a, _i| a + black_box(1));
-                assert_eq!(c, tree.len());
-            });
-        });
-    }
-}
-
-criterion_group!(
-    benches,
-    benchmark_bp_tree,
-    benchmark_btree,
-    benchmark_sorted_vec
-);
+criterion_group!(benches, benchmark_bp_tree, benchmark_btree,);
 criterion_main!(benches);
