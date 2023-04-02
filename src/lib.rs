@@ -468,20 +468,18 @@ where
                     node,
                     child_idx - 1,
                     key_idx_in_child,
-                )
-                .unwrap();
+                );
                 self.st.rotate_right_leaf += 1;
                 self.set_cache(cache_item);
                 return DeleteDescendResult::Done(deleted);
             }
             FixAction::RotateLeft => {
-                let (deleted, cache_item) = Self::try_rotate_left_for_leaf_node(
+                let (deleted, cache_item) = Self::rotate_left_for_leaf_node(
                     &mut self.node_store,
                     node,
                     child_idx,
                     key_idx_in_child,
-                )
-                .unwrap();
+                );
                 self.st.rotate_left_leaf += 1;
                 self.set_cache(cache_item);
                 return DeleteDescendResult::Done(deleted);
@@ -600,14 +598,12 @@ where
         node: &mut S::InnerNode,
         slot: usize,
         delete_idx: usize,
-    ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
+    ) -> ((S::K, S::V), Option<CacheItem<S::K>>) {
         let left_id = unsafe { node.child_id_at(slot).leaf_id_unchecked() };
         let right_id = unsafe { node.child_id_at(slot + 1).leaf_id_unchecked() };
 
         let left = node_store.get_mut_leaf(left_id);
-        if !left.able_to_lend() {
-            return None;
-        }
+        debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
         let new_slot_key = kv.0;
@@ -618,22 +614,20 @@ where
 
         node.set_key(slot, new_slot_key);
 
-        Some((deleted, cache_item))
+        (deleted, cache_item)
     }
 
-    fn try_rotate_left_for_leaf_node(
+    fn rotate_left_for_leaf_node(
         node_store: &mut S,
         parent: &mut S::InnerNode,
         slot: usize,
         delete_idx: usize,
-    ) -> Option<((S::K, S::V), Option<CacheItem<S::K>>)> {
+    ) -> ((S::K, S::V), Option<CacheItem<S::K>>) {
         let left_id = unsafe { parent.child_id_at(slot).leaf_id_unchecked() };
         let right_id = unsafe { parent.child_id_at(slot + 1).leaf_id_unchecked() };
 
         let right = node_store.get_mut_leaf(right_id);
-        if !right.able_to_lend() {
-            return None;
-        }
+        debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
         let new_slot_key = *right.data_at(0).0;
@@ -644,7 +638,7 @@ where
 
         parent.set_key(slot, new_slot_key);
 
-        Some((deleted, cache_item))
+        (deleted, cache_item)
     }
 
     fn merge_leaf_node_left(
@@ -1358,9 +1352,7 @@ mod tests {
             .set_data([(40, 1), (41, 1)]);
 
         let mut parent = node_store.take_inner(parent_id);
-        assert!(
-            BPlusTree::try_rotate_right_for_leaf_node(&mut node_store, &mut parent, 1, 0).is_some()
-        );
+        BPlusTree::try_rotate_right_for_leaf_node(&mut node_store, &mut parent, 1, 0);
         node_store.put_back_inner(parent_id, parent);
 
         {
@@ -1402,8 +1394,7 @@ mod tests {
             .set_data([(39, 1), (40, 1), (41, 1)]);
 
         let mut parent = node_store.take_inner(parent_id);
-        let result =
-            BPlusTree::try_rotate_left_for_leaf_node(&mut node_store, &mut parent, 1, 0).unwrap();
+        let result = BPlusTree::rotate_left_for_leaf_node(&mut node_store, &mut parent, 1, 0);
         node_store.put_back_inner(parent_id, parent);
         assert_eq!(result.0 .0, 10);
 
