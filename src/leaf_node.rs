@@ -338,18 +338,6 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         unsafe { (k.assume_init_read(), v.assume_init_read()) }
     }
 
-    fn split_at_idx(
-        &mut self,
-        idx: usize,
-    ) -> (
-        (&mut [MaybeUninit<K>], &mut [MaybeUninit<V>]),
-        (MaybeUninit<K>, MaybeUninit<V>),
-        (&mut [MaybeUninit<K>], &mut [MaybeUninit<V>]),
-    ) {
-        // (head, (k, v), tail)
-        todo!()
-    }
-
     /// Delete the item at idx, then merge with right
     pub(crate) fn merge_with_right_with_delete(
         &mut self,
@@ -419,10 +407,6 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.extend(data);
 
         self.next = right.next;
-    }
-
-    fn data(&self) -> (&[MaybeUninit<K>], &[MaybeUninit<V>]) {
-        unsafe { (self.key_area(..self.len()), self.value_area(..self.len())) }
     }
 
     /// This should never called with same slot
