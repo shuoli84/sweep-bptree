@@ -315,15 +315,17 @@ where
                     Some(deleted_item)
                 }
             },
-            NodeId::Leaf(leaf_id) => match self.remove_leaf(leaf_id, k) {
-                DeleteDescendLeafResult::None => None,
-                DeleteDescendLeafResult::Done(item) => Some(item),
-                DeleteDescendLeafResult::LeafUnderSize(idx) => {
-                    let leaf = self.node_store.get_mut_leaf(leaf_id);
-                    let item = leaf.delete_at(idx);
-                    Some(item)
+            NodeId::Leaf(leaf_id) => {
+                let leaf = self.node_store.get_mut_leaf(leaf_id);
+                match leaf.try_delete(k) {
+                    LeafDeleteResult::Done(kv) => Some(kv),
+                    LeafDeleteResult::NotFound => None,
+                    LeafDeleteResult::UnderSize(idx) => {
+                        let item = leaf.delete_at(idx);
+                        Some(item)
+                    }
                 }
-            },
+            }
         };
 
         if r.is_some() {
@@ -345,13 +347,16 @@ where
                 }
                 DeleteDescendResult::None => DeleteDescendResult::None,
             },
-            NodeId::Leaf(leaf_id) => match self.remove_leaf(leaf_id, k) {
-                DeleteDescendLeafResult::None => DeleteDescendResult::None,
-                DeleteDescendLeafResult::Done(item) => DeleteDescendResult::Done(item),
-                DeleteDescendLeafResult::LeafUnderSize(key_idx_in_child) => {
-                    self.handle_leaf_under_size(&mut inner_node, child_idx, key_idx_in_child)
+            NodeId::Leaf(leaf_id) => {
+                let leaf = self.node_store.get_mut_leaf(leaf_id);
+                match leaf.try_delete(k) {
+                    LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
+                    LeafDeleteResult::NotFound => DeleteDescendResult::None,
+                    LeafDeleteResult::UnderSize(idx) => {
+                        self.handle_leaf_under_size(&mut inner_node, child_idx, idx)
+                    }
                 }
-            },
+            }
         };
 
         self.node_store.put_back_inner(node_id, inner_node);
@@ -506,19 +511,6 @@ where
                 self.set_cache(cache_item);
                 result
             }
-        }
-    }
-
-    fn remove_leaf(
-        &mut self,
-        leaf_id: LeafNodeId,
-        k: &S::K,
-    ) -> DeleteDescendLeafResult<S::K, S::V> {
-        let leaf = self.node_store.get_mut_leaf(leaf_id);
-        match leaf.try_delete(k) {
-            LeafDeleteResult::Done(kv) => DeleteDescendLeafResult::Done(kv),
-            LeafDeleteResult::NotFound => DeleteDescendLeafResult::None,
-            LeafDeleteResult::UnderSize(idx) => DeleteDescendLeafResult::LeafUnderSize(idx),
         }
     }
 
@@ -923,14 +915,6 @@ enum DeleteDescendResult<K, V> {
     Done((K, V)),
     /// Inner node under size, the index and node_id to remove
     InnerUnderSize((K, V)),
-}
-
-#[derive(Debug)]
-enum DeleteDescendLeafResult<K, V> {
-    None,
-    Done((K, V)),
-    /// Leaf under size
-    LeafUnderSize(usize),
 }
 
 pub trait NodeStore: Clone {
