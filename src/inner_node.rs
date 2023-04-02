@@ -99,12 +99,12 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 Err(idx) => {
                     // the idx is the place where a matching element could be inserted while maintaining
                     // sorted order. go to left child
-                    (idx, self.child_id_at(idx))
+                    (idx, self.child_id(idx))
                 }
                 Ok(idx) => {
                     // exact match, go to right child.
                     // if the child split, then the new key should inserted idx + 1
-                    (idx + 1, self.child_id_at(idx + 1))
+                    (idx + 1, self.child_id(idx + 1))
                 }
             }
         } else {
@@ -116,12 +116,12 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                     if cmp == std::cmp::Ordering::Less {
                         None
                     } else if cmp == std::cmp::Ordering::Greater {
-                        Some((i, self.child_id_at(i)))
+                        Some((i, self.child_id(i)))
                     } else {
-                        Some((i + 1, self.child_id_at(i + 1)))
+                        Some((i + 1, self.child_id(i + 1)))
                     }
                 })
-                .unwrap_or_else(|| (self.size as usize, self.child_id_at(self.size as usize)))
+                .unwrap_or_else(|| (self.size as usize, self.child_id(self.size as usize)))
         }
     }
 
@@ -338,6 +338,14 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         self.size += 1;
     }
 
+    pub(crate) fn push_front(&mut self, k: K, child: NodeId) {
+        unsafe {
+            utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
+            utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
+        }
+        self.size += 1;
+    }
+
     /// get slot_key vec, used in test
     #[cfg(test)]
     fn slot_key_vec(&self) -> Vec<K> {
@@ -352,6 +360,16 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     fn key(&self, idx: usize) -> &K {
         unsafe { self.key_area(idx).assume_init_ref() }
+    }
+
+    pub(crate) fn set_key(&mut self, idx: usize, key: K) {
+        unsafe {
+            *self.key_area_mut(idx) = MaybeUninit::new(key);
+        }
+    }
+
+    fn child_id(&self, idx: usize) -> NodeId {
+        unsafe { self.child_area(idx).assume_init_read() }
     }
 
     unsafe fn key_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
@@ -412,13 +430,11 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
     }
 
     fn set_key(&mut self, idx: usize, key: K) {
-        unsafe {
-            *self.key_area_mut(idx) = MaybeUninit::new(key);
-        }
+        Self::set_key(self, idx, key)
     }
 
-    fn child_id_at(&self, idx: usize) -> NodeId {
-        unsafe { self.child_area(idx).assume_init_read() }
+    fn child_id(&self, idx: usize) -> NodeId {
+        Self::child_id(self, idx)
     }
 
     fn locate_child(&self, k: &K) -> (usize, NodeId) {
@@ -454,11 +470,7 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
     }
 
     fn push_front(&mut self, k: K, child: NodeId) {
-        unsafe {
-            utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
-            utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
-        }
-        self.size += 1;
+        Self::push_front(self, k, child)
     }
 
     fn merge_next(&mut self, slot_key: K, right: &mut Self) {
@@ -474,7 +486,7 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
         slot_keys: [K; N1],
         child_id: [I; C1],
     ) {
-        InnerNode::set_data(self, slot_keys, child_id)
+        Self::set_data(self, slot_keys, child_id)
     }
 
     fn iter_key<'a>(&'a self) -> Box<dyn Iterator<Item = &K> + 'a> {

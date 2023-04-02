@@ -53,8 +53,56 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.size > Self::minimum_size()
     }
 
+    pub fn key_range(&self) -> Option<(K, K)> {
+        if self.size == 0 {
+            return None;
+        }
+        unsafe {
+            Some((
+                self.key_area(0).assume_init_read(),
+                self.key_area(self.len() - 1).assume_init_read(),
+            ))
+        }
+    }
+
     pub fn is_size_minimum(&self) -> bool {
         self.size == Self::minimum_size()
+    }
+
+    pub fn set_prev(&mut self, id: Option<LeafNodeId>) {
+        self.prev = id;
+    }
+
+    fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
+        assert!(N1 <= N);
+        self.size = N1 as u16;
+        for i in 0..N1 {
+            unsafe {
+                *self.key_area_mut(i) = MaybeUninit::new(data[i].0);
+                *self.value_area_mut(i) = MaybeUninit::new(data[i].1);
+            }
+        }
+    }
+
+    fn data_at(&self, slot: usize) -> (&K, &V) {
+        unsafe {
+            (
+                self.key_area(slot).assume_init_ref(),
+                self.value_area(slot).assume_init_ref(),
+            )
+        }
+    }
+
+    pub fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
+        if idx >= self.size as usize {
+            return None;
+        }
+        Some(unsafe {
+            (
+                self.key_area(idx).assume_init_ref(),
+                self.value_area(idx).assume_init_ref(),
+            )
+        })
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
@@ -399,7 +447,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn set_prev(&mut self, id: Option<LeafNodeId>) {
-        self.prev = id;
+        Self::set_prev(self, id)
     }
 
     fn next(&self) -> Option<LeafNodeId> {
@@ -407,23 +455,11 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
-        assert!(N1 <= N);
-        self.size = N1 as u16;
-        for i in 0..N1 {
-            unsafe {
-                *self.key_area_mut(i) = MaybeUninit::new(data[i].0);
-                *self.value_area_mut(i) = MaybeUninit::new(data[i].1);
-            }
-        }
+        Self::set_data(self, data)
     }
 
     fn data_at(&self, slot: usize) -> (&K, &V) {
-        unsafe {
-            (
-                self.key_area(slot).assume_init_ref(),
-                self.value_area(slot).assume_init_ref(),
-            )
-        }
+        Self::data_at(self, slot)
     }
 
     fn is_full(&self) -> bool {
@@ -449,15 +485,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
-        if idx >= self.size as usize {
-            return None;
-        }
-        Some(unsafe {
-            (
-                self.key_area(idx).assume_init_ref(),
-                self.value_area(idx).assume_init_ref(),
-            )
-        })
+        Self::try_data_at(self, idx)
     }
 
     fn locate_slot_with_value(&self, k: &K) -> (usize, Option<&V>) {
@@ -509,15 +537,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
     }
 
     fn key_range(&self) -> Option<(K, K)> {
-        if self.size == 0 {
-            return None;
-        }
-        unsafe {
-            Some((
-                self.key_area(0).assume_init_read(),
-                self.key_area(self.len() - 1).assume_init_read(),
-            ))
-        }
+        Self::key_range(self)
     }
 }
 
