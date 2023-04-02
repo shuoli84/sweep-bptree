@@ -5,7 +5,7 @@ use std::{
     slice::SliceIndex,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct LeafNode<K: Key, V: Value, const N: usize> {
     /// how many data items
@@ -15,6 +15,28 @@ pub struct LeafNode<K: Key, V: Value, const N: usize> {
 
     prev: Option<LeafNodeId>,
     next: Option<LeafNodeId>,
+}
+
+impl<K: Key, V: Value, const N: usize> Clone for LeafNode<K, V, N> {
+    fn clone(&self) -> Self {
+        // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
+        let mut new_value = unsafe { MaybeUninit::<[MaybeUninit<V>; N]>::uninit().assume_init() };
+
+        for i in 0..self.len() {
+            unsafe {
+                *new_value.get_unchecked_mut(i) =
+                    MaybeUninit::new(self.value_area(i).assume_init_read().clone());
+            };
+        }
+
+        Self {
+            size: self.size.clone(),
+            slot_key: self.slot_key.clone(),
+            slot_value: new_value,
+            prev: self.prev.clone(),
+            next: self.next.clone(),
+        }
+    }
 }
 
 impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
@@ -79,7 +101,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         for i in 0..N1 {
             unsafe {
                 *self.key_area_mut(i) = MaybeUninit::new(data[i].0);
-                *self.value_area_mut(i) = MaybeUninit::new(data[i].1);
+                *self.value_area_mut(i) = MaybeUninit::new(data[i].1.clone());
             }
         }
     }
@@ -114,7 +136,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
     #[cfg(test)]
     pub(crate) fn data_vec(&self) -> Vec<(K, V)> {
-        self.iter().map(|(k, v)| (*k, *v)).collect()
+        self.iter().map(|(k, v)| (*k, v.clone())).collect()
     }
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
@@ -135,7 +157,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
                     self.size = new_len as u16;
                     LeafUpsertResult::Inserted
                 } else {
-                    LeafUpsertResult::IsFull(idx)
+                    LeafUpsertResult::IsFull(idx, v)
                 }
             }
         }
@@ -308,34 +330,24 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         let k = std::mem::replace(&mut self.slot_key[idx], MaybeUninit::uninit());
         let v = std::mem::replace(&mut self.slot_value[idx], MaybeUninit::uninit());
 
-        self.slot_key.copy_within(0..idx, 1);
-        self.slot_value.copy_within(0..idx, 1);
+        unsafe {
+            utils::slice_insert(self.key_area_mut(..idx + 1), 0, item.0);
+            utils::slice_insert(self.value_area_mut(..idx + 1), 0, item.1);
+        }
 
-        self.slot_key[0] = MaybeUninit::new(item.0);
-        self.slot_value[0] = MaybeUninit::new(item.1);
         unsafe { (k.assume_init_read(), v.assume_init_read()) }
     }
 
-    pub(crate) fn split_at_idx(
+    fn split_at_idx(
         &mut self,
         idx: usize,
     ) -> (
-        (&[MaybeUninit<K>], &[MaybeUninit<V>]),
+        (&mut [MaybeUninit<K>], &mut [MaybeUninit<V>]),
         (MaybeUninit<K>, MaybeUninit<V>),
-        (&[MaybeUninit<K>], &[MaybeUninit<V>]),
+        (&mut [MaybeUninit<K>], &mut [MaybeUninit<V>]),
     ) {
-        let k = std::mem::replace(unsafe { self.key_area_mut(idx) }, MaybeUninit::uninit());
-        let v = std::mem::replace(unsafe { self.value_area_mut(idx) }, MaybeUninit::uninit());
-
-        let head = unsafe { (self.key_area(0..idx), self.value_area(0..idx)) };
-        let tail = unsafe {
-            (
-                self.key_area(idx + 1..self.len()),
-                self.value_area(idx + 1..self.len()),
-            )
-        };
-
-        (head, (k, v), tail)
+        // (head, (k, v), tail)
+        todo!()
     }
 
     /// Delete the item at idx, then merge with right
@@ -344,29 +356,95 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         delete_idx: usize,
         right: &mut Self,
     ) -> (K, V) {
-        let (head, kv, tail) = right.split_at_idx(delete_idx);
-        self.extend(head);
-        self.extend(tail);
+        let k = std::mem::replace(
+            unsafe { right.key_area_mut(delete_idx) },
+            MaybeUninit::uninit(),
+        );
+        let v = std::mem::replace(
+            unsafe { right.value_area_mut(delete_idx) },
+            MaybeUninit::uninit(),
+        );
+
+        {
+            let head = unsafe {
+                (
+                    right
+                        .slot_key
+                        .as_mut_slice()
+                        .get_unchecked_mut(..delete_idx),
+                    right
+                        .slot_value
+                        .as_mut_slice()
+                        .get_unchecked_mut(..delete_idx),
+                )
+            };
+            self.extend(head);
+        }
+
+        {
+            let right_len = right.len();
+            let tail = unsafe {
+                (
+                    right
+                        .slot_key
+                        .as_mut_slice()
+                        .get_unchecked_mut(delete_idx + 1..right_len),
+                    right
+                        .slot_value
+                        .as_mut_slice()
+                        .get_unchecked_mut(delete_idx + 1..right_len),
+                )
+            };
+            self.extend(tail);
+        }
+
         self.next = right.next;
-        unsafe { (kv.0.assume_init_read(), kv.1.assume_init_read()) }
+
+        unsafe { (k.assume_init_read(), v.assume_init_read()) }
     }
 
     /// Delete the item at idx, then merge with right
-    pub(crate) fn merge_right(&mut self, right: &Self) {
-        self.extend(right.data());
+    pub(crate) fn merge_right(&mut self, right: &mut Self) {
+        let right_len = right.len();
+        let data = unsafe {
+            // safety: right.len() is checked against right.len()
+            (
+                right.slot_key.as_mut_slice().get_unchecked_mut(..right_len),
+                right
+                    .slot_value
+                    .as_mut_slice()
+                    .get_unchecked_mut(..right_len),
+            )
+        };
+        self.extend(data);
+
         self.next = right.next;
     }
 
-    pub(crate) fn data(&self) -> (&[MaybeUninit<K>], &[MaybeUninit<V>]) {
+    fn data(&self) -> (&[MaybeUninit<K>], &[MaybeUninit<V>]) {
         unsafe { (self.key_area(..self.len()), self.value_area(..self.len())) }
     }
 
-    pub(crate) fn extend(&mut self, (keys, values): (&[MaybeUninit<K>], &[MaybeUninit<V>])) {
+    /// This should never called with same slot
+    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+        debug_assert!(slot < self.len());
+
+        // safety: slot is checked against self.len()
         unsafe {
-            self.key_area_mut(self.size as usize..self.size as usize + keys.len())
-                .copy_from_slice(keys);
-            self.value_area_mut(self.size as usize..self.size as usize + values.len())
-                .copy_from_slice(values);
+            let k = self.key_area(slot).clone();
+            let v = std::mem::replace(self.value_area_mut(slot), MaybeUninit::uninit());
+            // special care must be taken to avoid double drop
+            (k.assume_init_read(), v.assume_init_read())
+        }
+    }
+
+    fn extend(&mut self, (keys, values): (&mut [MaybeUninit<K>], &mut [MaybeUninit<V>])) {
+        unsafe {
+            utils::move_to_slice(keys, self.key_area_mut(self.len()..self.len() + keys.len()));
+            utils::move_to_slice(
+                values,
+                self.value_area_mut(self.len()..self.len() + values.len()),
+            );
         }
         self.size += keys.len() as u16;
     }
@@ -425,7 +503,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 pub enum LeafUpsertResult<V> {
     Inserted,
     Updated(V),
-    IsFull(usize),
+    IsFull(usize, V),
 }
 
 pub enum LeafDeleteResult<K, V> {
@@ -520,7 +598,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Self::merge_with_right_with_delete(self, delete_idx_in_next, right)
     }
 
-    fn merge_right(&mut self, right: &Self) {
+    fn merge_right(&mut self, right: &mut Self) {
         Self::merge_right(self, right)
     }
 
@@ -538,6 +616,10 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
 
     fn key_range(&self) -> Option<(K, K)> {
         Self::key_range(self)
+    }
+
+    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+        Self::take_data(self, slot)
     }
 }
 

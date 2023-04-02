@@ -187,7 +187,7 @@ where
         match leaf_node.try_upsert(k, v) {
             LeafUpsertResult::Inserted => DescendInsertResult::Inserted,
             LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
-            LeafUpsertResult::IsFull(idx) => {
+            LeafUpsertResult::IsFull(idx, v) => {
                 let new_id = self.node_store.reserve_leaf();
 
                 let l_leaf = self.node_store.get_mut_leaf(id);
@@ -678,10 +678,10 @@ where
         let left_leaf_id = unsafe { parent.child_id(slot).leaf_id_unchecked() };
         let right_leaf_id = unsafe { parent.child_id(slot + 1).leaf_id_unchecked() };
 
-        let right = node_store.take_leaf(right_leaf_id);
+        let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.delete_at(delete_idx);
-        left.merge_right(&right);
+        left.merge_right(&mut right);
 
         let cache_item = CacheItem::try_from(left_leaf_id, left);
 
@@ -948,8 +948,8 @@ impl<T> Key for T where
 {
 }
 
-pub trait Value: std::fmt::Debug + Copy + Clone {}
-impl<T> Value for T where T: std::fmt::Debug + Copy + Clone {}
+pub trait Value: Clone {}
+impl<T> Value for T where T: Clone {}
 
 /// Inner node trait
 pub trait INode<K: Key> {
@@ -1033,6 +1033,9 @@ pub trait LNode<K: Key, V: Value> {
     fn next(&self) -> Option<LeafNodeId>;
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]);
     fn data_at(&self, slot: usize) -> (&K, &V);
+    /// this takes data at `slot` out, makes original storage `uinit`.
+    /// This should never called for same slot, or double free will happen.
+    unsafe fn take_data(&mut self, slot: usize) -> (K, V);
     fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
     fn key_range(&self) -> Option<(K, K)>;
     fn is_full(&self) -> bool;
@@ -1054,7 +1057,7 @@ pub trait LNode<K: Key, V: Value> {
     fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V);
     fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V);
     fn merge_right_delete_first(&mut self, delete_idx_in_next: usize, right: &mut Self) -> (K, V);
-    fn merge_right(&mut self, right: &Self);
+    fn merge_right(&mut self, right: &mut Self);
     fn pop(&mut self) -> (K, V);
     fn pop_front(&mut self) -> (K, V);
 
