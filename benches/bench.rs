@@ -143,24 +143,29 @@ fn benchmark_bp_tree(c: &mut Criterion) {
             });
         });
 
+        c.bench_function(format!("bptree drop {count}").as_str(), |b| {
+            b.iter_batched(
+                || create_tree(count),
+                |tree| {
+                    drop(tree);
+                },
+                criterion::BatchSize::NumIterations(1),
+            );
+        });
+
+        // note: this into_iter is slower than iter, mostly due to it has to drop items
         c.bench_function(format!("bptree into_iter {count}").as_str(), |b| {
-            let node_store = NodeStoreBench::new();
-            let mut tree = BPlusTree::new(node_store);
+            let tree = create_tree(count);
 
-            for i in 0..count {
-                let k = Point {
-                    x: i as f64,
-                    y: i as f64,
-                };
-                tree.insert(k, Value::default());
-            }
-
-            b.iter(|| {
-                let tree = tree.clone();
-                let count = tree.len();
-                let c = tree.into_iter().count();
-                assert_eq!(c, count);
-            });
+            b.iter_batched(
+                || tree.clone(),
+                |tree| {
+                    let count = tree.len();
+                    let c = tree.into_iter().count();
+                    assert_eq!(c, count);
+                },
+                criterion::BatchSize::NumIterations(1),
+            );
         });
 
         c.bench_function(format!("bptree cursor {count}").as_str(), |b| {
@@ -329,6 +334,14 @@ fn benchmark_btree(c: &mut Criterion) {
                 let c = tree.iter().count();
                 assert_eq!(c, tree.len());
             });
+        });
+
+        c.bench_function(format!("btree drop {count}").as_str(), |b| {
+            b.iter_batched(
+                || create_btree(count),
+                |tree| drop(tree),
+                criterion::BatchSize::NumIterations(1),
+            )
         });
     }
 }
