@@ -199,7 +199,7 @@ impl<K: Key> Cursor<K> {
     ) -> Option<(LeafNodeId, &'b S::LeafNode)> {
         let leaf_id = self.leaf_id_hint;
         if let Some(leaf) = tree.node_store.try_get_leaf(leaf_id) {
-            if leaf.in_range(&self.k) {
+            if range_contains(&leaf.key_range(), &self.k) {
                 return Some((leaf_id, leaf));
             }
         }
@@ -209,6 +209,10 @@ impl<K: Key> Cursor<K> {
 
         Some((leaf_id, tree.node_store.get_leaf(leaf_id)))
     }
+}
+
+fn range_contains<K: Ord + Eq>(range: &(K, K), k: &K) -> bool {
+    range.0.le(k) && range.1.ge(k)
 }
 
 #[cfg(test)]

@@ -75,29 +75,14 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.size > Self::minimum_size()
     }
 
-    pub fn in_range(&self, k: &K) -> bool {
+    pub fn key_range(&self) -> (K, K) {
         debug_assert!(self.len() > 0);
-
-        let (start, end) = self.key_range();
-        match (start, end) {
-            (Some(start), Some(end)) => k >= &start && k <= &end,
-            (Some(start), None) => k >= &start,
-            (None, Some(end)) => k <= &end,
-            (None, None) => true,
+        unsafe {
+            (
+                self.key_area(0).assume_init_read(),
+                self.key_area(self.len() - 1).assume_init_read(),
+            )
         }
-    }
-
-    pub fn key_range(&self) -> (Option<K>, Option<K>) {
-        debug_assert!(self.len() > 0);
-        let start = match self.prev {
-            Some(_) => Some(unsafe { self.key_area(0).assume_init_read() }),
-            None => None,
-        };
-        let end = match self.next {
-            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_read() }),
-            None => None,
-        };
-        (start, end)
     }
 
     pub fn is_size_minimum(&self) -> bool {
@@ -611,11 +596,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Box::new(LeafNode::iter(self))
     }
 
-    fn in_range(&self, k: &K) -> bool {
-        Self::in_range(self, k)
-    }
-
-    fn key_range(&self) -> (Option<K>, Option<K>) {
+    fn key_range(&self) -> (K, K) {
         Self::key_range(self)
     }
 

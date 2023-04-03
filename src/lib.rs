@@ -1,6 +1,6 @@
 mod inner_node;
 mod utils;
-use std::{cell::Cell, mem::ManuallyDrop};
+use std::{cell::RefCell, mem::ManuallyDrop};
 
 pub use inner_node::*;
 mod leaf_node;
@@ -77,7 +77,7 @@ pub struct BPlusTree<S: NodeStore> {
     len: usize,
     node_store: ManuallyDrop<S>,
     /// store last accessed leaf, and it's key range
-    leaf_cache: Cell<Option<CacheItem<S::K>>>,
+    leaf_cache: RefCell<Option<CacheItem<S::K>>>,
 
     st: Statistic,
 }
@@ -92,7 +92,7 @@ where
         Self {
             root: NodeId::Leaf(root_id),
             node_store: ManuallyDrop::new(node_store),
-            leaf_cache: Cell::new(None),
+            leaf_cache: RefCell::new(None),
             len: 0,
 
             st: Statistic::default(),
@@ -115,34 +115,8 @@ where
     }
 
     pub fn insert(&mut self, k: S::K, v: S::V) -> Option<S::V> {
-        // quick check if the last accessed leaf is the one to insert
-        if let Some(cache) = self.leaf_cache.get().as_ref() {
-            if cache.in_range(&k) {
-                let cache_leaf_id = cache.leaf_id;
-
-                let leaf = self.node_store.get_mut_leaf(cache_leaf_id);
-                if !leaf.is_full() {
-                    let result = match leaf.try_upsert(k, v) {
-                        LeafUpsertResult::Inserted => {
-                            self.len += 1;
-                            let cache_item = CacheItem::try_from(cache_leaf_id, leaf);
-                            self.set_cache(cache_item);
-                            None
-                        }
-                        LeafUpsertResult::Updated(v) => Some(v),
-                        LeafUpsertResult::IsFull(_, _) => unreachable!(),
-                    };
-
-                    #[cfg(test)]
-                    self.validate();
-
-                    return result;
-                }
-            }
-        }
-
+        // todo: consider check cache, and insert to cache if it has room (no split)
         let node_id = self.root;
-
         let result = match self.descend_insert(node_id, k, v) {
             DescendInsertResult::Inserted => None,
             DescendInsertResult::Updated(prev_v) => Some(prev_v),
@@ -154,12 +128,12 @@ where
             }
         };
 
+        #[cfg(test)]
+        self.validate();
+
         if result.is_none() {
             self.len += 1;
         }
-
-        #[cfg(test)]
-        self.validate();
 
         result
     }
@@ -222,11 +196,7 @@ where
     fn insert_leaf(&mut self, id: LeafNodeId, k: S::K, v: S::V) -> DescendInsertResult<S::K, S::V> {
         let leaf_node = self.node_store.get_mut_leaf(id);
         match leaf_node.try_upsert(k, v) {
-            LeafUpsertResult::Inserted => {
-                let cache_item = CacheItem::try_from(id, leaf_node);
-                self.set_cache(cache_item);
-                DescendInsertResult::Inserted
-            }
+            LeafUpsertResult::Inserted => DescendInsertResult::Inserted,
             LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
             LeafUpsertResult::IsFull(idx, v) => {
                 let new_id = self.node_store.reserve_leaf();
@@ -255,13 +225,13 @@ where
 
     #[inline]
     fn set_cache(&self, cache_item: Option<CacheItem<S::K>>) {
-        self.leaf_cache.set(cache_item);
+        *self.leaf_cache.borrow_mut() = cache_item;
     }
 
     /// Get reference to value identified by key.
     pub fn get(&self, k: &S::K) -> Option<&S::V> {
-        if let Some(cache) = self.leaf_cache.get() {
-            if cache.in_range(k) {
+        if let Some(cache) = self.leaf_cache.borrow().as_ref() {
+            if cache.start <= *k && cache.end >= *k {
                 // cache hit
                 return self.find_in_leaf(cache.leaf_id, k);
             }
@@ -273,8 +243,8 @@ where
     /// Get mutable reference to value identified by key.
     pub fn get_mut(&mut self, k: &S::K) -> Option<&mut S::V> {
         let mut cache_leaf_id: Option<LeafNodeId> = None;
-        if let Some(cache) = self.leaf_cache.get() {
-            if cache.in_range(k) {
+        if let Some(cache) = self.leaf_cache.borrow_mut().as_ref() {
+            if cache.start <= *k && cache.end >= *k {
                 // cache hit
                 cache_leaf_id = Some(cache.leaf_id);
             }
@@ -327,7 +297,7 @@ where
         k: &S::K,
     ) -> Option<&mut S::V> {
         let leaf_node = self.node_store.get_mut_leaf(leaf_id);
-        self.leaf_cache.set(CacheItem::try_from(leaf_id, leaf_node));
+        *self.leaf_cache.borrow_mut() = CacheItem::try_from(leaf_id, leaf_node);
         let (_, kv) = leaf_node.locate_slot_mut(k);
         kv
     }
@@ -341,32 +311,6 @@ where
 
     /// delete element identified by K
     pub fn remove(&mut self, k: &S::K) -> Option<S::V> {
-        // quick check if the last accessed leaf is the one to remove
-        if let Some(cache) = self.leaf_cache.get().as_ref() {
-            if cache.in_range(&k) {
-                let cache_leaf_id = cache.leaf_id;
-
-                let leaf = self.node_store.get_mut_leaf(cache_leaf_id);
-                if leaf.able_to_lend() {
-                    let result = match leaf.try_delete(k) {
-                        LeafDeleteResult::Done(v) => {
-                            self.len -= 1;
-                            let cache_item = CacheItem::try_from(cache_leaf_id, leaf);
-                            self.set_cache(cache_item);
-                            Some(v.1)
-                        }
-                        LeafDeleteResult::NotFound => None,
-                        LeafDeleteResult::UnderSize(_) => unreachable!(),
-                    };
-
-                    #[cfg(test)]
-                    self.validate();
-
-                    return result;
-                }
-            }
-        }
-
         let root_id = self.root;
         let r = match root_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
@@ -816,8 +760,8 @@ where
     /// Returns the leaf whose range contains `k`.
     /// User should query the leaf and check key existance.
     pub fn locate_leaf(&self, k: &S::K) -> Option<LeafNodeId> {
-        if let Some(cache) = self.leaf_cache.get().as_ref() {
-            if cache.in_range(k) {
+        if let Some(cache) = self.leaf_cache.borrow().as_ref() {
+            if cache.start <= *k && cache.end >= *k {
                 // cache hit
                 return Some(cache.leaf_id);
             }
@@ -945,22 +889,12 @@ pub struct Statistic {
     pub merge_with_right_leaf: u64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct CacheItem<K> {
-    start: Option<K>,
-    end: Option<K>,
+    start: K,
+    end: K,
     leaf_id: LeafNodeId,
     // consider cache the item?
-}
-
-impl<K: std::fmt::Debug> std::fmt::Debug for CacheItem<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CacheItem")
-            .field("start", &self.start)
-            .field("end", &self.end)
-            .field("leaf_id", &self.leaf_id)
-            .finish()
-    }
 }
 
 impl<K: Key> CacheItem<K> {
@@ -971,15 +905,6 @@ impl<K: Key> CacheItem<K> {
             end,
             leaf_id: id,
         })
-    }
-
-    pub fn in_range(&self, k: &K) -> bool {
-        match (self.start, self.end) {
-            (Some(start), Some(end)) => start.le(k) && end.gt(k),
-            (Some(start), None) => start.le(k),
-            (None, Some(end)) => end.gt(k),
-            (None, None) => true,
-        }
     }
 }
 
@@ -1133,8 +1058,7 @@ pub trait LNode<K: Key, V: Value> {
     /// This should never called for same slot, or double free will happen.
     unsafe fn take_data(&mut self, slot: usize) -> (K, V);
     fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
-    fn in_range(&self, k: &K) -> bool;
-    fn key_range(&self) -> (Option<K>, Option<K>);
+    fn key_range(&self) -> (K, K);
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
     fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V>;

@@ -13,7 +13,7 @@ const RAND_SEED: u64 = 123;
 type NodeStoreBench = NodeStoreVec<Point, Value, 64, 65, 64>;
 
 fn bench_ordered_insert(c: &mut Criterion) {
-    let mut group = c.benchmark_group("ordered_insert");
+    let mut group = c.benchmark_group("ordered_input");
 
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
