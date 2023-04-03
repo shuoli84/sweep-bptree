@@ -58,22 +58,18 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     ) -> Box<Self> {
         // not sure how to do a constrain in compile time, just put a debug assert here.
         debug_assert!(C == N + 1);
-
-        let layout = Layout::new::<mem::MaybeUninit<Self>>();
-        let ptr: *mut Self = unsafe { alloc(layout).cast() };
-        let mut this = unsafe { Box::from_raw(ptr) };
-
-        this.set_data(slot_keys, child_id);
-
-        this
+        Self::new_from_iter(slot_keys, child_id.map(|c| c.into()))
     }
 
     /// Create a new inner node from keys and childs iterator
     fn new_from_iter(
-        keys: impl Iterator<Item = K>,
-        childs: impl Iterator<Item = NodeId>,
+        keys: impl IntoIterator<Item = K>,
+        childs: impl IntoIterator<Item = NodeId>,
     ) -> Box<Self> {
         let mut node = Self::empty();
+
+        let keys = keys.into_iter();
+        let childs = childs.into_iter();
 
         let mut key_size = 0;
         for (idx, k) in keys.enumerate() {
@@ -91,23 +87,6 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         node.size = key_size;
 
         node
-    }
-
-    pub(crate) fn set_data<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
-        &mut self,
-        slot_keys: [K; N1],
-        child_id: [I; C1],
-    ) {
-        assert!(N1 + 1 == C1);
-        assert!(N1 <= N);
-        self.size = N1 as u16;
-        for i in 0..N1 {
-            self.slot_key[i] = MaybeUninit::new(slot_keys[i]);
-        }
-
-        for c in 0..C1 {
-            self.child_id[c] = MaybeUninit::new(child_id[c].into());
-        }
     }
 
     const fn binary_search_threshold() -> usize {
@@ -438,6 +417,24 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         // for the lifetime of the borrow.
         unsafe { self.child_id.as_slice().get_unchecked(index) }
     }
+
+    #[cfg(test)]
+    pub(crate) fn set_data<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
+        &mut self,
+        slot_keys: [K; N1],
+        child_id: [I; C1],
+    ) {
+        assert!(N1 + 1 == C1);
+        assert!(N1 <= N);
+        self.size = N1 as u16;
+        for i in 0..N1 {
+            self.slot_key[i] = MaybeUninit::new(slot_keys[i]);
+        }
+
+        for c in 0..C1 {
+            self.child_id[c] = MaybeUninit::new(child_id[c].into());
+        }
+    }
 }
 
 impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N, C> {
@@ -513,14 +510,6 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
 
     fn merge_child(&mut self, slot: usize) -> InnerMergeResult {
         Self::merge_child(self, slot)
-    }
-
-    fn set_data<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
-        &mut self,
-        slot_keys: [K; N1],
-        child_id: [I; C1],
-    ) {
-        Self::set_data(self, slot_keys, child_id)
     }
 }
 

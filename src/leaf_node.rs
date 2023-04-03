@@ -148,6 +148,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         })
     }
 
+    #[cfg(test)]
     fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         unsafe { self.key_area(..self.size as usize) }
             .iter()

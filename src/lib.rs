@@ -1136,13 +1136,6 @@ pub trait INode<K: Key> {
 
     /// Merge children at slot
     fn merge_child(&mut self, slot: usize) -> InnerMergeResult;
-
-    /// Set the data of the node
-    fn set_data<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
-        &mut self,
-        slot_keys: [K; N1],
-        child_id: [I; C1],
-    );
 }
 
 /// Leaf node trait
