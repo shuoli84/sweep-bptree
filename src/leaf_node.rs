@@ -75,15 +75,13 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.size > Self::minimum_size()
     }
 
-    pub fn key_range(&self) -> Option<(K, K)> {
-        if self.size == 0 {
-            return None;
-        }
+    pub fn key_range(&self) -> (K, K) {
+        debug_assert!(self.len() > 0);
         unsafe {
-            Some((
+            (
                 self.key_area(0).assume_init_read(),
                 self.key_area(self.len() - 1).assume_init_read(),
-            ))
+            )
         }
     }
 
@@ -598,7 +596,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Box::new(LeafNode::iter(self))
     }
 
-    fn key_range(&self) -> Option<(K, K)> {
+    fn key_range(&self) -> (K, K) {
         Self::key_range(self)
     }
 

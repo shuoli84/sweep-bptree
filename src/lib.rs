@@ -115,6 +115,7 @@ where
     }
 
     pub fn insert(&mut self, k: S::K, v: S::V) -> Option<S::V> {
+        // todo: consider check cache, and insert to cache if it has room (no split)
         let node_id = self.root;
         let result = match self.descend_insert(node_id, k, v) {
             DescendInsertResult::Inserted => None,
@@ -898,7 +899,7 @@ struct CacheItem<K> {
 
 impl<K: Key> CacheItem<K> {
     fn try_from<L: LNode<K, V>, V: Value>(id: LeafNodeId, leaf: &L) -> Option<Self> {
-        let (start, end) = leaf.key_range()?;
+        let (start, end) = leaf.key_range();
         Some(Self {
             start,
             end,
@@ -1057,7 +1058,7 @@ pub trait LNode<K: Key, V: Value> {
     /// This should never called for same slot, or double free will happen.
     unsafe fn take_data(&mut self, slot: usize) -> (K, V);
     fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
-    fn key_range(&self) -> Option<(K, K)>;
+    fn key_range(&self) -> (K, K);
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
     fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V>;
