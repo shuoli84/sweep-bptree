@@ -68,6 +68,31 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         this
     }
 
+    /// Create a new inner node from keys and childs iterator
+    fn new_from_iter(
+        keys: impl Iterator<Item = K>,
+        childs: impl Iterator<Item = NodeId>,
+    ) -> Box<Self> {
+        let mut node = Self::empty();
+
+        let mut key_size = 0;
+        for (idx, k) in keys.enumerate() {
+            node.slot_key[idx] = MaybeUninit::new(k);
+            key_size += 1;
+        }
+
+        let mut child_size = 0;
+        for (idx, c) in childs.enumerate() {
+            node.child_id[idx] = MaybeUninit::new(c);
+            child_size += 1;
+        }
+
+        assert!(key_size + 1 == child_size);
+        node.size = key_size;
+
+        node
+    }
+
     pub(crate) fn set_data<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         &mut self,
         slot_keys: [K; N1],
@@ -419,6 +444,13 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
         child_id: [I; C1],
     ) -> Box<Self> {
         Self::new(slot_keys, child_id)
+    }
+
+    fn new_from_iter(
+        keys: impl Iterator<Item = K>,
+        childs: impl Iterator<Item = NodeId>,
+    ) -> Box<Self> {
+        Self::new_from_iter(keys, childs)
     }
 
     fn size(&self) -> usize {

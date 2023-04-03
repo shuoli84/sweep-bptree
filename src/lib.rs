@@ -13,6 +13,7 @@ mod iterator;
 pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
+mod bulk_load;
 
 /// B plus tree implementation, with following considerations:
 ///
@@ -97,6 +98,23 @@ where
 
             st: Statistic::default(),
         }
+    }
+
+    /// Create a new `BPlusTree` from existing parts
+    fn new_from_parts(node_store: S, root: NodeId, len: usize) -> Self {
+        let me = Self {
+            root,
+            node_store: ManuallyDrop::new(node_store),
+            leaf_cache: Cell::new(None),
+            len,
+
+            st: Statistic::default(),
+        };
+
+        #[cfg(test)]
+        me.validate();
+
+        me
     }
 
     /// Gets a reference to the `NodeStore` that this `BPlusTree` was created with.
@@ -1008,12 +1026,17 @@ enum DeleteDescendResult<K, V> {
     InnerUnderSize((K, V)),
 }
 
-pub trait NodeStore: Clone {
+pub trait NodeStore: Clone + Default {
     type K: Key;
     type V: Value;
 
     type InnerNode: INode<Self::K>;
     type LeafNode: LNode<Self::K, Self::V>;
+
+    /// Get the max number of keys inner node can hold
+    fn inner_n() -> u16;
+    /// Get the max number of elements leaf node can hold
+    fn leaf_n() -> u16;
 
     #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId;
@@ -1054,6 +1077,14 @@ pub trait INode<K: Key> {
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
+    ) -> Box<Self>;
+
+    /// Create a new inner node from Iterators.
+    /// Note: the count for keys must less than `IN`, and count for childs must be keys's count plus 1.
+    /// Otherwise this method will panic!
+    fn new_from_iter(
+        keys: impl Iterator<Item = K>,
+        childs: impl Iterator<Item = NodeId>,
     ) -> Box<Self>;
 
     /// Get the number of keys
@@ -1125,10 +1156,15 @@ pub trait LNode<K: Key, V: Value> {
     /// Returns size of the leaf
     fn len(&self) -> usize;
 
+    fn new() -> Box<Self>;
+
     fn prev(&self) -> Option<LeafNodeId>;
     fn set_prev(&mut self, id: Option<LeafNodeId>);
     fn next(&self) -> Option<LeafNodeId>;
+    fn set_next(&mut self, id: Option<LeafNodeId>);
+
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]);
+    fn set_data_by_iter(&mut self, data: &mut impl Iterator<Item = (K, V)>);
     fn data_at(&self, slot: usize) -> (&K, &V);
     /// this takes data at `slot` out, makes original storage `uinit`.
     /// This should never called for same slot, or double free will happen.

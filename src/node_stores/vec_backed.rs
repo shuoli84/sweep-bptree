@@ -6,6 +6,17 @@ pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, cons
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 }
 
+impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> Default
+    for NodeStoreVec<K, V, IN, IC, LN>
+{
+    fn default() -> Self {
+        Self {
+            inner_nodes: Default::default(),
+            leaf_nodes: Default::default(),
+        }
+    }
+}
+
 impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
     NodeStoreVec<K, V, IN, IC, LN>
 {
@@ -59,6 +70,14 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     type V = V;
     type InnerNode = InnerNode<K, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
+
+    fn inner_n() -> u16 {
+        IN as u16
+    }
+
+    fn leaf_n() -> u16 {
+        LN as u16
+    }
 
     #[cfg(test)]
     fn debug(&self) {

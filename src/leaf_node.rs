@@ -108,6 +108,10 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.prev = id;
     }
 
+    pub fn set_next(&mut self, id: Option<LeafNodeId>) {
+        self.next = id;
+    }
+
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
         assert!(N1 <= N);
         self.size = N1 as u16;
@@ -115,6 +119,20 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
             unsafe {
                 *self.key_area_mut(i) = MaybeUninit::new(data[i].0);
                 *self.value_area_mut(i) = MaybeUninit::new(data[i].1.clone());
+            }
+        }
+    }
+
+    fn set_data_by_iter(&mut self, data: &mut impl Iterator<Item = (K, V)>) {
+        for i in 0..N {
+            if let Some((k, v)) = data.next() {
+                unsafe {
+                    *self.key_area_mut(i) = MaybeUninit::new(k);
+                    *self.value_area_mut(i) = MaybeUninit::new(v);
+                }
+                self.size += 1;
+            } else {
+                break;
             }
         }
     }
@@ -513,6 +531,10 @@ pub enum LeafDeleteResult<K, V> {
 }
 
 impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
+    fn new() -> Box<Self> {
+        Self::new()
+    }
+
     fn len(&self) -> usize {
         self.size as usize
     }
@@ -527,6 +549,10 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
 
     fn next(&self) -> Option<LeafNodeId> {
         self.next
+    }
+
+    fn set_next(&mut self, id: Option<LeafNodeId>) {
+        Self::set_next(self, id)
     }
 
     fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
@@ -623,6 +649,10 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
 
     unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
         Self::take_data(self, slot)
+    }
+
+    fn set_data_by_iter(&mut self, data: &mut impl Iterator<Item = (K, V)>) {
+        Self::set_data_by_iter(self, data)
     }
 }
 
