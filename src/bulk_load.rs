@@ -13,7 +13,8 @@ impl<S: NodeStore> crate::BPlusTree<S> {
                 .collect::<Vec<LeafNodeId>>();
 
             let mut data_iter = data.into_iter();
-            let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>))> = vec![];
+            let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>))> =
+                Vec::with_capacity(leaf_ids.len());
 
             for (idx, leaf_id) in leaf_ids.iter().enumerate() {
                 let prev_id = if idx > 0 {
@@ -66,7 +67,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
         // k and NodeId both impl Copy, so we are ok to use `chunks`
         let mut chunk_iter = nodes.chunks(child_n);
 
-        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>))> = vec![];
+        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>))> = Vec::with_capacity(node_num);
 
         for _ in 0..node_num {
             let childs = chunk_iter.next().unwrap();

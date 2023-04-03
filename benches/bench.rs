@@ -32,6 +32,26 @@ fn bench_ordered_insert(c: &mut Criterion) {
             });
         });
 
+        group.bench_with_input(
+            BenchmarkId::new("bptree bulk", count),
+            &count,
+            |b, count| {
+                b.iter(|| {
+                    let mut kvs = Vec::with_capacity(*count);
+
+                    for i in 0..*count {
+                        let k = Point {
+                            x: i as f64,
+                            y: i as f64,
+                        };
+                        kvs.push((k, Value::default()));
+                    }
+
+                    BPlusTree::<NodeStoreBench>::bulk_load(kvs)
+                });
+            },
+        );
+
         group.bench_with_input(BenchmarkId::new("btree", count), &count, |b, count| {
             b.iter(|| {
                 let mut tree = BTreeMap::<Point, Value>::new();
