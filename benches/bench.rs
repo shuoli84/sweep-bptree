@@ -14,7 +14,7 @@ type NodeStoreBench = NodeStoreVec<Point, Value, 64, 65, 64>;
 
 fn benchmark_bp_tree(c: &mut Criterion) {
     for count in COUNTS {
-        c.bench_function(format!("bptree insert {count}").as_str(), |b| {
+        c.bench_function(format!("bptree ordered_insert {count}").as_str(), |b| {
             b.iter(|| {
                 let node_store = NodeStoreBench::new();
                 let mut tree = BPlusTree::new(node_store);
@@ -26,6 +26,7 @@ fn benchmark_bp_tree(c: &mut Criterion) {
                     };
                     tree.insert(k, Value::default());
                 }
+                tree
             });
         });
 
@@ -48,14 +49,24 @@ fn benchmark_bp_tree(c: &mut Criterion) {
                 for k in &keys {
                     tree.insert(*k, Value::default());
                 }
+
+                tree
             });
         });
 
         c.bench_function(format!("bptree clone {count}").as_str(), |b| {
             let tree = create_tree(count);
-            b.iter(|| {
-                black_box(tree.clone());
-            });
+            b.iter(|| black_box(tree.clone()));
+        });
+
+        c.bench_function(format!("bptree drop {count}").as_str(), |b| {
+            b.iter_batched(
+                || create_tree(count),
+                |tree| {
+                    drop(tree);
+                },
+                criterion::BatchSize::NumIterations(1),
+            );
         });
 
         c.bench_function(format!("bptree ordered_remove {count}").as_str(), |b| {
@@ -79,6 +90,7 @@ fn benchmark_bp_tree(c: &mut Criterion) {
                     };
                     tree.remove(&k);
                 }
+                tree
             });
         });
 
@@ -94,6 +106,7 @@ fn benchmark_bp_tree(c: &mut Criterion) {
                 for k in keys.iter() {
                     tree.remove(&k);
                 }
+                tree
             });
         });
 
@@ -143,16 +156,6 @@ fn benchmark_bp_tree(c: &mut Criterion) {
             });
         });
 
-        c.bench_function(format!("bptree drop {count}").as_str(), |b| {
-            b.iter_batched(
-                || create_tree(count),
-                |tree| {
-                    drop(tree);
-                },
-                criterion::BatchSize::NumIterations(1),
-            );
-        });
-
         // note: this into_iter is slower than iter, mostly due to it has to drop items
         c.bench_function(format!("bptree into_iter {count}").as_str(), |b| {
             let tree = create_tree(count);
@@ -195,7 +198,7 @@ fn benchmark_bp_tree(c: &mut Criterion) {
 
 fn benchmark_btree(c: &mut Criterion) {
     for count in COUNTS {
-        c.bench_function(format!("btree insert {count}").as_str(), |b| {
+        c.bench_function(format!("btree ordered_insert {count}").as_str(), |b| {
             b.iter(|| {
                 let mut tree = BTreeMap::<Point, Value>::new();
 
@@ -227,6 +230,7 @@ fn benchmark_btree(c: &mut Criterion) {
                 for k in &keys {
                     tree.insert(*k, Value::default());
                 }
+                tree
             });
         });
 
@@ -257,6 +261,7 @@ fn benchmark_btree(c: &mut Criterion) {
                     };
                     tree.remove(&k);
                 }
+                tree
             });
         });
 
