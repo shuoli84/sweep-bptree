@@ -1137,12 +1137,6 @@ pub trait INode<K: Key> {
     /// Merge children at slot
     fn merge_child(&mut self, slot: usize) -> InnerMergeResult;
 
-    /// Create an iterator over the keys
-    fn iter_key<'a>(&'a self) -> Box<dyn Iterator<Item = &K> + 'a>;
-
-    /// Create an iterator over the child ids
-    fn iter_child<'a>(&'a self) -> Box<dyn Iterator<Item = NodeId> + 'a>;
-
     /// Set the data of the node
     fn set_data<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         &mut self,
@@ -1303,12 +1297,9 @@ mod tests {
         {
             let child_1 = node_store.get_inner(child_1);
             assert_eq!(child_1.size(), 3);
+            assert_eq!(child_1.key_vec(), vec![10, 11, 12]);
             assert_eq!(
-                child_1.iter_key().cloned().collect::<Vec<_>>(),
-                vec![10, 11, 12]
-            );
-            assert_eq!(
-                child_1.iter_child().collect::<Vec<_>>(),
+                child_1.child_id_vec(),
                 vec![
                     LeafNodeId(1).into(),
                     LeafNodeId(2).into(),
@@ -1323,12 +1314,9 @@ mod tests {
 
             assert_eq!(child_2.size(), 3);
 
+            assert_eq!(child_2.key_vec(), vec![30, 40, 41]);
             assert_eq!(
-                child_2.iter_key().cloned().collect::<Vec<_>>(),
-                vec![30, 40, 41]
-            );
-            assert_eq!(
-                child_2.iter_child().collect::<Vec<_>>(),
+                child_2.child_id_vec(),
                 vec![
                     LeafNodeId(5).into(),
                     LeafNodeId(6).into(),
@@ -1376,12 +1364,9 @@ mod tests {
         {
             let child_1 = node_store.get_inner(child_1);
             assert_eq!(child_1.size(), 4);
+            assert_eq!(child_1.key_vec(), vec![10, 11, 12, 30]);
             assert_eq!(
-                child_1.iter_key().cloned().collect::<Vec<_>>(),
-                vec![10, 11, 12, 30]
-            );
-            assert_eq!(
-                child_1.iter_child().collect::<Vec<_>>(),
+                child_1.child_id_vec(),
                 vec![
                     LeafNodeId(1).into(),
                     LeafNodeId(2).into(),
@@ -1397,12 +1382,9 @@ mod tests {
 
             assert_eq!(child_2.size(), 2);
 
+            assert_eq!(child_2.key_vec(), vec![40, 41]);
             assert_eq!(
-                child_2.iter_key().cloned().collect::<Vec<_>>(),
-                vec![40, 41]
-            );
-            assert_eq!(
-                child_2.iter_child().collect::<Vec<_>>(),
+                child_2.child_id_vec(),
                 vec![
                     LeafNodeId(6).into(),
                     LeafNodeId(7).into(),
@@ -1440,7 +1422,7 @@ mod tests {
             assert_eq!(parent.size(), 2);
             assert_eq!(parent.key(1).clone(), 50);
             assert_eq!(
-                parent.iter_child().collect::<Vec<_>>(),
+                parent.child_id_vec(),
                 vec![child_0.into(), child_1.into(), child_3.into(),]
             );
         }
@@ -1448,12 +1430,9 @@ mod tests {
         {
             let child_1 = node_store.get_inner(child_1);
             assert_eq!(child_1.size(), 4);
+            assert_eq!(child_1.key_vec(), vec![10, 11, 30, 40]);
             assert_eq!(
-                child_1.iter_key().cloned().collect::<Vec<_>>(),
-                vec![10, 11, 30, 40]
-            );
-            assert_eq!(
-                child_1.iter_child().collect::<Vec<_>>(),
+                child_1.child_id_vec(),
                 vec![
                     LeafNodeId(1).into(),
                     LeafNodeId(2).into(),

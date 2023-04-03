@@ -43,8 +43,8 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?}",
                 inner.size(),
-                inner.iter_key().collect::<Vec<_>>(),
-                inner.iter_child().collect::<Vec<_>>()
+                inner.key_vec(),
+                inner.child_id_vec()
             );
         }
 
