@@ -124,6 +124,41 @@ impl<S: NodeStore> Iterator for IntoIter<S> {
     }
 }
 
+impl<S: NodeStore> DoubleEndedIterator for IntoIter<S> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.len() == 0 {
+            return None;
+        }
+
+        let (leaf_id, offset) = self.end;
+        let leaf = self.node_store.get_mut_leaf(leaf_id);
+
+        if offset > 0 {
+            // book keeping current len
+            self.len -= 1;
+            // we should not call delete_at which internally memcpy, instead, use mark_uninit to take
+            // the value out and leaves the memory uninit
+            // safety: right after we called this, the pos moves to next.
+            let kv = unsafe { leaf.take_data(offset - 1) };
+            self.end = (leaf_id, offset - 1);
+            return Some(kv);
+        } else {
+            // move to prev leaf
+            match leaf.prev() {
+                Some(prev_id) => {
+                    let prev_leaf = self.node_store.get_mut_leaf(prev_id);
+                    self.end = (prev_id, prev_leaf.len());
+                    self.next_back()
+                }
+                None => {
+                    // we only reach here if len is mis counted
+                    unreachable!()
+                }
+            }
+        }
+    }
+}
+
 impl<S: NodeStore> Drop for IntoIter<S> {
     fn drop(&mut self) {
         // drop all the remaining items
@@ -165,48 +200,51 @@ mod tests {
     }
 
     #[test]
-    fn test_into_iter() {
-        {
-            // test collect and drop
-            let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
-            let mut tree = BPlusTree::new(node_store);
-            let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
-            for i in 0..10 {
-                tree.insert(i, TestValue::new(counter.clone()));
-            }
-            let iter = IntoIter::new(tree);
-            let items = iter.collect::<Vec<_>>();
-            assert_eq!(items.len(), 10);
-            drop(items);
-
-            assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+    fn test_into_iter_collect() {
+        // test collect and drop
+        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let mut tree = BPlusTree::new(node_store);
+        let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+        for i in 0..10 {
+            tree.insert(i, TestValue::new(counter.clone()));
         }
+        let iter = IntoIter::new(tree);
+        let items = iter.collect::<Vec<_>>();
+        assert_eq!(items.len(), 10);
+        drop(items);
 
-        {
-            // test drop
-            let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
-            let mut tree = BPlusTree::new(node_store);
-            let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
-            for i in 0..10 {
-                tree.insert(i, TestValue::new(counter.clone()));
-            }
-            let iter = IntoIter::new(tree);
-            drop(iter);
+        assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+    }
 
-            assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+    #[test]
+    fn test_into_iter_drop() {
+        // test drop
+        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let mut tree = BPlusTree::new(node_store);
+        let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+        for i in 0..10 {
+            tree.insert(i, TestValue::new(counter.clone()));
         }
+        let iter = IntoIter::new(tree);
+        drop(iter);
 
-        {
-            // test drop
-            let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
-            let mut tree = BPlusTree::new(node_store);
-            let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
-            for i in 0..10 {
-                tree.insert(i, TestValue::new(counter.clone()));
-            }
-            drop(tree);
+        assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+    }
 
-            assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+    #[test]
+    fn test_into_iter_double_ended() {
+        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let mut tree = BPlusTree::new(node_store);
+        let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+        for i in 0..10 {
+            tree.insert(i, TestValue::new(counter.clone()));
         }
+        let items = IntoIter::new(tree)
+            .rev()
+            .map(|(k, _v)| k)
+            .collect::<Vec<_>>();
+        assert_eq!(items.len(), 10);
+        assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+        assert_eq!(items, (0..10).rev().collect::<Vec<_>>());
     }
 }

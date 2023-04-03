@@ -1086,6 +1086,8 @@ pub trait LNode<K: Key, V: Value> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::*;
 
     #[test]
@@ -1575,5 +1577,37 @@ mod tests {
         assert_eq!(tree.len(), N);
 
         (tree, keys)
+    }
+
+    #[derive(Clone)]
+    struct TestValue {
+        counter: Rc<std::sync::atomic::AtomicU64>,
+    }
+
+    impl TestValue {
+        fn new(counter: Rc<std::sync::atomic::AtomicU64>) -> Self {
+            Self { counter }
+        }
+    }
+
+    impl Drop for TestValue {
+        fn drop(&mut self) {
+            self.counter
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    #[test]
+    fn test_drop() {
+        // test drop
+        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let mut tree = BPlusTree::new(node_store);
+        let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+        for i in 0..10 {
+            tree.insert(i, TestValue::new(counter.clone()));
+        }
+        drop(tree);
+
+        assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
     }
 }
