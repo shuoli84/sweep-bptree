@@ -4,7 +4,7 @@ use models::*;
 
 use std::collections::BTreeMap;
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use sweep_bptree::{BPlusTree, NodeStoreVec};
 
 const COUNTS: [usize; 3] = [1000, 10000, 10_0000];
@@ -97,6 +97,21 @@ fn bench_random_insert(c: &mut Criterion) {
 
                 tree
             });
+        });
+
+        group.bench_function(BenchmarkId::new("bptree sort_load", count), |b| {
+            b.iter_batched(
+                || keys.clone(),
+                |mut keys| {
+                    keys.sort();
+                    BPlusTree::<NodeStoreBench>::bulk_load(
+                        keys.into_iter()
+                            .map(|k| (k, Value::default()))
+                            .collect::<Vec<_>>(),
+                    )
+                },
+                BatchSize::NumIterations(1),
+            )
         });
 
         group.bench_function(BenchmarkId::new("btree", count), |b| {
