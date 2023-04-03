@@ -12,8 +12,15 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self {
-            inner_nodes: Vec::with_capacity(128),
-            leaf_nodes: Vec::with_capacity(128),
+            inner_nodes: Vec::new(),
+            leaf_nodes: Vec::new(),
+        }
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            inner_nodes: Vec::with_capacity(cap),
+            leaf_nodes: Vec::with_capacity(cap),
         }
     }
 
