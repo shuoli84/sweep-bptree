@@ -143,6 +143,26 @@ fn benchmark_bp_tree(c: &mut Criterion) {
             });
         });
 
+        c.bench_function(format!("bptree into_iter {count}").as_str(), |b| {
+            let node_store = NodeStoreBench::new();
+            let mut tree = BPlusTree::new(node_store);
+
+            for i in 0..count {
+                let k = Point {
+                    x: i as f64,
+                    y: i as f64,
+                };
+                tree.insert(k, Value::default());
+            }
+
+            b.iter(|| {
+                let tree = tree.clone();
+                let count = tree.len();
+                let c = tree.into_iter().count();
+                assert_eq!(c, count);
+            });
+        });
+
         c.bench_function(format!("bptree cursor {count}").as_str(), |b| {
             let node_store = NodeStoreBench::new();
             let mut tree = BPlusTree::new(node_store);
