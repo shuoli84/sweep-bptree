@@ -973,11 +973,12 @@ impl<K: Key> CacheItem<K> {
         })
     }
 
+    #[inline(always)]
     pub fn in_range(&self, k: &K) -> bool {
         match (self.start, self.end) {
-            (Some(start), Some(end)) => start.le(k) && end.gt(k),
+            (Some(start), Some(end)) => start.le(k) && end.ge(k),
             (Some(start), None) => start.le(k),
-            (None, Some(end)) => end.gt(k),
+            (None, Some(end)) => end.ge(k),
             (None, None) => true,
         }
     }

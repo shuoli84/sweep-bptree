@@ -611,10 +611,12 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Box::new(LeafNode::iter(self))
     }
 
+    #[inline(always)]
     fn in_range(&self, k: &K) -> bool {
         Self::in_range(self, k)
     }
 
+    #[inline(always)]
     fn key_range(&self) -> (Option<K>, Option<K>) {
         Self::key_range(self)
     }
