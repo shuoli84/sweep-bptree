@@ -1147,18 +1147,18 @@ pub trait INode<K: Key> {
 
 /// Leaf node trait
 pub trait LNode<K: Key, V: Value> {
+    /// Create an empty LeafNode
+    fn new() -> Box<Self>;
+
     /// Returns size of the leaf
     fn len(&self) -> usize;
-
-    fn new() -> Box<Self>;
 
     fn prev(&self) -> Option<LeafNodeId>;
     fn set_prev(&mut self, id: Option<LeafNodeId>);
     fn next(&self) -> Option<LeafNodeId>;
     fn set_next(&mut self, id: Option<LeafNodeId>);
 
-    fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]);
-    fn set_data_by_iter(&mut self, data: &mut impl Iterator<Item = (K, V)>);
+    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>);
     fn data_at(&self, slot: usize) -> (&K, &V);
     /// this takes data at `slot` out, makes original storage `uinit`.
     /// This should never called for same slot, or double free will happen.
@@ -1188,8 +1188,6 @@ pub trait LNode<K: Key, V: Value> {
     fn merge_right(&mut self, right: &mut Self);
     fn pop(&mut self) -> (K, V);
     fn pop_front(&mut self) -> (K, V);
-
-    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (&K, &V)> + 'a>;
 }
 
 #[cfg(test)]

@@ -112,18 +112,8 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.next = id;
     }
 
-    fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
-        assert!(N1 <= N);
-        self.size = N1 as u16;
-        for i in 0..N1 {
-            unsafe {
-                *self.key_area_mut(i) = MaybeUninit::new(data[i].0);
-                *self.value_area_mut(i) = MaybeUninit::new(data[i].1.clone());
-            }
-        }
-    }
-
-    fn set_data_by_iter(&mut self, data: &mut impl Iterator<Item = (K, V)>) {
+    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
+        let mut data = data.into_iter();
         for i in 0..N {
             if let Some((k, v)) = data.next() {
                 unsafe {
@@ -158,7 +148,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         })
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+    fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         unsafe { self.key_area(..self.size as usize) }
             .iter()
             .zip(unsafe { self.value_area(..self.size as usize) })
@@ -555,12 +545,30 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Self::set_next(self, id)
     }
 
-    fn set_data<const N1: usize>(&mut self, data: [(K, V); N1]) {
+    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
         Self::set_data(self, data)
     }
 
     fn data_at(&self, slot: usize) -> (&K, &V) {
         Self::data_at(self, slot)
+    }
+
+    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+        Self::take_data(self, slot)
+    }
+
+    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
+        Self::try_data_at(self, idx)
+    }
+
+    #[inline(always)]
+    fn in_range(&self, k: &K) -> bool {
+        Self::in_range(self, k)
+    }
+
+    #[inline(always)]
+    fn key_range(&self) -> (Option<K>, Option<K>) {
+        Self::key_range(self)
     }
 
     fn is_full(&self) -> bool {
@@ -585,16 +593,12 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         LeafNode::split_new_leaf(self, insert_idx, item, new_leaf_id, self_leaf_id)
     }
 
-    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
-        Self::try_data_at(self, idx)
+    fn locate_slot(&self, k: &K) -> Result<usize, usize> {
+        Self::locate_child_idx(&self, k)
     }
 
     fn locate_slot_with_value(&self, k: &K) -> (usize, Option<&V>) {
         Self::locate_child(self, k)
-    }
-
-    fn locate_slot(&self, k: &K) -> Result<usize, usize> {
-        Self::locate_child_idx(&self, k)
     }
 
     fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
@@ -631,28 +635,6 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
 
     fn pop_front(&mut self) -> (K, V) {
         Self::pop_front(self)
-    }
-
-    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = (&K, &V)> + 'a> {
-        Box::new(LeafNode::iter(self))
-    }
-
-    #[inline(always)]
-    fn in_range(&self, k: &K) -> bool {
-        Self::in_range(self, k)
-    }
-
-    #[inline(always)]
-    fn key_range(&self) -> (Option<K>, Option<K>) {
-        Self::key_range(self)
-    }
-
-    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
-        Self::take_data(self, slot)
-    }
-
-    fn set_data_by_iter(&mut self, data: &mut impl Iterator<Item = (K, V)>) {
-        Self::set_data_by_iter(self, data)
     }
 }
 

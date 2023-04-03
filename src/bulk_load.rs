@@ -30,7 +30,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
 
                 let mut leaf = S::LeafNode::new();
 
-                leaf.set_data_by_iter(&mut data_iter);
+                leaf.set_data(&mut data_iter);
                 leaf.set_prev(prev_id);
                 leaf.set_next(next_id);
 

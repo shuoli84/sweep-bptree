@@ -57,7 +57,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
                 leaf.next()
                     .map(|l| l.as_usize().to_string())
                     .unwrap_or("-".to_string()),
-                leaf.iter().map(|kv| kv.0).collect::<Vec<_>>()
+                leaf.data_vec().iter().map(|kv| kv.0).collect::<Vec<_>>()
             );
         }
     }
