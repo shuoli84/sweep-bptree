@@ -5,7 +5,7 @@ use crate::LeafNodeId;
 use crate::NodeStore;
 
 /// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Cursor<K: Key> {
     /// The key this cursor points to. It is possible the `k` doesn't exist in the tree.
     k: K,
@@ -18,7 +18,17 @@ pub struct Cursor<K: Key> {
 }
 
 impl<K: Key> Cursor<K> {
+    #[inline(always)]
+    pub(crate) fn new(k: K, leaf_id: LeafNodeId, offset: usize) -> Self {
+        Self {
+            k,
+            leaf_id_hint: leaf_id,
+            offset_hint: offset,
+        }
+    }
+
     /// Get the key of the cursor.
+    #[inline(always)]
     pub fn key(&self) -> &K {
         &self.k
     }
@@ -83,7 +93,11 @@ impl<K: Key> Cursor<K> {
                 }
             }
             _ => {
-                let (offset, _value) = leaf.locate_slot(&self.k);
+                let offset = match leaf.locate_slot(&self.k) {
+                    Ok(offset) => offset,
+                    Err(offset) => offset,
+                };
+
                 if offset > 0 {
                     (offset - 1, leaf)
                 } else if let Some(prev_id) = leaf.prev() {
@@ -98,7 +112,7 @@ impl<K: Key> Cursor<K> {
         let kv = leaf.data_at(offset);
         Some((
             Self {
-                k: kv.0,
+                k: *kv.0,
                 leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
@@ -122,7 +136,7 @@ impl<K: Key> Cursor<K> {
         let next_offset = match leaf.try_data_at(self.offset_hint) {
             Some(kv) if kv.0.eq(&self.k) => self.offset_hint + 1,
             _ => {
-                let (offset, value) = leaf.locate_slot(&self.k);
+                let (offset, value) = leaf.locate_slot_with_value(&self.k);
                 match value {
                     Some(_) => offset + 1,
                     None => offset,
@@ -134,7 +148,7 @@ impl<K: Key> Cursor<K> {
             let kv = leaf.data_at(next_offset);
             Some((
                 Self {
-                    k: kv.0,
+                    k: *kv.0,
                     leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
@@ -147,7 +161,7 @@ impl<K: Key> Cursor<K> {
 
             Some((
                 Self {
-                    k: kv.0,
+                    k: *kv.0,
                     leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },
@@ -172,33 +186,29 @@ impl<K: Key> Cursor<K> {
             Some(kv) if kv.0.eq(&self.k) => Some(&kv.1),
             _ => {
                 // todo: consider update self?
-                let (_, value) = leaf.locate_slot(&self.k);
-                value.map(|kv| &kv.1)
+                let (_, value) = leaf.locate_slot_with_value(&self.k);
+                value
             }
         }
     }
 
+    #[inline]
     fn locate_leaf<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(LeafNodeId, &'b S::LeafNode)> {
         let leaf_id = self.leaf_id_hint;
-        match tree.node_store.try_get_leaf(leaf_id) {
-            Some(leaf) if range_contains(&leaf.key_range(), &self.k) => {
-                // still valid
-                Some((leaf_id, leaf))
-            }
-            _ => {
-                // the leaf is modified, we need to do a search by key
-                let leaf_id = tree.locate_leaf(&self.k)?;
-                Some((leaf_id, tree.node_store.get_leaf(leaf_id)))
+        if let Some(leaf) = tree.node_store.try_get_leaf(leaf_id) {
+            if leaf.in_range(&self.k) {
+                return Some((leaf_id, leaf));
             }
         }
-    }
-}
 
-fn range_contains<K: Ord + Eq>(range: &(K, K), k: &K) -> bool {
-    range.0.le(k) && range.1.ge(k)
+        // no hint or hint outdated, need to do a search by key
+        let leaf_id = tree.locate_leaf(&self.k)?;
+
+        Some((leaf_id, tree.node_store.get_leaf(leaf_id)))
+    }
 }
 
 #[cfg(test)]
