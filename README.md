@@ -10,6 +10,8 @@ While developing [poly2tri-rs](https://github.com/shuoli84/poly2tri-rs), I need 
 2. performant for query, and the query pattern is more local than random. That means the query is more likely to be close to the last accessed node.
 3. Provide floating cursor support, so I can keep a cursor around and modify the tree underlying.
 
+Though it is designed for "Sweeping Front/Advancing Front", it is a general purpose tree, so can be used in other scenarios.
+
 ### Why not splaytree
 
 Splaytree is binary tree, so it has relative large number of nodes, which is bad for cache locality.
@@ -22,9 +24,9 @@ Also I couldn't come up a proper cache mechanism for BTree. BTree's value is sto
 
 ## Features
 
-* Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered access. (Check out benchmark)
+* Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered(local) access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
-* Plugable NodeStore, how to alloc or reuse Node is customizable.
+* Bulk load, currently the most performant way to build a tree. (Check out benchmark)
 
 ## Example
 
@@ -83,56 +85,110 @@ assert_eq!(cursor_1.value(&tree).unwrap().0, 100.);
 
 ## Benchmark
 
-Data collected on macbook pro m1.
-NOTE: The underlying code didn't tuned yet, there is a big space to improve.
+Data collected on macbook pro m1. The Key type is `Point { x: f64, y: f64}`
 
 ### Highlight
 
-* bptree ordered_get is way faster than random_get, also way faster than btree's ordered_get
-* bptree iter's faster than btree iter by around 50%.
-* bptree random_get and remove is slower than btree random_get by 100%. (Room to optimize)
+(All number is for elment count 100000)
+
+#### Advantages
+
+* bptree ordered_get is way faster than random_get, also way faster(1.6ms vs 4.7ms) than btree's ordered_get.
+* bptree iter's faster than btree(57us vs 200us).
+* bptree bulk_insert is the most fast way to build a tree(938µs vs normal bptree insert 2ms vs btree insert 8ms).
+* For unsorted data, sort then bulk_load is the fastest(9ms vs normal bptree 18.ms vs normal btree insert 13.9ms).
+
+#### Disadvantages
+
+* bptree random_get is slower(13ms vs 9ms) than btree.
+* random_remove(17ms vs 12ms).
+
+| name | bptree | btree |
+| --- | --- | --- |
+| ordered_get | 1.6ms | 4.7ms |
+| random_get | 13ms | 9ms |
+| iter | 57us | 200us |
+| cursor(1) | 486us | - |
+| ordered_insert | 2ms | 8ms |
+| bulk_load | 938µs | - |
+| sort then bulk_load | 9ms | - |
+| random_insert | 18.8ms | 13.9ms |
+| random_remove | 17ms | 12ms |
+| clone | 1.1ms | 2.6ms |
+| drop | 345us | 1800us |
+
+1. cursor here is the `floating` cursor, you can keep it around and modify the tree underlying. It's slower than `owned` cursor, because it has to check if the node is still valid.
 
 ```bash
-group                          base                                   new
------                          ----                                   ---
-bptree clone 1000              1.00      3.5±0.03µs        ? ?/sec    1.00      3.5±0.03µs        ? ?/sec
-bptree clone 10000             1.00     37.9±3.42µs        ? ?/sec    1.00     37.9±3.42µs        ? ?/sec
-bptree cursor 1000             1.00      4.4±0.04µs        ? ?/sec    1.00      4.4±0.04µs        ? ?/sec
-bptree cursor 10000            1.00     46.3±0.30µs        ? ?/sec    1.00     46.3±0.30µs        ? ?/sec
-bptree insert 1000             1.00     20.9±0.13µs        ? ?/sec    1.00     20.9±0.13µs        ? ?/sec
-bptree insert 10000            1.00    306.1±2.77µs        ? ?/sec    1.00    306.1±2.77µs        ? ?/sec
-bptree iter 1000               1.00    337.9±1.19ns        ? ?/sec    1.00    337.9±1.19ns        ? ?/sec
-bptree iter 10000              1.00      3.3±0.02µs        ? ?/sec    1.00      3.3±0.02µs        ? ?/sec
-bptree ordered_get 1000        1.00     11.3±0.28µs        ? ?/sec    1.00     11.3±0.28µs        ? ?/sec
-bptree ordered_get 10000       1.00    117.9±0.30µs        ? ?/sec    1.00    117.9±0.30µs        ? ?/sec
-bptree ordered_remove 1000     1.00     58.4±0.37µs        ? ?/sec    1.00     58.4±0.37µs        ? ?/sec
-bptree ordered_remove 10000    1.00   682.3±10.80µs        ? ?/sec    1.00   682.3±10.80µs        ? ?/sec
-bptree random_get 1000         1.00     19.3±2.32µs        ? ?/sec    1.00     19.3±2.32µs        ? ?/sec
-bptree random_get 10000        1.00    990.1±6.85µs        ? ?/sec    1.00    990.1±6.85µs        ? ?/sec
-bptree random_insert 1000      1.00     70.2±0.60µs        ? ?/sec    1.00     70.2±0.60µs        ? ?/sec
-bptree random_insert 10000     1.00  1331.9±12.50µs        ? ?/sec    1.00  1331.9±12.50µs        ? ?/sec
-bptree random_remove 1000      1.00     59.0±1.33µs        ? ?/sec    1.00     59.0±1.33µs        ? ?/sec
-bptree random_remove 10000     1.00   1221.1±7.52µs        ? ?/sec    1.00   1221.1±7.52µs        ? ?/sec
-btree clone 1000               1.00     12.5±0.14µs        ? ?/sec    1.00     12.5±0.14µs        ? ?/sec
-btree clone 10000              1.00    134.3±1.79µs        ? ?/sec    1.00    134.3±1.79µs        ? ?/sec
-btree insert 1000              1.00     51.3±1.07µs        ? ?/sec    1.00     51.3±1.07µs        ? ?/sec
-btree insert 10000             1.00   753.7±10.08µs        ? ?/sec    1.00   753.7±10.08µs        ? ?/sec
-btree iter 1000                1.00    876.7±7.04ns        ? ?/sec    1.00    876.7±7.04ns        ? ?/sec
-btree iter 10000               1.00     11.1±0.28µs        ? ?/sec    1.00     11.1±0.28µs        ? ?/sec
-btree ordered_get 1000         1.00     18.7±1.12µs        ? ?/sec    1.00     18.7±1.12µs        ? ?/sec
-btree ordered_get 10000        1.00    423.4±4.12µs        ? ?/sec    1.00    423.4±4.12µs        ? ?/sec
-btree ordered_remove 1000      1.00     36.5±0.56µs        ? ?/sec    1.00     36.5±0.56µs        ? ?/sec
-btree ordered_remove 10000     1.00   418.0±11.41µs        ? ?/sec    1.00   418.0±11.41µs        ? ?/sec
-btree random_get 1000          1.00     23.2±1.38µs        ? ?/sec    1.00     23.2±1.38µs        ? ?/sec
-btree random_get 10000         1.00    637.7±5.44µs        ? ?/sec    1.00    637.7±5.44µs        ? ?/sec
-btree random_remove 1000       1.00     53.2±1.57µs        ? ?/sec    1.00     53.2±1.57µs        ? ?/sec
-btree random_remove 10000      1.00   948.2±11.95µs        ? ?/sec    1.00   948.2±11.95µs        ? ?/sec
-vec get 1000                   1.00     20.5±3.97µs        ? ?/sec    1.00     20.5±3.97µs        ? ?/sec
-vec get 10000                  1.00    457.1±4.23µs        ? ?/sec    1.00    457.1±4.23µs        ? ?/sec
-vec insert 1000                1.00     13.5±0.11µs        ? ?/sec    1.00     13.5±0.11µs        ? ?/sec
-vec insert 10000               1.00    199.1±5.13µs        ? ?/sec    1.00    199.1±5.13µs        ? ?/sec
-vec iter 1000                  1.00    319.7±3.02ns        ? ?/sec    1.00    319.7±3.02ns        ? ?/sec
-vec iter 10000                 1.00      3.1±0.02µs        ? ?/sec    1.00      3.1±0.02µs        ? ?/sec
-vec remove 1000                1.00    406.7±4.15µs        ? ?/sec    1.00    406.7±4.15µs        ? ?/sec
-vec remove 10000               1.00     56.1±0.55ms        ? ?/sec    1.00     56.1±0.55ms        ? ?/sec
+group                                    base
+-----                                    ----
+clone/bptree/1000                        1.00      5.7±0.07µs
+clone/bptree/10000                       1.00     60.8±0.52µs
+clone/bptree/100000                      1.00  1045.9±81.45µs
+clone/btree/1000                         1.00     12.3±0.13µs
+clone/btree/10000                        1.00    133.5±2.84µs
+clone/btree/100000                       1.00      2.6±0.09ms
+cursor/bptree/1000                       1.00      4.7±0.02µs
+cursor/bptree/10000                      1.00     48.6±0.42µs
+cursor/bptree/100000                     1.00    486.2±3.31µs
+drop/bptree/1000                         1.00  1393.4±18.35ns
+drop/bptree/10000                        1.00     15.7±0.16µs
+drop/bptree/100000                       1.00   345.8±16.61µs
+drop/btree/1000                          1.00      7.8±0.07µs
+drop/btree/10000                         1.00     85.4±1.23µs
+drop/btree/100000                        1.00  1824.9±52.91µs
+into_iter/bptree/1000                    1.00  1398.9±24.90ns
+into_iter/bptree/10000                   1.00     15.3±0.33µs
+into_iter/bptree/100000                  1.00   326.3±19.66µs
+into_iter/btree/1000                     1.00      7.9±0.07µs
+into_iter/btree/10000                    1.00     85.2±1.14µs
+into_iter/btree/100000                   1.00  1838.8±61.67µs
+iter/bptree/1000                         1.00    397.8±4.35ns
+iter/bptree/10000                        1.00      5.3±0.03µs
+iter/bptree/100000                       1.00     57.3±0.28µs
+iter/btree/1000                          1.00    843.5±6.98ns
+iter/btree/10000                         1.00     11.2±0.10µs
+iter/btree/100000                        1.00    216.6±1.98µs
+ordered_get/bptree/1000                  1.00     10.3±0.06µs
+ordered_get/bptree/10000                 1.00    111.8±4.24µs
+ordered_get/bptree/100000                1.00   1164.3±1.80µs
+ordered_get/btree/1000                   1.00     24.9±4.07µs
+ordered_get/btree/10000                  1.00    423.8±1.59µs
+ordered_get/btree/100000                 1.00      4.7±0.02ms
+ordered_insert/bptree bulk/1000          1.00      6.1±0.04µs
+ordered_insert/bptree bulk/10000         1.00     69.2±2.56µs
+ordered_insert/bptree bulk/100000        1.00   938.2±30.39µs
+ordered_insert/bptree/1000               1.00     15.2±0.11µs
+ordered_insert/bptree/10000              1.00    163.2±1.36µs
+ordered_insert/bptree/100000             1.00      2.0±0.03ms
+ordered_insert/btree/1000                1.00     51.0±1.25µs
+ordered_insert/btree/10000               1.00    753.7±7.59µs
+ordered_insert/btree/100000              1.00      8.9±0.09ms
+ordered_remove/bptree/1000               1.00     62.7±0.34µs
+ordered_remove/bptree/10000              1.00    658.9±1.83µs
+ordered_remove/bptree/100000             1.00      7.3±0.11ms
+ordered_remove/btree/1000                1.00     31.9±0.26µs
+ordered_remove/btree/10000               1.00    352.6±3.90µs
+ordered_remove/btree/100000              1.00      4.6±0.12ms
+random_get/bptree/1000                   1.00     22.6±0.56µs
+random_get/bptree/10000                  1.00    990.6±8.44µs
+random_get/bptree/100000                 1.00     13.7±0.01ms
+random_get/btree/1000                    1.00     14.4±0.11µs
+random_get/btree/10000                   1.00    651.1±3.97µs
+random_get/btree/100000                  1.00      9.4±0.14ms
+random_insert/bptree sort_load/1000      1.00     43.3±0.16µs
+random_insert/bptree sort_load/10000     1.00    676.9±7.22µs
+random_insert/bptree sort_load/100000    1.00      9.5±0.08ms
+random_insert/bptree/1000                1.00     65.0±2.79µs
+random_insert/bptree/10000               1.00  1391.2±14.28µs
+random_insert/bptree/100000              1.00     18.8±0.17ms
+random_insert/btree/1000                 1.00     54.4±4.52µs
+random_insert/btree/10000                1.00    949.8±8.07µs
+random_insert/btree/100000               1.00     13.9±0.11ms
+random_remove/bptree/1000                1.00     67.4±2.21µs
+random_remove/bptree/10000               1.00   1249.4±8.83µs
+random_remove/bptree/100000              1.00     17.3±0.29ms
+random_remove/btree/1000                 1.00     57.3±3.65µs
+random_remove/btree/10000                1.00    920.1±8.75µs
+random_remove/btree/100000               1.00     12.8±0.21ms
 ```
