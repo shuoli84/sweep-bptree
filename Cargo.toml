@@ -1,6 +1,6 @@
 [package]
 name = "sweep-bptree"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "In memory locality aware b+ tree, faster for ordered access"
 license = "MIT OR Apache-2.0"
