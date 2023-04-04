@@ -18,15 +18,20 @@ Splaytree is binary tree, so it has relative large number of nodes, which is bad
 
 ### Why not std btree
 
-std::collections::BTreeMap's Cursor support is not stablized yet.
+`std::collections::BTreeMap`'s Cursor support is not stablized yet.
 
-Also I couldn't come up a proper cache mechanism for BTree. BTree's value is stored in all nodes, that makes cache invalidate more frequently.
+Also BTree's value is stored in all nodes, that makes cache invalidate more frequently.
 
-## Features
+## Features(Why use this)
 
 * Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered(local) access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
 * Bulk load, currently the most performant way to build a tree. (Check out benchmark)
+* Faster iteration than `std::collections::BTreeMap`, mostly because it has large leaf node and don't need to visit inner node.
+
+## Unsafe
+
+This crate utilize unsafe code to improve performance. Mostly for memory initialize, copy and move operations. It is tested with fuzzy testing.
 
 ## Example
 
@@ -86,6 +91,11 @@ assert_eq!(cursor_1.value(&tree).unwrap().0, 100.);
 ## Benchmark
 
 Data collected on macbook pro m1. The Key type is `Point { x: f64, y: f64}`
+
+```bash
+# try it
+cargo bench
+```
 
 ### Highlight
 
@@ -192,3 +202,15 @@ random_remove/btree/1000                 1.00     57.3±3.65µs
 random_remove/btree/10000                1.00    920.1±8.75µs
 random_remove/btree/100000               1.00     12.8±0.21ms
 ```
+
+## Contribution
+
+Contributions are welcome! Please open an issue or a PR. Currently, documentation, feature parity with `std::collections::BTreeMap`, and performance improvements are the main areas of interest.
+
+Things on my head:
+
+* Now each node access involved two pointer jump(one to get the `Option<Box<Node>>` in NodeStore, then jump to Boxed Node), which is something I want to avoid. Any idea welcomed.
+
+* Inside inner/leaf node, the `binary` search part is hot(if not hottest) path, and it is not optimized yet.  related: <https://quickwit.io/blog/search-a-sorted-block>
+
+* Mem move, e.g, when deleting, rotation and merging will do one memmove. I think it is possible to avoid this. E.g: use remove-empty instead of merge-at-half(now the impl is a quater).
