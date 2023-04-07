@@ -881,6 +881,7 @@ where
         iterator::Iter::new(self)
     }
 
+    /// Consume the tree and create an iterator on (K, &V) pairs
     pub fn into_iter(self) -> iterator::IntoIter<S> {
         iterator::IntoIter::new(self)
     }
@@ -948,6 +949,7 @@ impl<S: NodeStore> Drop for BPlusTree<S> {
     }
 }
 
+/// Statistic data used to guide the perf tuning
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Statistic {
     pub rotate_right_inner: u64,
@@ -968,7 +970,6 @@ struct CacheItem<K> {
     start: Option<K>,
     end: Option<K>,
     leaf_id: LeafNodeId,
-    // consider cache the item?
 }
 
 impl<K: std::fmt::Debug> std::fmt::Debug for CacheItem<K> {

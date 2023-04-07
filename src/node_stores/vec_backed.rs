@@ -28,6 +28,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
         }
     }
 
+    /// Create a new `NodeStoreVec` with capacity
     pub fn with_capacity(cap: usize) -> Self {
         Self {
             inner_nodes: Vec::with_capacity(cap),
@@ -35,6 +36,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
         }
     }
 
+    /// Print nodes, used in test only
     #[cfg(test)]
     pub fn print(&self) {
         use crate::INode;
