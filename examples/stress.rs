@@ -37,6 +37,7 @@ fn delete_tree(tree: &mut BPlusTree<NodeStore>) {
         tree.remove(k);
     }
     println!("{}", tree.len());
+    #[cfg(feature = "statistic")]
     println!("{:#?}", tree.statistic());
 }
 

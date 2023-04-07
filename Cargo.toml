@@ -15,6 +15,9 @@ bench = false
 criterion = { version = "0.4", features = ["html_reports"] }
 rand = "0.8"
 
+[features]
+statistic = []
+
 [[bench]]
 name = "bench"
 harness = false

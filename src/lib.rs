@@ -80,6 +80,7 @@ pub struct BPlusTree<S: NodeStore> {
     /// store last accessed leaf, and it's key range
     leaf_cache: Cell<Option<CacheItem<S::K>>>,
 
+    #[cfg(feature = "statistic")]
     st: Statistic,
 }
 
@@ -96,6 +97,7 @@ where
             leaf_cache: Cell::new(None),
             len: 0,
 
+            #[cfg(feature = "statistic")]
             st: Statistic::default(),
         }
     }
@@ -108,6 +110,7 @@ where
             leaf_cache: Cell::new(None),
             len,
 
+            #[cfg(feature = "statistic")]
             st: Statistic::default(),
         };
 
@@ -192,6 +195,7 @@ where
         )
     }
 
+    #[cfg(feature = "statistic")]
     pub fn statistic(&self) -> &Statistic {
         &self.st
     }
@@ -458,23 +462,35 @@ where
             if Self::try_rotate_right_for_inner_node(&mut self.node_store, node, child_idx - 1)
                 .is_some()
             {
-                self.st.rotate_right_inner += 1;
+                #[cfg(feature = "statistic")]
+                {
+                    self.st.rotate_right_inner += 1;
+                }
                 return DeleteDescendResult::Done(deleted_item);
             }
         }
         if child_idx < node.size() {
             if Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some()
             {
-                self.st.rotate_left_inner += 1;
+                #[cfg(feature = "statistic")]
+                {
+                    self.st.rotate_left_inner += 1;
+                }
                 return DeleteDescendResult::Done(deleted_item);
             }
         }
 
         let merge_slot = if child_idx > 0 {
-            self.st.merge_with_left_inner += 1;
+            #[cfg(feature = "statistic")]
+            {
+                self.st.merge_with_left_inner += 1;
+            }
             child_idx - 1
         } else {
-            self.st.merge_with_right_inner += 1;
+            #[cfg(feature = "statistic")]
+            {
+                self.st.merge_with_right_inner += 1;
+            }
             child_idx
         };
 
@@ -554,7 +570,10 @@ where
                     child_idx - 1,
                     key_idx_in_child,
                 );
-                self.st.rotate_right_leaf += 1;
+                #[cfg(feature = "statistic")]
+                {
+                    self.st.rotate_right_leaf += 1;
+                }
                 self.set_cache(cache_item);
                 return DeleteDescendResult::Done(deleted);
             }
@@ -565,12 +584,18 @@ where
                     child_idx,
                     key_idx_in_child,
                 );
-                self.st.rotate_left_leaf += 1;
+                #[cfg(feature = "statistic")]
+                {
+                    self.st.rotate_left_leaf += 1;
+                }
                 self.set_cache(cache_item);
                 return DeleteDescendResult::Done(deleted);
             }
             FixAction::MergeLeft => {
-                self.st.merge_with_left_leaf += 1;
+                #[cfg(feature = "statistic")]
+                {
+                    self.st.merge_with_left_leaf += 1;
+                }
                 // merge with prev node
                 let (result, cache_item) = Self::merge_leaf_node_left(
                     &mut self.node_store,
@@ -582,7 +607,11 @@ where
                 result
             }
             FixAction::MergeRight => {
-                self.st.merge_with_right_leaf += 1;
+                #[cfg(feature = "statistic")]
+                {
+                    self.st.merge_with_right_leaf += 1;
+                }
+
                 // merge with next node
                 let (result, cache_item) = Self::merge_leaf_node_with_right(
                     &mut self.node_store,
@@ -785,7 +814,7 @@ where
     }
 
     /// get the first leaf_id if exists
-    pub fn first_leaf(&self) -> Option<LeafNodeId> {
+    pub(crate) fn first_leaf(&self) -> Option<LeafNodeId> {
         match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
@@ -808,7 +837,7 @@ where
     }
 
     /// get the last leaf_id if exists
-    pub fn last_leaf(&self) -> Option<LeafNodeId> {
+    pub(crate) fn last_leaf(&self) -> Option<LeafNodeId> {
         match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
@@ -948,18 +977,29 @@ impl<S: NodeStore> Drop for BPlusTree<S> {
     }
 }
 
+/// Statistic info fo b plus tree, used to provide performance info
+/// to guide perf tune
+#[cfg(feature = "statistic")]
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Statistic {
+    /// How many rotate right operations on inner node
     pub rotate_right_inner: u64,
+    /// How many rotate left operations on inner node
     pub rotate_left_inner: u64,
 
+    /// How many merge left operations on inner node
     pub merge_with_left_inner: u64,
+    /// How many merge right operations on inner node
     pub merge_with_right_inner: u64,
 
+    /// How many rotate right operations on leaf node
     pub rotate_right_leaf: u64,
+    /// How many rotate left operations on leaf node
     pub rotate_left_leaf: u64,
 
+    /// How many merge left operations on leaf node
     pub merge_with_left_leaf: u64,
+    /// How many merge right operations on leaf node
     pub merge_with_right_leaf: u64,
 }
 
