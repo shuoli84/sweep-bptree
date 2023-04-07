@@ -177,4 +177,14 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>) {
         self.leaf_nodes[id.as_usize()] = Some(leaf);
     }
+
+    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut Self::InnerNode {
+        unsafe {
+            self.inner_nodes
+                .get_unchecked_mut(id.as_usize())
+                .as_mut()
+                .unwrap()
+                .as_mut() as *mut Self::InnerNode
+        }
+    }
 }

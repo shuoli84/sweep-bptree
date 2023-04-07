@@ -425,14 +425,15 @@ where
     }
 
     fn remove_inner(&mut self, node_id: InnerNodeId, k: &S::K) -> DeleteDescendResult<S::K, S::V> {
-        let mut inner_node = self.node_store.take_inner(node_id);
-
+        // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
+        //         so we can safely get a mutable ptr to it.
+        let inner_node = unsafe { &mut *self.node_store.get_mut_inner_ptr(node_id) };
         let (child_idx, child_id) = inner_node.locate_child(k);
         let r = match child_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
                 DeleteDescendResult::Done(kv) => DeleteDescendResult::Done(kv),
                 DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                    self.handle_inner_under_size(&mut inner_node, child_idx, deleted_item)
+                    self.handle_inner_under_size(inner_node, child_idx, deleted_item)
                 }
                 DeleteDescendResult::None => DeleteDescendResult::None,
             },
@@ -442,13 +443,12 @@ where
                     LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
                     LeafDeleteResult::NotFound => DeleteDescendResult::None,
                     LeafDeleteResult::UnderSize(idx) => {
-                        self.handle_leaf_under_size(&mut inner_node, child_idx, idx)
+                        self.handle_leaf_under_size(inner_node, child_idx, idx)
                     }
                 }
             }
         };
 
-        self.node_store.put_back_inner(node_id, inner_node);
         r
     }
 
@@ -1069,6 +1069,10 @@ pub trait NodeStore: Default {
 
     /// Get a mut reference to the `InnerNode`
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode;
+
+    /// Get a mut pointer to inner node.
+    /// User must ensure there is non shared reference to the node co-exists
+    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut Self::InnerNode;
 
     /// Take the inner node out of the store
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
