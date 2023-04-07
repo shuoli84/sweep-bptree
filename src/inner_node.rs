@@ -89,43 +89,22 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         node
     }
 
-    const fn binary_search_threshold() -> usize {
-        6
-    }
-
     /// returns the child index for k
     #[inline]
     pub(crate) fn locate_child(&self, k: &K) -> (usize, NodeId) {
-        if self.size > Self::binary_search_threshold() as u16 {
-            match unsafe { self.key_area(0..self.size as usize) }
-                .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
-            {
-                Err(idx) => {
-                    // the idx is the place where a matching element could be inserted while maintaining
-                    // sorted order. go to left child
-                    (idx, self.child_id(idx))
-                }
-                Ok(idx) => {
-                    // exact match, go to right child.
-                    // if the child split, then the new key should inserted idx + 1
-                    (idx + 1, self.child_id(idx + 1))
-                }
+        match unsafe { self.key_area(0..self.size as usize) }
+            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
+        {
+            Err(idx) => {
+                // the idx is the place where a matching element could be inserted while maintaining
+                // sorted order. go to left child
+                (idx, self.child_id(idx))
             }
-        } else {
-            unsafe { self.key_area(..self.size()) }
-                .iter()
-                .enumerate()
-                .find_map(|(i, s)| {
-                    let cmp = unsafe { s.assume_init_ref() }.cmp(k);
-                    if cmp == std::cmp::Ordering::Less {
-                        None
-                    } else if cmp == std::cmp::Ordering::Greater {
-                        Some((i, self.child_id(i)))
-                    } else {
-                        Some((i + 1, self.child_id(i + 1)))
-                    }
-                })
-                .unwrap_or_else(|| (self.size as usize, self.child_id(self.size as usize)))
+            Ok(idx) => {
+                // exact match, go to right child.
+                // if the child split, then the new key should inserted idx + 1
+                (idx + 1, self.child_id(idx + 1))
+            }
         }
     }
 
