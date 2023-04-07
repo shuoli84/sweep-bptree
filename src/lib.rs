@@ -305,14 +305,18 @@ where
         self.find_descend_mut(self.root, k)
     }
 
-    fn find_descend(&self, node_id: NodeId, k: &S::K) -> Option<&S::V> {
-        match node_id {
-            NodeId::Inner(inner_id) => {
-                let inner_node = self.node_store.get_inner(inner_id);
-                let (_, child_id) = inner_node.locate_child(k);
-                self.find_descend(child_id, k)
+    #[inline]
+    fn find_descend(&self, mut node_id: NodeId, k: &S::K) -> Option<&S::V> {
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    let inner_node = self.node_store.get_inner(inner_id);
+                    let (_, child_id) = inner_node.locate_child(k);
+                    node_id = child_id;
+                    continue;
+                }
+                NodeId::Leaf(leaf_id) => return self.find_in_leaf_and_cache_it(leaf_id, k),
             }
-            NodeId::Leaf(leaf_id) => self.find_in_leaf_and_cache_it(leaf_id, k),
         }
     }
 
