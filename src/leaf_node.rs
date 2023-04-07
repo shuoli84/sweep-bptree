@@ -17,7 +17,10 @@ pub struct LeafNode<K: Key, V: Value, const N: usize> {
     next: Option<LeafNodeId>,
 }
 
-impl<K: Key, V: Value, const N: usize> Clone for LeafNode<K, V, N> {
+impl<K: Key, V: Value, const N: usize> Clone for LeafNode<K, V, N>
+where
+    V: Clone,
+{
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_value = unsafe { MaybeUninit::<[MaybeUninit<V>; N]>::uninit().assume_init() };
@@ -162,7 +165,10 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     #[cfg(test)]
-    pub(crate) fn data_vec(&self) -> Vec<(K, V)> {
+    pub(crate) fn data_vec(&self) -> Vec<(K, V)>
+    where
+        V: Clone,
+    {
         self.iter().map(|(k, v)| (*k, v.clone())).collect()
     }
 

@@ -247,26 +247,26 @@ where
             }
             LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
             LeafUpsertResult::IsFull(idx, v) => {
-                let new_id = self.node_store.reserve_leaf();
+                let right_id = self.node_store.reserve_leaf();
 
                 let l_leaf = self.node_store.get_mut_leaf(id);
-                let r_leaf = l_leaf.split_new_leaf(idx, (k, v), new_id, id);
+                let r_leaf = l_leaf.split_new_leaf(idx, (k, v), right_id, id);
                 let slot_key: S::K = *r_leaf.data_at(0).0;
 
-                if k >= slot_key {
-                    self.set_cache(CacheItem::try_from(new_id, r_leaf.as_ref()));
+                let cache_item = if idx >= S::leaf_n() as usize / 2 {
+                    CacheItem::try_from(right_id, r_leaf.as_ref())
                 } else {
-                    let cache_item = CacheItem::try_from(id, l_leaf);
-                    self.set_cache(cache_item);
-                }
+                    CacheItem::try_from(id, l_leaf)
+                };
+                self.set_cache(cache_item);
 
                 // fix r_leaf's next's prev
                 if let Some(next) = r_leaf.next() {
-                    self.node_store.get_mut_leaf(next).set_prev(Some(new_id));
+                    self.node_store.get_mut_leaf(next).set_prev(Some(right_id));
                 }
-                self.node_store.assign_leaf(new_id, r_leaf);
+                self.node_store.assign_leaf(right_id, r_leaf);
 
-                DescendInsertResult::Split(slot_key, NodeId::Leaf(new_id))
+                DescendInsertResult::Split(slot_key, NodeId::Leaf(right_id))
             }
         }
     }
@@ -479,12 +479,8 @@ where
         };
 
         match Self::merge_inner_node(&mut self.node_store, node, merge_slot) {
-            InnerMergeResult::Done => {
-                return DeleteDescendResult::Done(deleted_item);
-            }
-            InnerMergeResult::UnderSize => {
-                return DeleteDescendResult::InnerUnderSize(deleted_item);
-            }
+            InnerMergeResult::Done => DeleteDescendResult::Done(deleted_item),
+            InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(deleted_item),
         }
     }
 
@@ -548,7 +544,7 @@ where
 
         match action {
             FixAction::RotateRight => {
-                let (deleted, cache_item) = Self::try_rotate_right_for_leaf_node(
+                let (deleted, cache_item) = Self::rotate_right_for_leaf(
                     &mut self.node_store,
                     node,
                     child_idx - 1,
@@ -556,10 +552,10 @@ where
                 );
                 self.st.rotate_right_leaf += 1;
                 self.set_cache(cache_item);
-                return DeleteDescendResult::Done(deleted);
+                DeleteDescendResult::Done(deleted)
             }
             FixAction::RotateLeft => {
-                let (deleted, cache_item) = Self::rotate_left_for_leaf_node(
+                let (deleted, cache_item) = Self::rotate_left_for_leaf(
                     &mut self.node_store,
                     node,
                     child_idx,
@@ -567,7 +563,7 @@ where
                 );
                 self.st.rotate_left_leaf += 1;
                 self.set_cache(cache_item);
-                return DeleteDescendResult::Done(deleted);
+                DeleteDescendResult::Done(deleted)
             }
             FixAction::MergeLeft => {
                 self.st.merge_with_left_leaf += 1;
@@ -678,7 +674,7 @@ where
         node.merge_child(slot)
     }
 
-    fn try_rotate_right_for_leaf_node(
+    fn rotate_right_for_leaf(
         node_store: &mut S,
         node: &mut S::InnerNode,
         slot: usize,
@@ -702,7 +698,7 @@ where
         (deleted, cache_item)
     }
 
-    fn rotate_left_for_leaf_node(
+    fn rotate_left_for_leaf(
         node_store: &mut S,
         parent: &mut S::InnerNode,
         slot: usize,
@@ -950,7 +946,7 @@ impl<S: NodeStore> Drop for BPlusTree<S> {
 }
 
 /// Statistic data used to guide the perf tuning
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Statistic {
     pub rotate_right_inner: u64,
     pub rotate_left_inner: u64,
@@ -993,7 +989,7 @@ impl<K: Key> CacheItem<K> {
     }
 
     #[inline]
-    pub fn in_range(&self, k: &K) -> bool {
+    fn in_range(&self, k: &K) -> bool {
         let is_lt_start = self
             .start
             .as_ref()
@@ -1008,6 +1004,7 @@ impl<K: Key> CacheItem<K> {
     }
 }
 
+/// Fix action
 enum FixAction {
     RotateRight,
     RotateLeft,
@@ -1032,11 +1029,17 @@ enum DeleteDescendResult<K, V> {
     InnerUnderSize((K, V)),
 }
 
-pub trait NodeStore: Clone + Default {
+/// NodeStore is the node storage for tree, responsible for
+/// define node types, manage node memory, and provide node access
+pub trait NodeStore: Default {
+    /// Key type for the tree
     type K: Key;
+    /// Value type for the tree
     type V: Value;
 
+    /// InnerNode type
     type InnerNode: INode<Self::K>;
+    /// LeafNode type
     type LeafNode: LNode<Self::K, Self::V>;
 
     /// Get the max number of keys inner node can hold
@@ -1044,38 +1047,69 @@ pub trait NodeStore: Clone + Default {
     /// Get the max number of elements leaf node can hold
     fn leaf_n() -> u16;
 
+    /// Create an empty inner node and returns its id
     #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId;
+
+    /// Add the inner node to the store and returns its id
     fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId;
+
+    /// Get the inner node
+    /// # Panics
+    /// if id is invalid or the node is already removed, panic
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode;
+
+    /// Get the inner node
+    /// if id is invalid or the node already removed, remove None
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
+
+    /// Get a mut reference to the `InnerNode`
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode;
+
+    /// Take the inner node out of the store
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
+
+    /// Put back the inner node
     fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>);
 
+    /// Create a new empty leaf node and returns its id
     fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
+
+    /// Reserve a leaf node, it must be assigned later
     fn reserve_leaf(&mut self) -> LeafNodeId;
+
+    /// Get a refernce to leaf node
+    /// Panics if id is invalid or the node is taken
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode;
+
+    /// Get a reference to leaf node
+    /// Returns None if id is invalid or the node is taken
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode>;
+
+    /// Get a mut reference to leaf node
+    /// Panics if id is invalid or the node is taken
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode;
+
+    /// Take the leaf out of store
     fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode>;
+
+    /// Assign the leaf to the id, the id must exists
     fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>);
 
     #[cfg(test)]
-    fn debug(&self);
+    fn debug(&self)
+    where
+        Self::K: std::fmt::Debug,
+        Self::V: std::fmt::Debug + Clone;
 }
 
-pub trait Key:
-    std::fmt::Debug + Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static
-{
-}
-impl<T> Key for T where
-    T: std::fmt::Debug + Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static
-{
-}
+/// Key trait
+pub trait Key: Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static {}
 
-pub trait Value: Clone {}
-impl<T> Value for T where T: Clone {}
+impl<T> Key for T where T: Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static {}
+
+pub trait Value {}
+impl<T> Value for T {}
 
 /// Inner node trait
 pub trait INode<K: Key> {
@@ -1145,6 +1179,7 @@ pub trait INode<K: Key> {
 }
 
 /// Leaf node trait
+/// This is not supposed to be implemented by user
 pub trait LNode<K: Key, V: Value> {
     /// Create an empty LeafNode
     fn new() -> Box<Self>;
@@ -1152,17 +1187,26 @@ pub trait LNode<K: Key, V: Value> {
     /// Returns size of the leaf
     fn len(&self) -> usize;
 
+    /// Returns prev `LeafNodeId` if exists
     fn prev(&self) -> Option<LeafNodeId>;
+
+    /// Set prev to `LeafNodeId`
     fn set_prev(&mut self, id: Option<LeafNodeId>);
+
+    /// Returns next `LeafNodeId` if exists
     fn next(&self) -> Option<LeafNodeId>;
+
+    /// Set next to `LeafNodeId`
     fn set_next(&mut self, id: Option<LeafNodeId>);
 
     fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>);
     fn data_at(&self, slot: usize) -> (&K, &V);
+    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
+
     /// this takes data at `slot` out, makes original storage `uinit`.
     /// This should never called for same slot, or double free will happen.
     unsafe fn take_data(&mut self, slot: usize) -> (K, V);
-    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
+
     fn in_range(&self, k: &K) -> bool;
     fn key_range(&self) -> (Option<K>, Option<K>);
     fn is_full(&self) -> bool;
@@ -1192,6 +1236,8 @@ pub trait LNode<K: Key, V: Value> {
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
+
+    use rand::seq::SliceRandom;
 
     use super::*;
 
@@ -1467,7 +1513,7 @@ mod tests {
             .set_data([(40, 1), (41, 1)]);
 
         let mut parent = node_store.take_inner(parent_id);
-        BPlusTree::try_rotate_right_for_leaf_node(&mut node_store, &mut parent, 1, 0);
+        BPlusTree::rotate_right_for_leaf(&mut node_store, &mut parent, 1, 0);
         node_store.put_back_inner(parent_id, parent);
 
         {
@@ -1509,7 +1555,7 @@ mod tests {
             .set_data([(39, 1), (40, 1), (41, 1)]);
 
         let mut parent = node_store.take_inner(parent_id);
-        let result = BPlusTree::rotate_left_for_leaf_node(&mut node_store, &mut parent, 1, 0);
+        let result = BPlusTree::rotate_left_for_leaf(&mut node_store, &mut parent, 1, 0);
         node_store.put_back_inner(parent_id, parent);
         assert_eq!(result.0 .0, 10);
 
@@ -1648,8 +1694,6 @@ mod tests {
 
     pub fn create_test_tree<const N: usize>(
     ) -> (BPlusTree<NodeStoreVec<i64, i64, 8, 9, 6>>, Vec<i64>) {
-        use rand::seq::SliceRandom;
-
         let node_store = NodeStoreVec::<i64, i64, 8, 9, 6>::new();
         let mut tree = BPlusTree::new(node_store);
 
@@ -1699,5 +1743,24 @@ mod tests {
         drop(tree);
 
         assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+    }
+
+    #[test]
+    fn test_cache() {
+        let (mut tree, mut keys) = create_test_tree::<100>();
+
+        for i in 101..200 {
+            // insert a new key
+            tree.insert(i, i * 2);
+            keys.push(i);
+
+            assert!(tree.leaf_cache.get().unwrap().in_range(&i));
+        }
+
+        keys.shuffle(&mut rand::thread_rng());
+        for k in keys.iter() {
+            assert!(tree.get(k).is_some());
+            assert!(tree.leaf_cache.get().unwrap().in_range(k));
+        }
     }
 }

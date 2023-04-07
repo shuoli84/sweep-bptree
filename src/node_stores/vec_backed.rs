@@ -1,9 +1,20 @@
 use crate::{InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, NodeStore, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> {
     inner_nodes: Vec<Option<Box<InnerNode<K, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
+}
+
+impl<K: Key, V: Value + Clone, const IN: usize, const IC: usize, const LN: usize> Clone
+    for NodeStoreVec<K, V, IN, IC, LN>
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner_nodes: self.inner_nodes.clone(),
+            leaf_nodes: self.leaf_nodes.clone(),
+        }
+    }
 }
 
 impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> Default
@@ -38,7 +49,11 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
 
     /// Print nodes, used in test only
     #[cfg(test)]
-    pub fn print(&self) {
+    pub fn print(&self)
+    where
+        K: std::fmt::Debug,
+        V: std::fmt::Debug + Clone,
+    {
         use crate::INode;
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
@@ -82,7 +97,11 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
     }
 
     #[cfg(test)]
-    fn debug(&self) {
+    fn debug(&self)
+    where
+        K: std::fmt::Debug,
+        V: std::fmt::Debug + Clone,
+    {
         self.print()
     }
 
