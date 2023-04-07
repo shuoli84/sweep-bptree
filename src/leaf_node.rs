@@ -78,13 +78,18 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     pub fn in_range(&self, k: &K) -> bool {
         debug_assert!(self.len() > 0);
 
-        let (start, end) = self.key_range();
-        match (start, end) {
-            (Some(start), Some(end)) => k >= &start && k <= &end,
-            (Some(start), None) => k >= &start,
-            (None, Some(end)) => k <= &end,
-            (None, None) => true,
+        let is_lt_start = match self.prev {
+            Some(_) => k.lt(unsafe { self.key_area(0).assume_init_ref() }),
+            None => false,
+        };
+        if is_lt_start {
+            return false;
         }
+        let is_gt_end = match self.next {
+            Some(_) => k.gt(unsafe { self.key_area(self.len() - 1).assume_init_ref() }),
+            None => false,
+        };
+        !is_gt_end
     }
 
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
@@ -694,5 +699,22 @@ mod tests {
             assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
             assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
         }
+    }
+    #[test]
+    fn test_in_range() {
+        let mut leaf = LeafNode::<i64, i64, 4>::new();
+        leaf.set_data([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        // prev and next both none, so all keys should considered in range
+        assert!(leaf.in_range(&0));
+        assert!(leaf.in_range(&5));
+
+        leaf.set_prev(Some(LeafNodeId(1)));
+        // now had prev, so all keys less than min should be out of range
+        assert!(!leaf.in_range(&0));
+        assert!(leaf.in_range(&5));
+
+        leaf.set_next(Some(LeafNodeId(2)));
+        assert!(!leaf.in_range(&0));
+        assert!(!leaf.in_range(&5));
     }
 }

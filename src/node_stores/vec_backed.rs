@@ -140,11 +140,9 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
         let leaf_node = self.leaf_nodes.get(id.as_usize())?.as_ref()?;
-        if leaf_node.len() == 0 {
-            None
-        } else {
-            Some(leaf_node)
-        }
+
+        debug_assert!(leaf_node.len() > 0, "Empty leaf should not exist");
+        Some(leaf_node)
     }
 
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode {
