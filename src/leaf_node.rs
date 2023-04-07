@@ -700,4 +700,21 @@ mod tests {
             assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
         }
     }
+    #[test]
+    fn test_in_range() {
+        let mut leaf = LeafNode::<i64, i64, 4>::new();
+        leaf.set_data([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        // prev and next both none, so all keys should considered in range
+        assert!(leaf.in_range(&0));
+        assert!(leaf.in_range(&5));
+
+        leaf.set_prev(Some(LeafNodeId(1)));
+        // now had prev, so all keys less than min should be out of range
+        assert!(!leaf.in_range(&0));
+        assert!(leaf.in_range(&5));
+
+        leaf.set_next(Some(LeafNodeId(2)));
+        assert!(!leaf.in_range(&0));
+        assert!(!leaf.in_range(&5));
+    }
 }
