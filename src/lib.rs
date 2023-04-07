@@ -991,6 +991,7 @@ impl<K: Key> CacheItem<K> {
         })
     }
 
+    #[inline]
     pub fn in_range(&self, k: &K) -> bool {
         let is_lt_start = self
             .start
