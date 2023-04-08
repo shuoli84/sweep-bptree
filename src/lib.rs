@@ -1168,6 +1168,12 @@ pub trait LNode<K: Key, V: Value> {
     fn pop_front(&mut self) -> (K, V);
 }
 
+/// ensure NodeStoreVec is send for send v
+fn _ensure_send<V: Send>() {
+    fn _assert_send<T: Send>() {}
+    _assert_send::<BPlusTree<NodeStoreVec<u64, V, 4, 5, 4>>>();
+}
+
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;

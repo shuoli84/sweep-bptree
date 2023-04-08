@@ -248,3 +248,9 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         }
     }
 }
+
+/// ensure NodeStoreVec is send for send v
+fn _ensure_send<V: Send>() {
+    fn _assert_send<T: Send>() {}
+    _assert_send::<NodeStoreVec<u64, V, 4, 5, 4>>();
+}
