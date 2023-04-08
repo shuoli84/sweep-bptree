@@ -23,6 +23,41 @@ impl<K: Key> BPlusTreeSet<K> {
         }
     }
 
+    /// Returns key count in the set
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::new();
+    /// assert_eq!(set.len(), 0);
+
+    /// set.insert(1);
+    /// assert_eq!(set.len(), 1);
+    ///
+    /// set.insert(1);
+    /// assert_eq!(set.len(), 1);
+    /// ```
+    pub fn len(&self) -> usize {
+        self.tree.len()
+    }
+
+    /// Returns true if the set contains no key
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::new();
+    /// assert!(set.is_empty());
+    ///
+    /// set.insert(1);
+    /// assert!(!set.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.tree.is_empty()
+    }
+
     /// Insert a key into the set
     /// Returns true if the key was inserted, false if it already existed
     ///
@@ -52,5 +87,22 @@ impl<K: Key> BPlusTreeSet<K> {
     /// ```
     pub fn remove(&mut self, k: &K) -> bool {
         self.tree.remove(k).is_some()
+    }
+
+    /// Clears the set
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<i32>::new();
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// set.clear();
+    /// assert!(set.is_empty());
+    /// ```
+    pub fn clear(&mut self) {
+        self.tree.clear();
     }
 }
