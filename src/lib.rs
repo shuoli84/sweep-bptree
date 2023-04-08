@@ -1254,15 +1254,13 @@ mod tests {
     #[test]
     fn test_round_trip_100() {
         for _ in 0..100 {
-            test_round_trip();
+            test_round_trip_one::<4, 5, 4>();
+            test_round_trip_one::<5, 6, 5>();
         }
     }
 
-    #[test]
-    fn test_round_trip() {
-        use rand::seq::SliceRandom;
-
-        let node_store = NodeStoreVec::<i64, i64, 8, 9, 6>::new();
+    fn test_round_trip_one<const N: usize, const C: usize, const L: usize>() {
+        let node_store = NodeStoreVec::<i64, i64, N, C, L>::new();
         let mut tree = BPlusTree::new(node_store);
 
         let size: i64 = 50;

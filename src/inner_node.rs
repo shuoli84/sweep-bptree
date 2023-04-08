@@ -158,7 +158,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 );
 
                 utils::move_to_slice(
-                    self.child_area_mut(split_new_size..N + 1),
+                    self.child_area_mut(split_origin_size..N + 1),
                     new_node.child_area_mut(..split_new_size + 1),
                 );
 
@@ -181,7 +181,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
             new_key = unsafe { self.key_area(prompt_key_index).assume_init_read() };
 
             let new_slot_idx = child_idx - 1 - split_origin_size;
-            let new_child_idx = child_idx - split_new_size;
+            let new_child_idx = child_idx - split_origin_size;
 
             unsafe {
                 utils::move_to_slice(
@@ -190,7 +190,9 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 );
 
                 utils::move_to_slice(
-                    self.child_area_mut(split_new_size + 1..split_new_size + 1 + new_child_idx),
+                    self.child_area_mut(
+                        split_origin_size + 1..split_origin_size + 1 + new_child_idx,
+                    ),
                     new_node.child_area_mut(0..new_child_idx),
                 );
 
@@ -203,7 +205,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 );
 
                 utils::move_to_slice(
-                    self.child_area_mut(split_new_size + 1 + new_child_idx..N + 1),
+                    self.child_area_mut(split_origin_size + 1 + new_child_idx..N + 1),
                     new_node.child_area_mut(new_child_idx + 1..split_new_size + 1),
                 );
             };
@@ -218,12 +220,12 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
             unsafe {
                 utils::move_to_slice(
-                    self.key_area_mut(split_new_size..N),
+                    self.key_area_mut(split_origin_size..N),
                     new_node.key_area_mut(..split_new_size),
                 );
 
                 utils::move_to_slice(
-                    self.child_area_mut(split_new_size + 1..N + 1),
+                    self.child_area_mut(split_origin_size + 1..N + 1),
                     new_node.child_area_mut(1..split_new_size + 1),
                 );
 
@@ -501,37 +503,72 @@ pub enum InnerMergeResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    type InnerNode = super::InnerNode<usize, 4, 5>;
+    type InnerNode45 = InnerNode<usize, 4, 5>;
+
+    fn new_test_node<const N: usize, const C: usize>() -> Box<InnerNode<usize, N, C>> {
+        let mut slot_keys = [0; N];
+        for i in 0..N {
+            slot_keys[i] = i * 2;
+        }
+        let mut child_ids = [InnerNodeId(0); C];
+        for i in 0..C {
+            child_ids[i] = InnerNodeId(i * 10);
+        }
+        InnerNode::new(slot_keys, child_ids)
+    }
 
     #[test]
-    fn test_inner_split_new_key_in_origin() {
-        let mut inner_node = InnerNode::new(
-            [1, 3, 4, 5],
-            [
-                InnerNodeId(10),
-                InnerNodeId(20),
-                InnerNodeId(30),
-                InnerNodeId(40),
-                InnerNodeId(50),
-            ],
-        );
+    fn test_inner_split_new_key_in_origin_even() {
+        let mut inner_node = new_test_node::<4, 5>();
 
-        // child_idx is 1
-        let (k, new_node) = inner_node.split(1, 2, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(k, 3);
-        assert_eq!(inner_node.key_vec(), vec![1, 2]);
+        let test_key = 3;
+        let test_child = InnerNodeId(333);
+
+        let (k, new_node) = inner_node.split(1, test_key, test_child.into());
+        assert_eq!(k, 2);
+        assert_eq!(inner_node.key_vec(), vec![0, test_key]);
         assert_eq!(
             &inner_node.child_id_vec(),
             &[
+                NodeId::Inner(InnerNodeId(0)),
                 NodeId::Inner(InnerNodeId(10)),
-                NodeId::Inner(InnerNodeId(20)),
-                NodeId::Inner(InnerNodeId(100)),
+                NodeId::Inner(test_child),
             ]
         );
-        assert_eq!(new_node.key_vec(), vec![4, 5]);
+        assert_eq!(new_node.key_vec(), vec![4, 6]);
         assert_eq!(
             new_node.child_id_vec().as_slice(),
             &[
+                NodeId::Inner(InnerNodeId(20)),
+                NodeId::Inner(InnerNodeId(30)),
+                NodeId::Inner(InnerNodeId(40)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_inner_split_new_key_in_origin_odd() {
+        let mut inner_node = new_test_node::<5, 6>();
+
+        let test_key = 3;
+        let test_child = InnerNodeId(333);
+
+        let (k, new_node) = inner_node.split(1, test_key, test_child.into());
+        assert_eq!(k, 2);
+        assert_eq!(inner_node.key_vec(), vec![0, test_key]);
+        assert_eq!(
+            &inner_node.child_id_vec(),
+            &[
+                NodeId::Inner(InnerNodeId(0)),
+                NodeId::Inner(InnerNodeId(10)),
+                NodeId::Inner(test_child),
+            ]
+        );
+        assert_eq!(new_node.key_vec(), vec![4, 6, 8]);
+        assert_eq!(
+            new_node.child_id_vec().as_slice(),
+            &[
+                NodeId::Inner(InnerNodeId(20)),
                 NodeId::Inner(InnerNodeId(30)),
                 NodeId::Inner(InnerNodeId(40)),
                 NodeId::Inner(InnerNodeId(50)),
@@ -540,36 +577,65 @@ mod tests {
     }
 
     #[test]
-    fn test_inner_split_new_key_in_new_last() {
-        let mut inner_node = InnerNode::new(
-            [1, 2, 3, 4],
-            [
-                InnerNodeId(10),
-                InnerNodeId(20),
-                InnerNodeId(30),
-                InnerNodeId(40),
-                InnerNodeId(50),
-            ],
-        );
+    fn test_inner_split_new_key_in_new_last_even() {
+        let mut inner_node = new_test_node::<4, 5>();
 
-        // child_idx is 1
-        let (k, new_node) = inner_node.split(4, 5, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(new_node.size(), InnerNode::split_new_size());
-        assert_eq!(inner_node.size(), InnerNode::split_origin_size());
-        assert_eq!(k, 3);
-        assert_eq!(inner_node.key_vec(), vec![1, 2,]);
+        //   0 2  4  6
+        // 0 10 20 30 40
+
+        let test_idx = 4;
+        let test_key = 7;
+        let test_child = InnerNodeId(333);
+
+        let (k, new_node) = inner_node.split(test_idx, test_key, NodeId::Inner(test_child));
+        assert_eq!(new_node.size(), InnerNode45::split_new_size());
+        assert_eq!(inner_node.size(), InnerNode45::split_origin_size());
+        assert_eq!(k, 4);
+        assert_eq!(inner_node.key_vec(), vec![0, 2]);
+        assert_eq!(
+            inner_node.child_id_vec(),
+            vec![
+                NodeId::Inner(InnerNodeId(0)),
+                NodeId::Inner(InnerNodeId(10)),
+                NodeId::Inner(InnerNodeId(20)),
+            ]
+        );
+        assert_eq!(new_node.key_vec().as_slice(), &[6, 7]);
+        assert_eq!(
+            new_node.child_id_vec(),
+            vec![
+                NodeId::Inner(InnerNodeId(30)),
+                NodeId::Inner(InnerNodeId(40)),
+                NodeId::Inner(test_child),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_inner_split_new_key_in_new_last_odd() {
+        let mut inner_node = new_test_node::<5, 6>();
+
+        //  0  2  4  6  8
+        // 0 10 20 30 40 50
+
+        let (k, new_node) = inner_node.split(5, 9, NodeId::Inner(InnerNodeId(100)));
+        assert_eq!(inner_node.size(), 2);
+        assert_eq!(new_node.size(), 3);
+        assert_eq!(k, 4);
+        assert_eq!(inner_node.key_vec(), vec![0, 2]);
         assert_eq!(
             inner_node.child_id_vec().as_slice(),
             &[
+                NodeId::Inner(InnerNodeId(0)),
                 NodeId::Inner(InnerNodeId(10)),
                 NodeId::Inner(InnerNodeId(20)),
-                NodeId::Inner(InnerNodeId(30)),
             ]
         );
-        assert_eq!(new_node.key_vec().as_slice(), &[4, 5]);
+        assert_eq!(new_node.key_vec().as_slice(), &[6, 8, 9]);
         assert_eq!(
             new_node.child_id_vec().as_slice(),
             &[
+                NodeId::Inner(InnerNodeId(30)),
                 NodeId::Inner(InnerNodeId(40)),
                 NodeId::Inner(InnerNodeId(50)),
                 NodeId::Inner(InnerNodeId(100)),
@@ -579,7 +645,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_new() {
-        let mut inner_node = InnerNode::new(
+        let mut inner_node = InnerNode45::new(
             [1, 2, 3, 5],
             [
                 InnerNodeId(10),
@@ -592,8 +658,8 @@ mod tests {
 
         // child_idx is 1
         let (k, new_node) = inner_node.split(3, 4, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(inner_node.size(), InnerNode::split_origin_size());
-        assert_eq!(new_node.size(), InnerNode::split_new_size());
+        assert_eq!(inner_node.size(), InnerNode45::split_origin_size());
+        assert_eq!(new_node.size(), InnerNode45::split_new_size());
         assert_eq!(k, 3);
         assert_eq!(inner_node.key_vec().as_slice(), &[1, 2]);
         assert_eq!(
@@ -617,7 +683,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_is_the_prompt_key() {
-        let mut inner_node = InnerNode::new(
+        let mut inner_node = InnerNode45::new(
             [1, 2, 4, 5],
             [
                 InnerNodeId(10),
@@ -630,7 +696,7 @@ mod tests {
 
         // child_idx is 1
         let (k, new_node) = inner_node.split(2, 3, NodeId::Inner(InnerNodeId(100)));
-        assert_eq!(inner_node.size(), InnerNode::split_origin_size());
+        assert_eq!(inner_node.size(), InnerNode45::split_origin_size());
         assert_eq!(k, 3);
         assert_eq!(inner_node.key_vec().as_slice(), &[1, 2]);
         assert_eq!(
