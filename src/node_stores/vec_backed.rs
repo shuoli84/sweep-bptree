@@ -56,7 +56,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
     {
-        use crate::INode;
+        use crate::{INode, LNode};
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
