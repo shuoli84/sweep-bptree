@@ -126,10 +126,17 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         id
     }
 
+    #[inline(always)]
     fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode {
-        unsafe { self.inner_nodes.get_unchecked(id.as_usize()) }
-            .as_ref()
-            .unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() })
+        // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
+
+        // SAFETY: id is only used in btree impl, and it is always valid
+        unsafe {
+            self.inner_nodes
+                .get_unchecked(id.as_usize())
+                .as_ref()
+                .unwrap_or_else(|| std::hint::unreachable_unchecked())
+        }
     }
 
     fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode> {
@@ -137,8 +144,17 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         Some(node)
     }
 
+    #[inline(always)]
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode {
-        self.inner_nodes[id.as_usize()].as_mut().unwrap()
+        // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
+
+        // SAFETY: id is only used in btree impl, and it is always valid
+        unsafe {
+            self.inner_nodes
+                .get_unchecked_mut(id.as_usize())
+                .as_mut()
+                .unwrap_or_else(|| std::hint::unreachable_unchecked())
+        }
     }
 
     fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
@@ -155,8 +171,17 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         id
     }
 
+    #[inline(always)]
     fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode {
-        &self.leaf_nodes[id.as_usize()].as_ref().unwrap()
+        // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
+
+        // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
+        unsafe {
+            self.leaf_nodes
+                .get_unchecked(id.as_usize())
+                .as_ref()
+                .unwrap_or_else(|| std::hint::unreachable_unchecked())
+        }
     }
 
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
@@ -166,8 +191,15 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         Some(leaf_node)
     }
 
+    #[inline(always)]
     fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode {
-        self.leaf_nodes[id.as_usize()].as_mut().unwrap()
+        // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
+        unsafe {
+            self.leaf_nodes
+                .get_unchecked_mut(id.as_usize())
+                .as_mut()
+                .unwrap_or_else(|| std::hint::unreachable_unchecked())
+        }
     }
 
     fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode> {
@@ -178,12 +210,16 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
         self.leaf_nodes[id.as_usize()] = Some(leaf);
     }
 
+    #[inline(always)]
     unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut Self::InnerNode {
+        // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
+
+        // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
         unsafe {
             self.inner_nodes
                 .get_unchecked_mut(id.as_usize())
                 .as_mut()
-                .unwrap()
+                .unwrap_or_else(|| std::hint::unreachable_unchecked())
                 .as_mut() as *mut Self::InnerNode
         }
     }

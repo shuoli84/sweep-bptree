@@ -354,6 +354,8 @@ where
         kv
     }
 
+    /// Find the key in leaf, and cache leaf, this method only called when
+    /// cache miss
     fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
         let leaf = self.node_store.get_leaf(leaf_id);
         self.set_cache(CacheItem::try_from(leaf_id, leaf));
