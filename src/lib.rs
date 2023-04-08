@@ -883,6 +883,12 @@ where
         Some((Cursor::new(*k, leaf_id, idx), v))
     }
 
+    /// Clear the tree
+    pub fn clear(&mut self) {
+        // todo: should we keep the node_store's capacity?
+        std::mem::drop(std::mem::replace(self, Self::new(S::default())));
+    }
+
     #[cfg(test)]
     fn validate(&self) {
         let Some(mut leaf_id) = self.first_leaf() else { return; };
@@ -1193,7 +1199,7 @@ mod tests {
         let node_store = NodeStoreVec::<i64, i64, N, C, L>::new();
         let mut tree = BPlusTree::new(node_store);
 
-        let size: i64 = 50;
+        let size: i64 = 500;
 
         let mut keys = (0..size).collect::<Vec<_>>();
         keys.shuffle(&mut rand::thread_rng());
@@ -1201,7 +1207,6 @@ mod tests {
         for i in keys {
             tree.insert(i, i % 13);
         }
-        tree.node_store.debug();
 
         let mut keys = (0..size).collect::<Vec<_>>();
         keys.shuffle(&mut rand::thread_rng());
@@ -1220,6 +1225,22 @@ mod tests {
         }
 
         assert!(tree.is_empty());
+
+        // call clear on empty tree
+        tree.clear();
+    }
+
+    #[test]
+    fn test_tree_clear() {
+        let (mut tree, keys) = create_test_tree::<100>();
+        tree.clear();
+        assert!(tree.is_empty());
+
+        // insert after clear
+        for k in keys.clone() {
+            tree.insert(k, k % 13);
+        }
+        assert_eq!(tree.len(), keys.len());
     }
 
     #[test]
