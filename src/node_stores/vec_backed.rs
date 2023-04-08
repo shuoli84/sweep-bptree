@@ -4,6 +4,8 @@ use crate::{InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, NodeStore,
 pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> {
     inner_nodes: Vec<Option<Box<InnerNode<K, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
+
+    cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
 impl<K: Key, V: Value + Clone, const IN: usize, const IC: usize, const LN: usize> Clone
@@ -13,6 +15,9 @@ impl<K: Key, V: Value + Clone, const IN: usize, const IC: usize, const LN: usize
         Self {
             inner_nodes: self.inner_nodes.clone(),
             leaf_nodes: self.leaf_nodes.clone(),
+            cached_leaf: std::sync::atomic::AtomicUsize::new(
+                self.cached_leaf.load(std::sync::atomic::Ordering::Relaxed),
+            ),
         }
     }
 }
@@ -24,6 +29,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> Defaul
         Self {
             inner_nodes: Default::default(),
             leaf_nodes: Default::default(),
+            cached_leaf: std::sync::atomic::AtomicUsize::new(usize::MAX),
         }
     }
 }
@@ -33,10 +39,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
 {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
-        Self {
-            inner_nodes: Vec::new(),
-            leaf_nodes: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Create a new `NodeStoreVec` with capacity
@@ -44,6 +47,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
         Self {
             inner_nodes: Vec::with_capacity(cap),
             leaf_nodes: Vec::with_capacity(cap),
+            ..Self::default()
         }
     }
 
@@ -221,6 +225,26 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
                 .as_mut()
                 .unwrap_or_else(|| std::hint::unreachable_unchecked())
                 .as_mut() as *mut Self::InnerNode
+        }
+    }
+
+    fn cache_leaf(&self, leaf_id: LeafNodeId) {
+        self.cached_leaf
+            .store(leaf_id.as_usize(), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn try_cache(&self, k: &Self::K) -> Option<LeafNodeId> {
+        let leaf_id = self.cached_leaf.load(std::sync::atomic::Ordering::Relaxed);
+        let leaf_id = LeafNodeId(leaf_id);
+        // try_get_leaf returns None for usize:MAX, so we don't need to handle it explicitly
+        if self
+            .try_get_leaf(leaf_id)
+            .map(|l| l.in_range(k))
+            .unwrap_or_default()
+        {
+            Some(leaf_id)
+        } else {
+            None
         }
     }
 }
