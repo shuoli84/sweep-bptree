@@ -1,14 +1,14 @@
-use crate::{InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, NodeStore, Value};
+use crate::{InnerNode, InnerNodeId, Key, LNode, LeafNode, LeafNodeId, NodeStore};
 
 #[derive(Debug)]
-pub struct NodeStoreVec<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> {
+pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, const LN: usize> {
     inner_nodes: Vec<Option<Box<InnerNode<K, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
-impl<K: Key, V: Value + Clone, const IN: usize, const IC: usize, const LN: usize> Clone
+impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     for NodeStoreVec<K, V, IN, IC, LN>
 {
     fn clone(&self) -> Self {
@@ -22,7 +22,7 @@ impl<K: Key, V: Value + Clone, const IN: usize, const IC: usize, const LN: usize
     }
 }
 
-impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> Default
+impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> Default
     for NodeStoreVec<K, V, IN, IC, LN>
 {
     fn default() -> Self {
@@ -34,9 +34,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> Defaul
     }
 }
 
-impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
-    NodeStoreVec<K, V, IN, IC, LN>
-{
+impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<K, V, IN, IC, LN> {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self::default()
@@ -84,7 +82,7 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize>
     }
 }
 
-impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeStore
+impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
     for NodeStoreVec<K, V, IN, IC, LN>
 {
     type K = K;
@@ -190,8 +188,6 @@ impl<K: Key, V: Value, const IN: usize, const IC: usize, const LN: usize> NodeSt
 
     fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
         let leaf_node = self.leaf_nodes.get(id.as_usize())?.as_ref()?;
-
-        debug_assert!(leaf_node.len() > 0, "Empty leaf should not exist");
         Some(leaf_node)
     }
 

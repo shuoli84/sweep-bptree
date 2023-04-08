@@ -14,6 +14,8 @@ pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
 mod bulk_load;
+mod set;
+pub use set::*;
 
 /// B plus tree implementation, with following considerations:
 ///
@@ -960,7 +962,7 @@ pub trait NodeStore: Default {
     /// Key type for the tree
     type K: Key;
     /// Value type for the tree
-    type V: Value;
+    type V;
 
     /// InnerNode type
     type InnerNode: INode<Self::K>;
@@ -1043,9 +1045,6 @@ pub trait Key: Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static {}
 
 impl<T> Key for T where T: Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static {}
 
-pub trait Value {}
-impl<T> Value for T {}
-
 /// Inner node trait
 pub trait INode<K: Key> {
     /// Create a new inner node with `slot_keys` and `child_id`.
@@ -1115,7 +1114,7 @@ pub trait INode<K: Key> {
 
 /// Leaf node trait
 /// This is not supposed to be implemented by user
-pub trait LNode<K: Key, V: Value> {
+pub trait LNode<K: Key, V> {
     /// Create an empty LeafNode
     fn new() -> Box<Self>;
 

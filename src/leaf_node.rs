@@ -7,7 +7,7 @@ use std::{
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct LeafNode<K: Key, V: Value, const N: usize> {
+pub struct LeafNode<K, V, const N: usize> {
     /// how many data items
     size: u16,
     slot_key: [MaybeUninit<K>; N],
@@ -17,7 +17,7 @@ pub struct LeafNode<K: Key, V: Value, const N: usize> {
     next: Option<LeafNodeId>,
 }
 
-impl<K: Key, V: Value, const N: usize> Clone for LeafNode<K, V, N>
+impl<K: Key, V, const N: usize> Clone for LeafNode<K, V, N>
 where
     V: Clone,
 {
@@ -42,7 +42,7 @@ where
     }
 }
 
-impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
+impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     pub(crate) fn new() -> Box<Self> {
         let layout = Layout::new::<mem::MaybeUninit<Self>>();
         let ptr: *mut Self = unsafe { alloc(layout).cast() };
@@ -79,8 +79,6 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     pub fn in_range(&self, k: &K) -> bool {
-        debug_assert!(self.len() > 0);
-
         let is_lt_start = match self.prev {
             Some(_) => k.lt(unsafe { self.key_area(0).assume_init_ref() }),
             None => false,
@@ -532,7 +530,7 @@ pub enum LeafDeleteResult<K, V> {
     UnderSize(usize),
 }
 
-impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
+impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
     fn new() -> Box<Self> {
         Self::new()
     }
