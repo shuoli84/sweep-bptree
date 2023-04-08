@@ -1,7 +1,7 @@
+use crate::tree::LNode;
+use crate::tree::LeafNodeId;
 use crate::BPlusTree;
 use crate::Key;
-use crate::LNode;
-use crate::LeafNodeId;
 use crate::NodeStore;
 
 /// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
@@ -214,11 +214,10 @@ impl<K: Key> Cursor<K> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
+    use super::*;
+    use crate::{tree::tests, *};
     use rand::seq::SliceRandom;
-
-    use crate::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn test_cursor_next() {

@@ -1,6 +1,4 @@
-use crate::{BPlusTree, Key};
-
-use crate::node_stores::NodeStoreVec;
+use crate::{BPlusTree, Key, NodeStoreVec};
 
 pub struct BPlusTreeSet<K: crate::Key> {
     tree: BPlusTree<NodeStoreVec<K, (), 64, 65, 64>>,

@@ -1,4 +1,4 @@
-use crate::{InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
+use crate::tree::{InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
 
 #[derive(Debug)]
 pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, const LN: usize> {
@@ -56,7 +56,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
     {
-        use crate::{INode, LNode};
+        use crate::tree::{INode, LNode};
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(

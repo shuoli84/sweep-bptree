@@ -1,4 +1,4 @@
-use crate::*;
+use super::*;
 
 /// A borrowed iterator for BPlusTree
 /// Borrowed, means the underlying tree won't change, so this is faster
@@ -171,7 +171,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::tests::create_test_tree;
+    use crate::tree::tests::create_test_tree;
 
     #[derive(Clone)]
     struct TestValue {
