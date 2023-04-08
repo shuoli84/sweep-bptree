@@ -129,6 +129,7 @@ where
         self.len() == 0
     }
 
+    /// Insert a new key-value pair into the tree.
     pub fn insert(&mut self, k: S::K, v: S::V) -> Option<S::V> {
         // quick check if the last accessed leaf is the one to insert
         if let Some(leaf_id) = self.node_store.try_cache(&k) {
@@ -174,6 +175,7 @@ where
         result
     }
 
+    /// consume self and return the parts. This is useful when implementing `IntoIter`
     fn into_parts(self) -> (S, NodeId, usize) {
         let mut me = ManuallyDrop::new(self);
         (
@@ -1190,12 +1192,18 @@ mod tests {
     #[test]
     fn test_round_trip_100() {
         for _ in 0..100 {
-            test_round_trip_one::<4, 5, 4>();
-            test_round_trip_one::<5, 6, 5>();
+            round_trip_one::<4, 5, 4>();
+            round_trip_one::<5, 6, 5>();
         }
     }
 
-    fn test_round_trip_one<const N: usize, const C: usize, const L: usize>() {
+    #[test]
+    fn test_round_trip_one() {
+        round_trip_one::<4, 5, 4>();
+        round_trip_one::<5, 6, 5>();
+    }
+
+    fn round_trip_one<const N: usize, const C: usize, const L: usize>() {
         let node_store = NodeStoreVec::<i64, i64, N, C, L>::new();
         let mut tree = BPlusTree::new(node_store);
 
