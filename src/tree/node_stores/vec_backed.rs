@@ -229,7 +229,11 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
             .store(leaf_id.as_usize(), std::sync::atomic::Ordering::Relaxed);
     }
 
-    fn try_cache(&self, k: &Self::K) -> Option<LeafNodeId> {
+    fn try_cache<Q: ?Sized>(&self, k: &Q) -> Option<LeafNodeId>
+    where
+        Q: Ord,
+        Self::K: std::borrow::Borrow<Q>,
+    {
         let leaf_id = self.cached_leaf.load(std::sync::atomic::Ordering::Relaxed);
         let leaf_id = LeafNodeId(leaf_id);
         // try_get_leaf returns None for usize:MAX, so we don't need to handle it explicitly

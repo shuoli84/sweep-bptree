@@ -1,6 +1,6 @@
 mod inner_node;
 mod utils;
-use std::mem::ManuallyDrop;
+use std::{borrow::Borrow, mem::ManuallyDrop};
 
 pub use inner_node::*;
 mod leaf_node;
@@ -345,7 +345,11 @@ where
     }
 
     /// delete element identified by K
-    pub fn remove(&mut self, k: &S::K) -> Option<S::V> {
+    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<S::V>
+    where
+        Q: Ord,
+        S::K: Borrow<Q>,
+    {
         // quick check if the last accessed leaf is the one to remove
         if let Some(cache_leaf_id) = self.node_store.try_cache(k) {
             let leaf = self.node_store.get_mut_leaf(cache_leaf_id);
@@ -401,7 +405,15 @@ where
         r.map(|kv| kv.1)
     }
 
-    fn remove_inner(&mut self, node_id: InnerNodeId, k: &S::K) -> DeleteDescendResult<S::K, S::V> {
+    fn remove_inner<Q: ?Sized>(
+        &mut self,
+        node_id: InnerNodeId,
+        k: &Q,
+    ) -> DeleteDescendResult<S::K, S::V>
+    where
+        Q: Ord,
+        S::K: Borrow<Q>,
+    {
         // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
         //         so we can safely get a mutable ptr to it.
         let inner_node = unsafe { &mut *self.node_store.get_mut_inner_ptr(node_id) };
@@ -1037,7 +1049,10 @@ pub trait NodeStore: Default {
     fn cache_leaf(&self, leaf_id: LeafNodeId);
 
     /// try cache for k
-    fn try_cache(&self, k: &Self::K) -> Option<LeafNodeId>;
+    fn try_cache<Q: ?Sized>(&self, k: &Q) -> Option<LeafNodeId>
+    where
+        Q: Ord,
+        Self::K: Borrow<Q>;
 
     #[cfg(test)]
     fn debug(&self)
@@ -1155,7 +1170,11 @@ pub trait LNode<K: Key, V> {
     /// This should never called for same slot, or double free will happen.
     unsafe fn take_data(&mut self, slot: usize) -> (K, V);
 
-    fn in_range(&self, k: &K) -> bool;
+    fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>;
+
     fn key_range(&self) -> (Option<K>, Option<K>);
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
@@ -1167,11 +1186,24 @@ pub trait LNode<K: Key, V> {
         new_leaf_id: LeafNodeId,
         self_leaf_id: LeafNodeId,
     ) -> Box<Self>;
-    fn locate_slot(&self, k: &K) -> Result<usize, usize>;
-    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<&V>);
 
-    fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>);
-    fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V>;
+    fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>;
+    fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>;
+    fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>;
+
+    fn try_delete<Q: ?Sized>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>;
     fn delete_at(&mut self, idx: usize) -> (K, V);
     fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V);
     fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V);

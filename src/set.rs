@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use crate::{BPlusTree, Key, NodeStoreVec};
 
 pub struct BPlusTreeSet<K: crate::Key> {
@@ -11,7 +13,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// ```rust
     /// use sweep_bptree::BPlusTreeSet;
     ///
-    /// let mut set = BPlusTreeSet::<i32>::new();
+    /// BPlusTreeSet::<i32>::new();
     /// ```
     pub fn new() -> Self {
         let store = NodeStoreVec::new();
@@ -27,7 +29,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// ```rust
     /// use sweep_bptree::BPlusTreeSet;
     ///
-    /// let mut set = BPlusTreeSet::new();
+    /// let mut set = BPlusTreeSet::<i32>::new();
     /// assert_eq!(set.len(), 0);
 
     /// set.insert(1);
@@ -46,7 +48,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// ```rust
     /// use sweep_bptree::BPlusTreeSet;
     ///
-    /// let mut set = BPlusTreeSet::new();
+    /// let mut set = BPlusTreeSet::<i32>::new();
     /// assert!(set.is_empty());
     ///
     /// set.insert(1);
@@ -83,7 +85,11 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(set.remove(&1));
     /// assert!(!set.remove(&2));
     /// ```
-    pub fn remove(&mut self, k: &K) -> bool {
+    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         self.tree.remove(k).is_some()
     }
 

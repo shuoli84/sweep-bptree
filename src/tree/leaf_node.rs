@@ -1,6 +1,7 @@
 use super::*;
 use std::{
     alloc::{alloc, Layout},
+    borrow::Borrow,
     mem::{self, MaybeUninit},
     slice::SliceIndex,
 };
@@ -78,16 +79,20 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         self.size > Self::minimum_size()
     }
 
-    pub fn in_range(&self, k: &K) -> bool {
+    pub fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>,
+    {
         let is_lt_start = match self.prev {
-            Some(_) => k.lt(unsafe { self.key_area(0).assume_init_ref() }),
+            Some(_) => k.lt(unsafe { self.key_area(0).assume_init_ref().borrow() }),
             None => false,
         };
         if is_lt_start {
             return false;
         }
         let is_gt_end = match self.next {
-            Some(_) => k.gt(unsafe { self.key_area(self.len() - 1).assume_init_ref() }),
+            Some(_) => k.gt(unsafe { self.key_area(self.len() - 1).assume_init_ref().borrow() }),
             None => false,
         };
         !is_gt_end
@@ -255,7 +260,10 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     /// Delete an item from LeafNode
-    pub(crate) fn delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {
+    pub(crate) fn delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    where
+        K: Borrow<Q>,
+    {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 if self.able_to_lend() {
@@ -274,7 +282,6 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    #[inline]
     pub(crate) fn locate_child_idx<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
     where
         Q: Ord,
@@ -284,7 +291,11 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
             .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref().borrow() })
     }
 
-    pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&V>) {
+    pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 // exact match, go to right child.
@@ -303,7 +314,11 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    pub(crate) fn locate_child_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
+    pub(crate) fn locate_child_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 // exact match, go to right child.
@@ -575,8 +590,11 @@ impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
         Self::try_data_at(self, idx)
     }
 
-    #[inline(always)]
-    fn in_range(&self, k: &K) -> bool {
+    fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>,
+    {
         Self::in_range(self, k)
     }
 
@@ -607,19 +625,35 @@ impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
         LeafNode::split_new_leaf(self, insert_idx, item, new_leaf_id, self_leaf_id)
     }
 
-    fn locate_slot(&self, k: &K) -> Result<usize, usize> {
+    fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         Self::locate_child_idx(&self, k)
     }
 
-    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<&V>) {
+    fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         Self::locate_child(self, k)
     }
 
-    fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
+    fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         Self::locate_child_mut(self, k)
     }
 
-    fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {
+    fn try_delete<Q: ?Sized>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         Self::delete(self, k)
     }
 
