@@ -2,6 +2,7 @@ use std::borrow::Borrow;
 
 use crate::{BPlusTree, Key, NodeStoreVec};
 
+/// A B+ tree based set
 pub struct BPlusTreeSet<K: crate::Key> {
     tree: BPlusTree<NodeStoreVec<K, (), 64, 65, 64>>,
 }
@@ -166,5 +167,42 @@ impl<K: Key> BPlusTreeSet<K> {
     /// ```
     pub fn last(&self) -> Option<&K> {
         self.tree.last().map(|(k, _)| k)
+    }
+
+    /// Returns a iterator over the keys in the set
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<i32>::new();
+    ///
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// let keys = set.iter().collect::<Vec<_>>();
+    /// assert_eq!(keys.len(), 2);
+    ///
+    /// ```
+    pub fn iter(&self) -> iter::Iter<K> {
+        iter::Iter {
+            iter: self.tree.iter(),
+        }
+    }
+}
+
+pub mod iter {
+    use super::*;
+
+    pub struct Iter<'a, K: crate::Key> {
+        pub(super) iter: crate::tree::Iter<'a, NodeStoreVec<K, (), 64, 65, 64>>,
+    }
+
+    impl<'a, K: crate::Key> Iterator for Iter<'a, K> {
+        type Item = &'a K;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next().map(|(k, _)| k)
+        }
     }
 }
