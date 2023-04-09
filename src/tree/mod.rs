@@ -262,7 +262,10 @@ where
     }
 
     /// Get reference to value identified by key.
-    pub fn get(&self, k: &S::K) -> Option<&S::V> {
+    pub fn get<Q: ?Sized + Ord>(&self, k: &Q) -> Option<&S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         if let Some(leaf_id) = self.node_store.try_cache(k) {
             // cache hit
             return self.find_in_leaf(leaf_id, k);
@@ -286,8 +289,10 @@ where
         self.find_descend_mut(self.root, k)
     }
 
-    #[inline]
-    fn find_descend(&self, mut node_id: NodeId, k: &S::K) -> Option<&S::V> {
+    fn find_descend<Q: ?Sized + Ord>(&self, mut node_id: NodeId, k: &Q) -> Option<&S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         loop {
             match node_id {
                 NodeId::Inner(inner_id) => {
@@ -301,7 +306,10 @@ where
         }
     }
 
-    fn find_in_leaf(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
+    fn find_in_leaf<Q: ?Sized + Ord>(&self, leaf_id: LeafNodeId, k: &Q) -> Option<&S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         let leaf_node = self.node_store.get_leaf(leaf_id);
         let (_, kv) = leaf_node.locate_slot_with_value(k);
         kv
@@ -337,7 +345,14 @@ where
 
     /// Find the key in leaf, and cache leaf, this method only called when
     /// cache miss
-    fn find_in_leaf_and_cache_it(&self, leaf_id: LeafNodeId, k: &S::K) -> Option<&S::V> {
+    fn find_in_leaf_and_cache_it<Q: ?Sized + Ord>(
+        &self,
+        leaf_id: LeafNodeId,
+        k: &Q,
+    ) -> Option<&S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         self.node_store.cache_leaf(leaf_id);
         let leaf = self.node_store.get_leaf(leaf_id);
         let (_, v) = leaf.locate_slot_with_value(k);
