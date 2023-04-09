@@ -289,6 +289,50 @@ where
         self.find_descend_mut(self.root, k)
     }
 
+    /// Returns first key-value pair in the map.
+    pub fn first(&self) -> Option<(&S::K, &S::V)> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let mut node_id = self.root;
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    let inner_node = self.node_store.get_inner(inner_id);
+                    node_id = inner_node.child_id(0);
+                    continue;
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf_node = self.node_store.get_leaf(leaf_id);
+                    return Some(leaf_node.data_at(0));
+                }
+            }
+        }
+    }
+
+    /// Returns last key-value pair in the map.
+    pub fn last(&self) -> Option<(&S::K, &S::V)> {
+        if self.is_empty() {
+            return None;
+        }
+
+        let mut node_id = self.root;
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    let inner_node = self.node_store.get_inner(inner_id);
+                    node_id = inner_node.child_id(inner_node.len());
+                    continue;
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf_node = self.node_store.get_leaf(leaf_id);
+                    return Some(leaf_node.data_at(leaf_node.len() - 1));
+                }
+            }
+        }
+    }
+
     fn find_descend<Q: ?Sized + Ord>(&self, mut node_id: NodeId, k: &Q) -> Option<&S::V>
     where
         S::K: Borrow<Q>,

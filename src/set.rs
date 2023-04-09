@@ -129,4 +129,42 @@ impl<K: Key> BPlusTreeSet<K> {
     pub fn clear(&mut self) {
         self.tree.clear();
     }
+
+    /// Returns a reference to the first key in the set, if any
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<i32>::new();
+    ///
+    /// assert!(set.first().is_none());
+    ///
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// assert_eq!(*set.first().unwrap(), 1);
+    /// ```
+    pub fn first(&self) -> Option<&K> {
+        self.tree.first().map(|(k, _)| k)
+    }
+
+    /// Returns a reference to the last key in the set, if any
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<i32>::new();
+    ///
+    /// assert!(set.last().is_none());
+    ///
+    /// set.insert(1);
+    /// set.insert(2);
+    ///
+    /// assert_eq!(*set.last().unwrap(), 2);
+    /// ```
+    pub fn last(&self) -> Option<&K> {
+        self.tree.last().map(|(k, _)| k)
+    }
 }
