@@ -1,7 +1,9 @@
+use std::borrow::Cow;
+
 use sweep_bptree::BPlusTreeSet;
 
 fn main() {
-    let mut set = BPlusTreeSet::<String>::new();
+    let mut set = BPlusTreeSet::<Cow<'_, str>>::new();
     set.insert("hello");
     set.insert("world");
 

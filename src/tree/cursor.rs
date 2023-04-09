@@ -6,7 +6,7 @@ use crate::NodeStore;
 
 /// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
 #[derive(Debug, Clone, Copy)]
-pub struct Cursor<K: Key + 'static> {
+pub struct Cursor<K: Key> {
     /// The key this cursor points to. It is possible the `k` doesn't exist in the tree.
     k: K,
     /// The leaf node id this cursor points to. This is a hint, which means it is possible the leaf
@@ -17,7 +17,7 @@ pub struct Cursor<K: Key + 'static> {
     offset_hint: usize,
 }
 
-impl<K: Key> Cursor<K> {
+impl<'k, K: Key + 'k> Cursor<K> {
     /// Create a new cursor
     #[inline(always)]
     pub(crate) fn new(k: K, leaf_id: LeafNodeId, offset: usize) -> Self {
@@ -35,7 +35,10 @@ impl<K: Key> Cursor<K> {
     }
 
     /// Create a `Cursor` pointing to the first key-value pair in the tree.
-    pub fn first<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
+    pub fn first<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let leaf_id = tree.first_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
 
@@ -53,7 +56,10 @@ impl<K: Key> Cursor<K> {
 
     /// Create a `Cursor` pointing to the last key-value pair in the tree. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just larger than the deleted key.
-    pub fn last<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
+    pub fn last<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let leaf_id = tree.last_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
         let kv = leaf.data_at(leaf.len() - 1);
@@ -79,7 +85,10 @@ impl<K: Key> Cursor<K> {
     pub fn prev_with_value<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
-    ) -> Option<(Self, &'b S::V)> {
+    ) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let (leaf_id, leaf) = self.locate_leaf(tree)?;
 
         let (offset, leaf) = match leaf.try_data_at(self.offset_hint) {
@@ -131,7 +140,10 @@ impl<K: Key> Cursor<K> {
     pub fn next_with_value<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
-    ) -> Option<(Self, &'b S::V)> {
+    ) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let (leaf_id, leaf) = self.locate_leaf(tree)?;
 
         let next_offset = match leaf.try_data_at(self.offset_hint) {
@@ -177,10 +189,10 @@ impl<K: Key> Cursor<K> {
     }
 
     /// get the value attached to cursor, if the underlying key is deleted, this returns None
-    pub fn value<'a, 'b, S: NodeStore<K = K>>(
-        &'a self,
-        tree: &'b BPlusTree<S>,
-    ) -> Option<&'b S::V> {
+    pub fn value<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<&'b S::V>
+    where
+        'k: 'b,
+    {
         let (_, leaf) = self.locate_leaf(tree)?;
 
         match leaf.try_data_at(self.offset_hint) {

@@ -1077,6 +1077,7 @@ pub trait NodeStore: Default {
 }
 
 /// Key trait
+/// `Clone` is required since Inner Node may dup the key.
 pub trait Key: Clone + Ord {}
 
 impl<T> Key for T where T: Clone + Ord {}
