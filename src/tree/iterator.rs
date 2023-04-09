@@ -1,8 +1,11 @@
+use std::iter::FusedIterator;
+
 use super::*;
 
 /// A borrowed iterator for BPlusTree
 /// Borrowed, means the underlying tree won't change, so this is faster
 /// compare to Cursor.
+#[derive(Clone)]
 pub struct Iter<'a, S: NodeStore> {
     tree: &'a BPlusTree<S>,
     len: usize,
@@ -107,6 +110,9 @@ impl<'a, S: NodeStore> DoubleEndedIterator for Iter<'a, S> {
     }
 }
 
+impl<'a, S: NodeStore> FusedIterator for Iter<'a, S> {}
+impl<'a, S: NodeStore> ExactSizeIterator for Iter<'a, S> {}
+
 pub struct IntoIter<S: NodeStore> {
     node_store: S,
     len: usize,
@@ -132,10 +138,6 @@ impl<S: NodeStore> IntoIter<S> {
             pos: (first_leaf_id, 0),
             end: (last_leaf_id, last_leaf_size),
         }
-    }
-
-    fn len(&self) -> usize {
-        self.len
     }
 }
 
@@ -215,6 +217,9 @@ impl<S: NodeStore> DoubleEndedIterator for IntoIter<S> {
         }
     }
 }
+
+impl<S: NodeStore> FusedIterator for IntoIter<S> {}
+impl<S: NodeStore> ExactSizeIterator for IntoIter<S> {}
 
 impl<S: NodeStore> Drop for IntoIter<S> {
     fn drop(&mut self) {

@@ -4,8 +4,8 @@ use sweep_bptree::BPlusTreeSet;
 
 fn main() {
     let mut set = BPlusTreeSet::<Cow<'_, str>>::new();
-    set.insert("hello");
-    set.insert("world");
+    set.insert("hello".into());
+    set.insert("world".into());
 
     assert!(set.contains("hello"));
 }
