@@ -443,7 +443,7 @@ where
                 return DeleteDescendResult::Done(deleted_item);
             }
         }
-        if child_idx < node.size() {
+        if child_idx < node.len() {
             if Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some()
             {
                 self.st.rotate_left_inner += 1;
@@ -479,7 +479,7 @@ where
         } else {
             None
         };
-        let next_sibling = if child_idx < node.size() {
+        let next_sibling = if child_idx < node.len() {
             Some(
                 self.node_store
                     .get_leaf(unsafe { node.child_id(child_idx + 1).leaf_id_unchecked() }),
@@ -636,7 +636,7 @@ where
         //  merge 3
         //     1        5
         //       2,3,4
-        debug_assert!(slot < node.size());
+        debug_assert!(slot < node.len());
 
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
@@ -648,7 +648,7 @@ where
 
         left.merge_next(slot_key, &mut right);
 
-        node.merge_child(slot)
+        node.remove_slot_with_right(slot)
     }
 
     fn rotate_right_for_leaf(
@@ -715,7 +715,7 @@ where
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
         }
 
-        let r = match parent.merge_child(slot) {
+        let r = match parent.remove_slot_with_right(slot) {
             InnerMergeResult::Done => DeleteDescendResult::Done(kv),
             InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
         };
@@ -743,7 +743,7 @@ where
         }
 
         // the merge on inner, it could propagate
-        let r = match parent.merge_child(slot) {
+        let r = match parent.remove_slot_with_right(slot) {
             InnerMergeResult::Done => DeleteDescendResult::Done(kv),
             InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
         };
@@ -781,7 +781,7 @@ where
                 let mut result = None;
 
                 self.descend_visit_inner(inner_id, |inner_node| {
-                    let child_id = inner_node.child_id(inner_node.size());
+                    let child_id = inner_node.child_id(inner_node.len());
                     match child_id {
                         NodeId::Inner(inner_id) => Some(inner_id),
                         NodeId::Leaf(leaf_id) => {
@@ -1068,11 +1068,11 @@ pub trait INode<K: Key> {
     ) -> Box<Self>;
 
     /// Get the number of keys
-    fn size(&self) -> usize;
+    fn len(&self) -> usize;
 
     /// Check if the node is empty
     fn is_empty(&self) -> bool {
-        self.size() == 0
+        self.len() == 0
     }
 
     /// Get the key at `slot`
@@ -1084,8 +1084,11 @@ pub trait INode<K: Key> {
     /// Get the child id at `idx`
     fn child_id(&self, idx: usize) -> NodeId;
 
-    /// Locate child index and `NodeId` for `k`
-    fn locate_child(&self, k: &K) -> (usize, NodeId);
+    /// Locate the child node that contains the key
+    fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>;
 
     /// Check if the node is full
     fn is_full(&self) -> bool;
@@ -1115,7 +1118,7 @@ pub trait INode<K: Key> {
     fn merge_next(&mut self, slot_key: K, right: &mut Self);
 
     /// Merge children at slot
-    fn merge_child(&mut self, slot: usize) -> InnerMergeResult;
+    fn remove_slot_with_right(&mut self, slot: usize) -> InnerMergeResult;
 }
 
 /// Leaf node trait
@@ -1126,6 +1129,11 @@ pub trait LNode<K: Key, V> {
 
     /// Returns size of the leaf
     fn len(&self) -> usize;
+
+    /// Returns true if the leaf is empty
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     /// Returns prev `LeafNodeId` if exists
     fn prev(&self) -> Option<LeafNodeId>;
@@ -1304,7 +1312,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.size(), 3);
+            assert_eq!(child_1.len(), 3);
             assert_eq!(child_1.key_vec(), vec![10, 11, 12]);
             assert_eq!(
                 child_1.child_id_vec(),
@@ -1320,7 +1328,7 @@ mod tests {
         {
             let child_2 = node_store.get_inner(child_2);
 
-            assert_eq!(child_2.size(), 3);
+            assert_eq!(child_2.len(), 3);
 
             assert_eq!(child_2.key_vec(), vec![30, 40, 41]);
             assert_eq!(
@@ -1371,7 +1379,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.size(), 4);
+            assert_eq!(child_1.len(), 4);
             assert_eq!(child_1.key_vec(), vec![10, 11, 12, 30]);
             assert_eq!(
                 child_1.child_id_vec(),
@@ -1388,7 +1396,7 @@ mod tests {
         {
             let child_2 = node_store.get_inner(child_2);
 
-            assert_eq!(child_2.size(), 2);
+            assert_eq!(child_2.len(), 2);
 
             assert_eq!(child_2.key_vec(), vec![40, 41]);
             assert_eq!(
@@ -1427,7 +1435,7 @@ mod tests {
 
         {
             let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.size(), 2);
+            assert_eq!(parent.len(), 2);
             assert_eq!(parent.key(1).clone(), 50);
             assert_eq!(
                 parent.child_id_vec(),
@@ -1437,7 +1445,7 @@ mod tests {
 
         {
             let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.size(), 4);
+            assert_eq!(child_1.len(), 4);
             assert_eq!(child_1.key_vec(), vec![10, 11, 30, 40]);
             assert_eq!(
                 child_1.child_id_vec(),

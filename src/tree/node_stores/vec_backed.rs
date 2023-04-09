@@ -61,7 +61,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?}",
-                inner.size(),
+                inner.len(),
                 inner.key_vec(),
                 inner.child_id_vec()
             );

@@ -67,8 +67,8 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(set.insert(1));
     /// assert!(!set.insert(1));
     /// ```
-    pub fn insert(&mut self, k: K) -> bool {
-        self.tree.insert(k, ()).is_none()
+    pub fn insert(&mut self, k: impl Into<K>) -> bool {
+        self.tree.insert(k.into(), ()).is_none()
     }
 
     /// Remove a key from the set

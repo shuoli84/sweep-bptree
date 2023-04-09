@@ -275,9 +275,13 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     #[inline]
-    pub(crate) fn locate_child_idx(&self, k: &K) -> Result<usize, usize> {
+    pub(crate) fn locate_child_idx<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>,
+    {
         unsafe { self.key_area(..self.len()) }
-            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
+            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref().borrow() })
     }
 
     pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&V>) {
