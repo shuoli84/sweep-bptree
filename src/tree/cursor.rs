@@ -6,7 +6,7 @@ use crate::NodeStore;
 
 /// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
 #[derive(Debug, Clone, Copy)]
-pub struct Cursor<K: Key> {
+pub struct Cursor<K: Key + 'static> {
     /// The key this cursor points to. It is possible the `k` doesn't exist in the tree.
     k: K,
     /// The leaf node id this cursor points to. This is a hint, which means it is possible the leaf
@@ -35,7 +35,7 @@ impl<K: Key> Cursor<K> {
     }
 
     /// Create a `Cursor` pointing to the first key-value pair in the tree.
-    pub fn first<'a, 'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
+    pub fn first<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
         let leaf_id = tree.first_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
 
@@ -53,7 +53,7 @@ impl<K: Key> Cursor<K> {
 
     /// Create a `Cursor` pointing to the last key-value pair in the tree. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just larger than the deleted key.
-    pub fn last<'a, 'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
+    pub fn last<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
         let leaf_id = tree.last_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
         let kv = leaf.data_at(leaf.len() - 1);
@@ -113,7 +113,7 @@ impl<K: Key> Cursor<K> {
         let kv = leaf.data_at(offset);
         Some((
             Self {
-                k: *kv.0,
+                k: kv.0.clone(),
                 leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
@@ -149,7 +149,7 @@ impl<K: Key> Cursor<K> {
             let kv = leaf.data_at(next_offset);
             Some((
                 Self {
-                    k: *kv.0,
+                    k: kv.0.clone(),
                     leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
@@ -162,7 +162,7 @@ impl<K: Key> Cursor<K> {
 
             Some((
                 Self {
-                    k: *kv.0,
+                    k: kv.0.clone(),
                     leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },

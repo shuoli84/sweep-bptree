@@ -93,6 +93,26 @@ impl<K: Key> BPlusTreeSet<K> {
         self.tree.remove(k).is_some()
     }
 
+    /// Returns true if the set contains the key
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<i32>::new();
+    /// set.insert(1);
+    /// assert!(set.contains(&1));
+    /// set.remove(&1);
+    /// assert!(!set.contains(&1));
+    /// ```
+    pub fn contains<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
+        self.tree.get(k).is_some()
+    }
+
     /// Clears the set
     ///
     /// # Examples

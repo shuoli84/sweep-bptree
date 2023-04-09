@@ -24,6 +24,16 @@ where
 {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
+        let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
+
+        for i in 0..self.len() {
+            unsafe {
+                *new_key.get_unchecked_mut(i) =
+                    MaybeUninit::new(self.key_area(i).assume_init_read().clone());
+            };
+        }
+
+        // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_value = unsafe { MaybeUninit::<[MaybeUninit<V>; N]>::uninit().assume_init() };
 
         for i in 0..self.len() {
@@ -35,7 +45,7 @@ where
 
         Self {
             size: self.size.clone(),
-            slot_key: self.slot_key.clone(),
+            slot_key: new_key,
             slot_value: new_value,
             prev: self.prev.clone(),
             next: self.next.clone(),
@@ -172,7 +182,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     where
         V: Clone,
     {
-        self.iter().map(|(k, v)| (*k, v.clone())).collect()
+        self.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
@@ -465,7 +475,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
 
         // safety: slot is checked against self.len()
         unsafe {
-            let k = self.key_area(slot).clone();
+            let k = std::mem::replace(self.key_area_mut(slot), MaybeUninit::uninit());
             let v = std::mem::replace(self.value_area_mut(slot), MaybeUninit::uninit());
             // special care must be taken to avoid double drop
             (k.assume_init_read(), v.assume_init_read())

@@ -76,7 +76,10 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
                 leaf.next()
                     .map(|l| l.as_usize().to_string())
                     .unwrap_or("-".to_string()),
-                leaf.data_vec().iter().map(|kv| kv.0).collect::<Vec<_>>()
+                leaf.data_vec()
+                    .iter()
+                    .map(|kv| kv.0.clone())
+                    .collect::<Vec<_>>()
             );
         }
     }

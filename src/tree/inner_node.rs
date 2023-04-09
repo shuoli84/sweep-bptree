@@ -9,13 +9,33 @@ use std::{
 /// Tree's inner node, it contains a list of keys and a list of child node id
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Copy)]
 #[repr(C)]
 pub struct InnerNode<K: Key, const N: usize, const C: usize> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
     child_id: [MaybeUninit<NodeId>; C],
+}
+
+impl<K: Key, const N: usize, const C: usize> Clone for InnerNode<K, N, C> {
+    fn clone(&self) -> Self {
+        // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
+        let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
+
+        for i in 0..self.len() {
+            unsafe {
+                *new_key.get_unchecked_mut(i) =
+                    MaybeUninit::new(self.key_area(i).assume_init_read().clone());
+            };
+        }
+
+        Self {
+            size: self.size.clone(),
+            slot_key: new_key,
+            child_id: self.child_id.clone(),
+        }
+    }
 }
 
 impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
@@ -425,7 +445,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         assert!(N1 <= N);
         self.size = N1 as u16;
         for i in 0..N1 {
-            self.slot_key[i] = MaybeUninit::new(slot_keys[i]);
+            self.slot_key[i] = MaybeUninit::new(slot_keys[i].clone());
         }
 
         for c in 0..C1 {

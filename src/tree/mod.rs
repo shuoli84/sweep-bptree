@@ -230,7 +230,7 @@ where
 
     fn insert_leaf(&mut self, id: LeafNodeId, k: S::K, v: S::V) -> DescendInsertResult<S::K, S::V> {
         let leaf_node = self.node_store.get_mut_leaf(id);
-        match leaf_node.try_upsert(k, v) {
+        match leaf_node.try_upsert(k.clone(), v) {
             LeafUpsertResult::Inserted => {
                 self.node_store.cache_leaf(id);
                 DescendInsertResult::Inserted
@@ -241,7 +241,7 @@ where
 
                 let l_leaf = self.node_store.get_mut_leaf(id);
                 let r_leaf = l_leaf.split_new_leaf(idx, (k, v), right_id, id);
-                let slot_key: S::K = *r_leaf.data_at(0).0;
+                let slot_key: S::K = r_leaf.data_at(0).0.clone();
 
                 let updated_id = if idx >= S::leaf_n() as usize / 2 {
                     right_id
@@ -609,7 +609,7 @@ where
         //     ..  3,4
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
-        let slot_key = *node.key(slot);
+        let slot_key = node.key(slot).clone();
 
         let prev_node = node_store.get_mut_inner(left_child_id);
         if prev_node.able_to_lend() {
@@ -691,7 +691,7 @@ where
         debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
-        let new_slot_key = kv.0;
+        let new_slot_key = kv.0.clone();
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
 
@@ -715,7 +715,7 @@ where
         debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
-        let new_slot_key = *right.data_at(0).0;
+        let new_slot_key = right.data_at(0).0.clone();
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
 
@@ -907,7 +907,7 @@ where
 
         let leaf = self.node_store.get_leaf(leaf_id);
         let (idx, v) = leaf.locate_slot_with_value(k);
-        Some((Cursor::new(*k, leaf_id, idx), v))
+        Some((Cursor::new(k.clone(), leaf_id, idx), v))
     }
 
     /// Clear the tree
@@ -1077,9 +1077,9 @@ pub trait NodeStore: Default {
 }
 
 /// Key trait
-pub trait Key: Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static {}
+pub trait Key: Clone + Ord {}
 
-impl<T> Key for T where T: Copy + Clone + Ord + PartialOrd + Eq + PartialEq + 'static {}
+impl<T> Key for T where T: Clone + Ord {}
 
 /// Inner node trait
 pub trait INode<K: Key> {
