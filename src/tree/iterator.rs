@@ -142,6 +142,11 @@ impl<S: NodeStore> IntoIter<S> {
 impl<S: NodeStore> Iterator for IntoIter<S> {
     type Item = (S::K, S::V);
 
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.len, Some(self.len))
+    }
+
     fn next(&mut self) -> Option<Self::Item> {
         if self.len() == 0 {
             return None;
@@ -173,11 +178,6 @@ impl<S: NodeStore> Iterator for IntoIter<S> {
                 }
             }
         }
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.len, Some(self.len))
     }
 }
 

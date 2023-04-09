@@ -186,7 +186,28 @@ impl<K: Key> BPlusTreeSet<K> {
     /// ```
     pub fn iter(&self) -> iter::Iter<K> {
         iter::Iter {
-            iter: self.tree.iter(),
+            inner: self.tree.iter(),
+        }
+    }
+
+    /// Returns a iterator over the keys in the set
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<String>::new();
+    ///
+    /// set.insert(1.to_string());
+    /// set.insert(2.to_string());
+    ///
+    /// let keys = set.into_iter().collect::<Vec<_>>();
+    /// assert_eq!(keys.len(), 2);
+    ///
+    /// ```
+    pub fn into_iter(self) -> iter::IntoIter<K> {
+        iter::IntoIter {
+            inner: self.tree.into_iter(),
         }
     }
 }
@@ -195,14 +216,38 @@ pub mod iter {
     use super::*;
 
     pub struct Iter<'a, K: crate::Key> {
-        pub(super) iter: crate::tree::Iter<'a, NodeStoreVec<K, (), 64, 65, 64>>,
+        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, (), 64, 65, 64>>,
     }
 
     impl<'a, K: crate::Key> Iterator for Iter<'a, K> {
         type Item = &'a K;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.iter.next().map(|(k, _)| k)
+            self.inner.next().map(|(k, _)| k)
+        }
+    }
+
+    impl<'a, K: crate::Key> DoubleEndedIterator for Iter<'a, K> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.inner.next_back().map(|(k, _)| k)
+        }
+    }
+
+    pub struct IntoIter<K: crate::Key> {
+        pub(super) inner: crate::tree::IntoIter<NodeStoreVec<K, (), 64, 65, 64>>,
+    }
+
+    impl<K: crate::Key> Iterator for IntoIter<K> {
+        type Item = K;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|(k, _)| k)
+        }
+    }
+
+    impl<K: crate::Key> DoubleEndedIterator for IntoIter<K> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.inner.next_back().map(|(k, _)| k)
         }
     }
 }
