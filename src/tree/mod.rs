@@ -13,7 +13,10 @@ mod iterator;
 pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
+
+use self::visit_stack::VisitStack64;
 mod bulk_load;
+mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
 ///
@@ -478,38 +481,59 @@ where
 
     fn remove_inner<Q: ?Sized>(
         &mut self,
-        node_id: InnerNodeId,
+        mut node_id: InnerNodeId,
         k: &Q,
     ) -> DeleteDescendResult<S::K, S::V>
     where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
-        //         so we can safely get a mutable ptr to it.
-        let inner_node = unsafe { &mut *self.node_store.get_mut_inner_ptr(node_id) };
-        let (child_idx, child_id) = inner_node.locate_child(k);
-        let r = match child_id {
-            NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
-                DeleteDescendResult::Done(kv) => DeleteDescendResult::Done(kv),
-                DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                    self.handle_inner_under_size(inner_node, child_idx, deleted_item)
+        let mut stack = VisitStack64::new();
+
+        let mut r = loop {
+            // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
+            //         so we can safely get a mutable ptr to it.
+            let inner_node = unsafe { &mut *self.node_store.get_mut_inner_ptr(node_id) };
+
+            let (child_idx, child_id) = inner_node.locate_child(k);
+
+            match child_id {
+                NodeId::Inner(inner_id) => {
+                    // we only track inner node, because leaf node is always processed in this loop
+                    stack.push(node_id, child_idx);
+                    node_id = inner_id;
+                    continue;
                 }
-                DeleteDescendResult::None => DeleteDescendResult::None,
-            },
-            NodeId::Leaf(leaf_id) => {
-                let leaf = self.node_store.get_mut_leaf(leaf_id);
-                match leaf.try_delete(k) {
-                    LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
-                    LeafDeleteResult::NotFound => DeleteDescendResult::None,
-                    LeafDeleteResult::UnderSize(idx) => {
-                        self.handle_leaf_under_size(inner_node, child_idx, idx)
+                NodeId::Leaf(leaf_id) => {
+                    let leaf = self.node_store.get_mut_leaf(leaf_id);
+                    match leaf.try_delete(k) {
+                        LeafDeleteResult::Done(kv) => return DeleteDescendResult::Done(kv),
+                        LeafDeleteResult::NotFound => return DeleteDescendResult::None,
+                        LeafDeleteResult::UnderSize(idx) => {
+                            break self.handle_leaf_under_size(inner_node, child_idx, idx);
+                        }
                     }
                 }
             }
         };
 
-        r
+        // when reach here, means we need to propogate
+        loop {
+            match r {
+                DeleteDescendResult::InnerUnderSize(kv) => match stack.pop() {
+                    Some((parent_id, child_idx)) => {
+                        // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
+                        //         so we can safely get a mutable ptr to it.
+                        let parent = unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
+                        r = self.handle_inner_under_size(parent, child_idx, kv);
+                        continue;
+                    }
+                    None => return DeleteDescendResult::InnerUnderSize(kv),
+                },
+                DeleteDescendResult::Done(kv) => return DeleteDescendResult::Done(kv),
+                DeleteDescendResult::None => return DeleteDescendResult::None,
+            }
+        }
     }
 
     fn handle_inner_under_size(

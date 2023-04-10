@@ -2,6 +2,9 @@
 pub struct InnerNodeId(pub(crate) usize);
 
 impl InnerNodeId {
+    /// The invalid node id, used as placeholder
+    pub const INVALID: Self = InnerNodeId(usize::MAX);
+
     #[inline(always)]
     pub fn from_usize(id: usize) -> Self {
         Self(id)
