@@ -137,7 +137,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     }
 }
 
-pub mod iter {
+mod iter {
     use std::iter::FusedIterator;
 
     use super::*;

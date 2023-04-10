@@ -236,7 +236,7 @@ impl<K: Key> BPlusTreeSet<K> {
     }
 }
 
-pub mod iter {
+mod iter {
     use std::{cmp::max, iter::FusedIterator};
 
     use crate::merge_iter::MergeIterInner;
