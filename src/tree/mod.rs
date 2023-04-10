@@ -145,7 +145,7 @@ where
                         None
                     }
                     LeafUpsertResult::Updated(v) => Some(v),
-                    LeafUpsertResult::IsFull(_, _) => unreachable!(),
+                    LeafUpsertResult::IsFull(..) => unreachable!(),
                 };
 
                 #[cfg(test)]
@@ -263,25 +263,18 @@ where
 
     fn insert_leaf(&mut self, id: LeafNodeId, k: S::K, v: S::V) -> DescendInsertResult<S::K, S::V> {
         let leaf_node = self.node_store.get_mut_leaf(id);
-        match leaf_node.try_upsert(k.clone(), v) {
+        match leaf_node.try_upsert(k, v) {
             LeafUpsertResult::Inserted => {
                 self.node_store.cache_leaf(id);
                 DescendInsertResult::Inserted
             }
             LeafUpsertResult::Updated(v) => DescendInsertResult::Updated(v),
-            LeafUpsertResult::IsFull(idx, v) => {
+            LeafUpsertResult::IsFull(idx, k, v) => {
                 let right_id = self.node_store.reserve_leaf();
 
                 let l_leaf = self.node_store.get_mut_leaf(id);
                 let r_leaf = l_leaf.split_new_leaf(idx, (k, v), right_id, id);
                 let slot_key: S::K = r_leaf.data_at(0).0.clone();
-
-                let updated_id = if idx >= S::leaf_n() as usize / 2 {
-                    right_id
-                } else {
-                    id
-                };
-                self.node_store.cache_leaf(updated_id);
 
                 // fix r_leaf's next's prev
                 if let Some(next) = r_leaf.next() {
@@ -289,6 +282,12 @@ where
                 }
                 self.node_store.assign_leaf(right_id, r_leaf);
 
+                let updated_id = if idx >= S::leaf_n() as usize / 2 {
+                    right_id
+                } else {
+                    id
+                };
+                self.node_store.cache_leaf(updated_id);
                 DescendInsertResult::Split(slot_key, NodeId::Leaf(right_id))
             }
         }
@@ -1305,7 +1304,7 @@ pub trait LNode<K: Key, V> {
     fn key_range(&self) -> (Option<K>, Option<K>);
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
-    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V>;
+    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V>;
     fn split_new_leaf(
         &mut self,
         insert_idx: usize,

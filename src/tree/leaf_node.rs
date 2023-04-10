@@ -186,7 +186,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
-    pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
+    pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
         match self.locate_child_idx(&k) {
             Ok(idx) => {
                 // update existing item
@@ -203,7 +203,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
                     self.size = new_len as u16;
                     LeafUpsertResult::Inserted
                 } else {
-                    LeafUpsertResult::IsFull(idx, v)
+                    LeafUpsertResult::IsFull(idx, k, v)
                 }
             }
         }
@@ -544,10 +544,10 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 }
 
-pub enum LeafUpsertResult<V> {
+pub enum LeafUpsertResult<K, V> {
     Inserted,
     Updated(V),
-    IsFull(usize, V),
+    IsFull(usize, K, V),
 }
 
 pub enum LeafDeleteResult<K, V> {
@@ -621,7 +621,7 @@ impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
         LeafNode::able_to_lend(self)
     }
 
-    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
+    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
         LeafNode::try_upsert(self, k, v)
     }
 
