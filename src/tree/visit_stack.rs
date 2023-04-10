@@ -38,10 +38,12 @@ impl<const N: usize> VisitStack<N> {
         }
     }
 
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.len as usize
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -63,13 +65,6 @@ impl<const N: usize> VisitStack<N> {
         let id = self.stack[self.len as usize];
         let offset = self.offsets[self.len as usize];
         Some((id, offset as usize))
-    }
-
-    pub fn pop_unchecked(&mut self) -> (InnerNodeId, usize) {
-        self.len -= 1;
-        let id = self.stack[self.len as usize];
-        let offset = self.offsets[self.len as usize];
-        (id, offset as usize)
     }
 }
 
