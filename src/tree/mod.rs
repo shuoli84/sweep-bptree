@@ -275,7 +275,10 @@ where
     }
 
     /// Get mutable reference to value identified by key.
-    pub fn get_mut(&mut self, k: &S::K) -> Option<&mut S::V> {
+    pub fn get_mut<Q: ?Sized + Ord>(&mut self, k: &Q) -> Option<&mut S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         let mut cache_leaf_id: Option<LeafNodeId> = None;
         if let Some(leaf_id) = self.node_store.try_cache(k) {
             // cache hit
@@ -359,7 +362,10 @@ where
         kv
     }
 
-    fn find_descend_mut(&mut self, node_id: NodeId, k: &S::K) -> Option<&mut S::V> {
+    fn find_descend_mut<Q: ?Sized + Ord>(&mut self, node_id: NodeId, k: &Q) -> Option<&mut S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         match node_id {
             NodeId::Inner(inner_id) => {
                 let inner_node = self.node_store.get_inner(inner_id);
@@ -370,17 +376,23 @@ where
         }
     }
 
-    fn find_in_leaf_mut(&mut self, leaf_id: LeafNodeId, k: &S::K) -> Option<&mut S::V> {
+    fn find_in_leaf_mut<Q: ?Sized + Ord>(&mut self, leaf_id: LeafNodeId, k: &Q) -> Option<&mut S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         let leaf_node = self.node_store.get_mut_leaf(leaf_id);
         let (_, v) = leaf_node.locate_slot_mut(k);
         v
     }
 
-    fn find_in_leaf_mut_and_cache_it(
+    fn find_in_leaf_mut_and_cache_it<Q: ?Sized + Ord>(
         &mut self,
         leaf_id: LeafNodeId,
-        k: &S::K,
-    ) -> Option<&mut S::V> {
+        k: &Q,
+    ) -> Option<&mut S::V>
+    where
+        S::K: Borrow<Q>,
+    {
         self.node_store.cache_leaf(leaf_id);
         let leaf_node = self.node_store.get_mut_leaf(leaf_id);
         let (_, kv) = leaf_node.locate_slot_mut(k);

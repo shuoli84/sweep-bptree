@@ -78,6 +78,24 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
         self.inner.get(key)
     }
 
+    /// Returns a mut reference to the value corresponding to the key.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeMap;
+    ///
+    /// let mut map = BPlusTreeMap::<i32, i32>::new();
+    /// map.insert(1, 2);
+    /// *map.get_mut(&1).unwrap() += 1;
+    /// assert_eq!(map.get(&1).unwrap(), &3);
+    /// ```
+    pub fn get_mut<Q: ?Sized + Ord>(&mut self, key: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+    {
+        self.inner.get_mut(key)
+    }
+
     /// Removes a key from the map, returning the value at the key if the key was previously in the map.
     ///
     /// # Examples
