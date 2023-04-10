@@ -114,4 +114,58 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     {
         self.inner.remove(key)
     }
+
+    /// Returns an iterator over the map.
+    ///
+    /// # Examples
+    /// ```rust
+    ///
+    /// use sweep_bptree::BPlusTreeMap;
+    ///
+    /// let mut map = BPlusTreeMap::<i32, i32>::new();
+    /// map.insert(1, 2);
+    /// map.insert(2, 3);
+    ///
+    /// let kvs = map.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>();
+    /// assert_eq!(kvs.len(), 2);
+    /// assert_eq!(kvs, vec![(1, 2), (2, 3)]);
+    /// ```
+    pub fn iter(&self) -> iter::Iter<K, V> {
+        iter::Iter {
+            inner: self.inner.iter(),
+        }
+    }
+}
+
+pub mod iter {
+    use std::iter::FusedIterator;
+
+    use super::*;
+
+    pub struct Iter<'a, K: Key, V> {
+        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, V, 64, 65, 64>>,
+    }
+
+    impl<'a, K: Key, V> Iterator for Iter<'a, K, V> {
+        type Item = (&'a K, &'a V);
+
+        #[inline]
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
+
+        #[inline]
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+    }
+
+    impl<'a, K: Key, V> DoubleEndedIterator for Iter<'a, K, V> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.inner.next_back()
+        }
+    }
+
+    impl<'a, K: Key, V> ExactSizeIterator for Iter<'a, K, V> {}
+    impl<'a, K: Key, V> FusedIterator for Iter<'a, K, V> {}
 }
