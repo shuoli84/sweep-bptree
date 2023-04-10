@@ -192,35 +192,6 @@ where
         &self.st
     }
 
-    fn descend_insert_inner(
-        &mut self,
-        id: InnerNodeId,
-        k: S::K,
-        v: S::V,
-    ) -> DescendInsertResult<S::K, S::V> {
-        let node = self.node_store.get_inner(id);
-        let (child_idx, child_id) = node.locate_child(&k);
-        match self.descend_insert(child_id, k, v) {
-            DescendInsertResult::Inserted => DescendInsertResult::Inserted,
-            DescendInsertResult::Split(key, right_child) => {
-                // child splited
-                let inner_node = self.node_store.get_mut_inner(id);
-
-                if !inner_node.is_full() {
-                    let slot = child_idx;
-                    inner_node.insert_at(slot, key, right_child);
-                    DescendInsertResult::Inserted
-                } else {
-                    let (prompt_k, new_node) = inner_node.split(child_idx, key, right_child);
-
-                    let new_node_id = self.node_store.add_inner(new_node);
-                    DescendInsertResult::Split(prompt_k, NodeId::Inner(new_node_id))
-                }
-            }
-            r => r,
-        }
-    }
-
     fn descend_insert(
         &mut self,
         node_id: NodeId,
@@ -228,8 +199,65 @@ where
         v: S::V,
     ) -> DescendInsertResult<S::K, S::V> {
         match node_id {
-            NodeId::Inner(node_id) => self.descend_insert_inner(node_id, k, v),
+            NodeId::Inner(id) => self.insert_inner(id, k, v),
             NodeId::Leaf(leaf_id) => self.insert_leaf(leaf_id, k, v),
+        }
+    }
+
+    fn insert_inner(
+        &mut self,
+        mut id: InnerNodeId,
+        k: S::K,
+        v: S::V,
+    ) -> DescendInsertResult<S::K, S::V> {
+        // todo: fix this, now hard code as 64's stack
+        let mut stack = VisitStack64::new();
+        let mut r = loop {
+            let node = self.node_store.get_inner(id);
+            let (child_idx, child_id) = node.locate_child(&k);
+            stack.push(id, child_idx);
+
+            match child_id {
+                NodeId::Inner(child_inner) => {
+                    id = child_inner;
+                    continue;
+                }
+                NodeId::Leaf(leaf_id) => match self.insert_leaf(leaf_id, k, v) {
+                    r @ (DescendInsertResult::Updated(_) | DescendInsertResult::Inserted) => {
+                        return r;
+                    }
+                    DescendInsertResult::Split(key, right_child) => {
+                        break (key, right_child);
+                    }
+                },
+            }
+        };
+
+        loop {
+            match r {
+                (key, right_child) => {
+                    // handle split
+                    match stack.pop() {
+                        Some((id, child_idx)) => {
+                            let inner_node = self.node_store.get_mut_inner(id);
+
+                            if !inner_node.is_full() {
+                                let slot = child_idx;
+                                inner_node.insert_at(slot, key, right_child);
+                                return DescendInsertResult::Inserted;
+                            } else {
+                                let (prompt_k, new_node) =
+                                    inner_node.split(child_idx, key, right_child);
+
+                                let new_node_id = self.node_store.add_inner(new_node);
+                                r = (prompt_k, NodeId::Inner(new_node_id));
+                                continue;
+                            }
+                        }
+                        None => return DescendInsertResult::Split(key, right_child),
+                    }
+                }
+            }
         }
     }
 
@@ -490,6 +518,7 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
+        // todo: fix, now hard coded as branch factor 64
         let mut stack = VisitStack64::new();
 
         let mut r = loop {
