@@ -5,11 +5,17 @@ pub const STACK_SIZE_FOR_64: usize = 12;
 /// Type alias for branch factor 64
 pub(crate) type VisitStack64 = VisitStack<STACK_SIZE_FOR_64>;
 
-/// When visit descend in the tree, it is temping to think of the stack as a
-/// dynamic growing array. However, this is not the case. The stack's maximum
-/// cap is fixed. Take 64 as an example, the stack's maximum cap is 11. 64 ** 11
-/// is larger than u64::MAX. The formular is a simple log(u64::MAX, K), the K is
-/// the branching factor of the tree.
+/// When searching in the tree, it is temping to think of the stack(0) as a
+/// dynamic growing array. However, this is not the case. The stack(0)'s maximum
+/// cap is fixed. Take branch factor 64 as an example, the maximum cap is 11.
+/// 64 ** 11 is already larger than u64::MAX.
+/// The formular is `ceil(log(u64::MAX, K))`, the K is the branching factor of the tree.
+///
+/// So we use a fixed size array to implement the stack(0). The size of the `VisitStack` for
+/// branch factor 64 is 128 bytes, so we are happy to put it on the stack(1).
+///
+/// stack(0) is the general term stack.
+/// stack(1) is the function call stack.
 #[derive(Debug)]
 pub(crate) struct VisitStack<const N: usize = STACK_SIZE_FOR_64> {
     /// current stack size

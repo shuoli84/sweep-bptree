@@ -135,6 +135,8 @@ where
         // quick check if the last accessed leaf is the one to insert
         if let Some(leaf_id) = self.node_store.try_cache(&k) {
             let leaf = self.node_store.get_mut_leaf(leaf_id);
+            // Note, if k is already in Leaf, then we actually don't need
+            // to check whether it is full, but that requires a find first
             if !leaf.is_full() {
                 let result = match leaf.try_upsert(k, v) {
                     LeafUpsertResult::Inserted => {
