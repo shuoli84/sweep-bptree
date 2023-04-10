@@ -6,6 +6,12 @@ pub struct BPlusTreeMap<K: Key, V> {
     inner: BPlusTree<NodeStoreVec<K, V, 64, 65, 64>>,
 }
 
+impl<K: Key, V> Default for BPlusTreeMap<K, V> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K: Key, V> BPlusTreeMap<K, V> {
     /// Create a new BPlusTreeMap
     ///

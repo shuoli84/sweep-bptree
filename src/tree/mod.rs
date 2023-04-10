@@ -889,7 +889,7 @@ where
     }
 
     /// get the first leaf_id if exists
-    pub fn first_leaf(&self) -> Option<LeafNodeId> {
+    pub(crate) fn first_leaf(&self) -> Option<LeafNodeId> {
         match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;
@@ -912,7 +912,7 @@ where
     }
 
     /// get the last leaf_id if exists
-    pub fn last_leaf(&self) -> Option<LeafNodeId> {
+    pub(crate) fn last_leaf(&self) -> Option<LeafNodeId> {
         match self.root {
             NodeId::Inner(inner_id) => {
                 let mut result = None;

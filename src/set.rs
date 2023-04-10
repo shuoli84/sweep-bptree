@@ -7,6 +7,12 @@ pub struct BPlusTreeSet<K: crate::Key> {
     tree: BPlusTree<NodeStoreVec<K, (), 64, 65, 64>>,
 }
 
+impl<K: Key> Default for BPlusTreeSet<K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K: Key> BPlusTreeSet<K> {
     /// Create a new BPlusTreeSet
     ///
