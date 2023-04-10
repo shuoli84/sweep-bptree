@@ -1,9 +1,12 @@
 use super::InnerNodeId;
 
-pub const STACK_SIZE_FOR_64: usize = 12;
-
-/// Type alias for branch factor 64
-pub(crate) type VisitStack64 = VisitStack<STACK_SIZE_FOR_64>;
+/// This trait exists because we want to let NodeStore decides the VisitStack
+/// due to const_generics not stable
+pub trait VisitStackT {
+    fn new() -> Self;
+    fn push(&mut self, node_id: InnerNodeId, offset: usize);
+    fn pop(&mut self) -> Option<(InnerNodeId, usize)>;
+}
 
 /// When searching in the tree, it is temping to think of the stack(0) as a
 /// dynamic growing array. However, this is not the case. The stack(0)'s maximum
@@ -17,7 +20,7 @@ pub(crate) type VisitStack64 = VisitStack<STACK_SIZE_FOR_64>;
 /// stack(0) is the general term stack.
 /// stack(1) is the function call stack.
 #[derive(Debug)]
-pub(crate) struct VisitStack<const N: usize = STACK_SIZE_FOR_64> {
+pub struct VisitStack<const N: usize> {
     /// current stack size
     len: u16,
 
@@ -29,15 +32,6 @@ pub(crate) struct VisitStack<const N: usize = STACK_SIZE_FOR_64> {
 }
 
 impl<const N: usize> VisitStack<N> {
-    /// Create a new empty stack
-    pub fn new() -> Self {
-        Self {
-            len: 0,
-            stack: [InnerNodeId::INVALID; N],
-            offsets: [0; N],
-        }
-    }
-
     #[cfg(test)]
     pub fn len(&self) -> usize {
         self.len as usize
@@ -47,8 +41,19 @@ impl<const N: usize> VisitStack<N> {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+}
 
-    pub fn push(&mut self, id: InnerNodeId, offset: usize) {
+impl<const N: usize> VisitStackT for VisitStack<N> {
+    /// Create a new empty stack
+    fn new() -> Self {
+        Self {
+            len: 0,
+            stack: [InnerNodeId::INVALID; N],
+            offsets: [0; N],
+        }
+    }
+
+    fn push(&mut self, id: InnerNodeId, offset: usize) {
         debug_assert!(self.len < N as u16);
 
         self.stack[self.len as usize] = id;
@@ -56,7 +61,7 @@ impl<const N: usize> VisitStack<N> {
         self.len += 1;
     }
 
-    pub fn pop(&mut self) -> Option<(InnerNodeId, usize)> {
+    fn pop(&mut self) -> Option<(InnerNodeId, usize)> {
         if self.len == 0 {
             return None;
         }
@@ -74,9 +79,9 @@ mod tests {
 
     #[test]
     fn test_visit_stack() {
-        assert_eq!(std::mem::size_of::<VisitStack64>(), 128);
+        assert_eq!(std::mem::size_of::<VisitStack<12>>(), 128);
 
-        let mut stack = VisitStack64::new();
+        let mut stack = VisitStack::<12>::new();
         assert!(stack.is_empty());
 
         stack.push(InnerNodeId(1), 1);

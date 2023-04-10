@@ -14,7 +14,7 @@ pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
 
-use self::visit_stack::VisitStack64;
+use self::visit_stack::VisitStackT;
 mod bulk_load;
 mod visit_stack;
 
@@ -211,7 +211,7 @@ where
         v: S::V,
     ) -> DescendInsertResult<S::K, S::V> {
         // todo: fix this, now hard code as 64's stack
-        let mut stack = VisitStack64::new();
+        let mut stack = S::VisitStack::new();
         let mut r = loop {
             let node = self.node_store.get_inner(id);
             let (child_idx, child_id) = node.locate_child(&k);
@@ -518,7 +518,7 @@ where
         S::K: Borrow<Q>,
     {
         // todo: fix, now hard coded as branch factor 64
-        let mut stack = VisitStack64::new();
+        let mut stack = S::VisitStack::new();
 
         let mut r = loop {
             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
@@ -1111,6 +1111,9 @@ pub trait NodeStore: Default {
     type InnerNode: INode<Self::K>;
     /// LeafNode type
     type LeafNode: LNode<Self::K, Self::V>;
+
+    /// The visit stack type
+    type VisitStack: VisitStackT;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;

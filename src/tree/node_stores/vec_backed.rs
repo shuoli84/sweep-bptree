@@ -1,4 +1,6 @@
-use crate::tree::{InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
+use crate::tree::{
+    visit_stack::VisitStack, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore,
+};
 
 #[derive(Debug)]
 pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, const LN: usize> {
@@ -26,6 +28,8 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> Default
     for NodeStoreVec<K, V, IN, IC, LN>
 {
     fn default() -> Self {
+        assert!(IN == IC - 1);
+
         Self {
             inner_nodes: Default::default(),
             leaf_nodes: Default::default(),
@@ -92,6 +96,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
     type V = V;
     type InnerNode = InnerNode<K, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
+    type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
 
     fn inner_n() -> u16 {
         IN as u16
