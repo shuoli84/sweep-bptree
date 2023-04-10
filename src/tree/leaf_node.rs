@@ -111,11 +111,11 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
         debug_assert!(self.len() > 0);
         let start = match self.prev {
-            Some(_) => Some(unsafe { self.key_area(0).assume_init_read() }),
+            Some(_) => Some(unsafe { self.key_area(0).assume_init_ref().clone() }),
             None => None,
         };
         let end = match self.next {
-            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_read() }),
+            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() }),
             None => None,
         };
         (start, end)
