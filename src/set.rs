@@ -22,6 +22,7 @@ impl<K: Key> BPlusTreeSet<K> {
     ///
     /// BPlusTreeSet::<i32>::new();
     /// ```
+    #[inline]
     pub fn new() -> Self {
         let store = NodeStoreVec::new();
 
@@ -45,6 +46,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// set.insert(1);
     /// assert_eq!(set.len(), 1);
     /// ```
+    #[inline]
     pub fn len(&self) -> usize {
         self.tree.len()
     }
@@ -61,6 +63,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// set.insert(1);
     /// assert!(!set.is_empty());
     /// ```
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.tree.is_empty()
     }
@@ -76,6 +79,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(set.insert(1));
     /// assert!(!set.insert(1));
     /// ```
+    #[inline]
     pub fn insert(&mut self, k: K) -> bool {
         self.tree.insert(k, ()).is_none()
     }
@@ -92,6 +96,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(set.remove(&1));
     /// assert!(!set.remove(&2));
     /// ```
+    #[inline]
     pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> bool
     where
         Q: Ord,
@@ -112,6 +117,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// set.remove(&1);
     /// assert!(!set.contains(&1));
     /// ```
+    #[inline]
     pub fn contains<Q: ?Sized>(&self, k: &Q) -> bool
     where
         Q: Ord,
@@ -133,6 +139,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// set.clear();
     /// assert!(set.is_empty());
     /// ```
+    #[inline]
     pub fn clear(&mut self) {
         self.tree.clear();
     }
@@ -152,6 +159,7 @@ impl<K: Key> BPlusTreeSet<K> {
     ///
     /// assert_eq!(*set.first().unwrap(), 1);
     /// ```
+    #[inline]
     pub fn first(&self) -> Option<&K> {
         self.tree.first().map(|(k, _)| k)
     }
@@ -171,6 +179,7 @@ impl<K: Key> BPlusTreeSet<K> {
     ///
     /// assert_eq!(*set.last().unwrap(), 2);
     /// ```
+    #[inline]
     pub fn last(&self) -> Option<&K> {
         self.tree.last().map(|(k, _)| k)
     }
@@ -190,6 +199,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert_eq!(keys.len(), 2);
     ///
     /// ```
+    #[inline]
     pub fn iter(&self) -> iter::Iter<K> {
         iter::Iter {
             inner: self.tree.iter(),
@@ -211,6 +221,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert_eq!(keys.len(), 2);
     ///
     /// ```
+    #[inline]
     pub fn into_iter(self) -> iter::IntoIter<K> {
         iter::IntoIter {
             inner: self.tree.into_iter(),
@@ -236,6 +247,7 @@ impl<K: Key> BPlusTreeSet<K> {
     /// let union: Vec<_> = a.union(&b).cloned().collect();
     /// assert_eq!(union, [1, 2]);
     /// ```
+    #[inline]
     pub fn union<'a>(&'a self, other: &'a Self) -> iter::Union<'a, K> {
         use crate::merge_iter::MergeIterInner;
         iter::Union(MergeIterInner::new(self.iter(), other.iter()))

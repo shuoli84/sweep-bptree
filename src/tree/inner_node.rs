@@ -273,18 +273,19 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
 
     /// remove key at `slot` and it's right child. This method is used when the children of slot
     /// is merged.
-    pub(crate) fn remove_slot_with_right(&mut self, slot: usize) -> InnerMergeResult {
-        unsafe {
-            utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
+    pub(crate) fn remove_slot_with_right(&mut self, slot: usize) -> (InnerMergeResult, K) {
+        let k = unsafe {
+            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
             utils::slice_remove(self.child_area_mut(..self.size as usize + 1), slot + 1);
+            k
         };
         self.size -= 1;
 
         if self.size >= Self::minimum_size() as u16 {
-            InnerMergeResult::Done
+            (InnerMergeResult::Done, k)
         } else {
             // the undersized inner node will be fixed by parent node
-            InnerMergeResult::UnderSize
+            (InnerMergeResult::UnderSize, k)
         }
     }
 
@@ -385,9 +386,9 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         unsafe { self.key_area(idx).assume_init_ref() }
     }
 
-    pub(crate) fn set_key(&mut self, idx: usize, key: K) {
+    pub(crate) fn set_key(&mut self, idx: usize, key: K) -> K {
         unsafe {
-            *self.key_area_mut(idx) = MaybeUninit::new(key);
+            std::mem::replace(self.key_area_mut(idx), MaybeUninit::new(key)).assume_init_read()
         }
     }
 
@@ -477,7 +478,7 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
         Self::key(self, idx)
     }
 
-    fn set_key(&mut self, idx: usize, key: K) {
+    fn set_key(&mut self, idx: usize, key: K) -> K {
         Self::set_key(self, idx, key)
     }
 
@@ -529,7 +530,7 @@ impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N,
         Self::merge_next(self, slot_key, right)
     }
 
-    fn remove_slot_with_right(&mut self, slot: usize) -> InnerMergeResult {
+    fn remove_slot_with_right(&mut self, slot: usize) -> (InnerMergeResult, K) {
         Self::remove_slot_with_right(self, slot)
     }
 }

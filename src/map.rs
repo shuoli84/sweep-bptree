@@ -23,6 +23,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     ///
     /// assert!(map.is_empty());
     /// ```
+    #[inline]
     pub fn new() -> Self {
         let inner = BPlusTree::new(Default::default());
 
@@ -30,6 +31,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     }
 
     /// Returns item count in the map
+    #[inline]
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -44,6 +46,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     ///
     /// assert!(map.is_empty());
     /// ```
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -61,6 +64,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     /// assert!(!map.is_empty());
     /// assert_eq!(map.len(), 2);
     /// ```
+    #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.inner.insert(key, value)
     }
@@ -77,6 +81,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     /// assert_eq!(map.get(&1).unwrap(), &2);
     /// assert!(map.get(&2).is_none());
     /// ```
+    #[inline]
     pub fn get<Q: ?Sized + Ord>(&self, key: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
@@ -95,6 +100,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     /// *map.get_mut(&1).unwrap() += 1;
     /// assert_eq!(map.get(&1).unwrap(), &3);
     /// ```
+    #[inline]
     pub fn get_mut<Q: ?Sized + Ord>(&mut self, key: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
@@ -114,6 +120,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     /// assert!(map.remove(&1).is_some());
     /// assert!(map.remove(&2).is_none());
     /// ```
+    #[inline]
     pub fn remove<Q: ?Sized + Ord>(&mut self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
@@ -136,6 +143,7 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     /// assert_eq!(kvs.len(), 2);
     /// assert_eq!(kvs, vec![(1, 2), (2, 3)]);
     /// ```
+    #[inline]
     pub fn iter(&self) -> iter::Iter<K, V> {
         iter::Iter {
             inner: self.inner.iter(),

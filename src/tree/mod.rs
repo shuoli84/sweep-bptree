@@ -719,15 +719,13 @@ where
         //     ..  3,4
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
-        let slot_key = node.key(slot).clone();
 
         let prev_node = node_store.get_mut_inner(left_child_id);
         if prev_node.able_to_lend() {
             let (k, c) = prev_node.pop();
-            let child = node_store.get_mut_inner(right_child_id);
-            child.push_front(slot_key, c);
-
-            node.set_key(slot, k);
+            let slot_key = node.set_key(slot, k);
+            let right = node_store.get_mut_inner(right_child_id);
+            right.push_front(slot_key, c);
 
             Some(())
         } else {
@@ -747,15 +745,13 @@ where
         //      2,3  ..
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
-        let slot_key = node.key(slot).clone();
 
         let right = node_store.get_mut_inner(right_child_id);
         if right.able_to_lend() {
             let (k, c) = right.pop_front();
+            let slot_key = node.set_key(slot, k);
             let left = node_store.get_mut_inner(left_child_id);
             left.push(slot_key, c);
-
-            node.set_key(slot, k);
 
             Some(())
         } else {
@@ -777,15 +773,15 @@ where
 
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
-        let slot_key = node.key(slot).clone();
+
+        let (result, slot_key) = node.remove_slot_with_right(slot);
 
         // merge right into left
         let mut right = node_store.take_inner(right_child_id);
         let left = node_store.get_mut_inner(left_child_id);
-
         left.merge_next(slot_key, &mut right);
 
-        node.remove_slot_with_right(slot)
+        result
     }
 
     fn rotate_right_for_leaf(
@@ -807,7 +803,8 @@ where
 
         node_store.cache_leaf(right_id);
 
-        node.set_key(slot, new_slot_key);
+        // the prev key is dropped here
+        let _ = node.set_key(slot, new_slot_key);
 
         deleted
     }
@@ -829,7 +826,8 @@ where
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
 
-        parent.set_key(slot, new_slot_key);
+        // the prev key is dropped here
+        let _ = parent.set_key(slot, new_slot_key);
 
         node_store.cache_leaf(left_id);
         deleted
@@ -853,8 +851,8 @@ where
         }
 
         let r = match parent.remove_slot_with_right(slot) {
-            InnerMergeResult::Done => DeleteDescendResult::Done(kv),
-            InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
+            (InnerMergeResult::Done, _removed_k) => DeleteDescendResult::Done(kv),
+            (InnerMergeResult::UnderSize, _removed_k) => DeleteDescendResult::InnerUnderSize(kv),
         };
 
         node_store.cache_leaf(left_leaf_id);
@@ -881,8 +879,8 @@ where
 
         // the merge on inner, it could propagate
         let r = match parent.remove_slot_with_right(slot) {
-            InnerMergeResult::Done => DeleteDescendResult::Done(kv),
-            InnerMergeResult::UnderSize => DeleteDescendResult::InnerUnderSize(kv),
+            (InnerMergeResult::Done, _removed_k) => DeleteDescendResult::Done(kv),
+            (InnerMergeResult::UnderSize, _removed_k) => DeleteDescendResult::InnerUnderSize(kv),
         };
         node_store.cache_leaf(left_leaf_id);
         r
@@ -1223,7 +1221,7 @@ pub trait INode<K: Key> {
     fn key(&self, slot: usize) -> &K;
 
     /// Set the key at `slot`
-    fn set_key(&mut self, slot: usize, key: K);
+    fn set_key(&mut self, slot: usize, key: K) -> K;
 
     /// Get the child id at `idx`
     fn child_id(&self, idx: usize) -> NodeId;
@@ -1261,8 +1259,8 @@ pub trait INode<K: Key> {
     /// Merge the key and its right child id at `slot` with its right sibling
     fn merge_next(&mut self, slot_key: K, right: &mut Self);
 
-    /// Merge children at slot
-    fn remove_slot_with_right(&mut self, slot: usize) -> InnerMergeResult;
+    /// Remove the key at `slot` and it's right child
+    fn remove_slot_with_right(&mut self, slot: usize) -> (InnerMergeResult, K);
 }
 
 /// Leaf node trait
