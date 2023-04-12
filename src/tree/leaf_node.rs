@@ -447,6 +447,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
 
         self.next = right.next;
+        right.size = 0;
 
         unsafe { (k.assume_init_read(), v.assume_init_read()) }
     }
@@ -467,6 +468,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         self.extend(data);
 
         self.next = right.next;
+        right.size = 0;
     }
 
     /// This should never called with same slot

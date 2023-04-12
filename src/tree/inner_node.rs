@@ -331,6 +331,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
                 self.child_area_mut(self_size..self_size + right_size + 1),
             );
             self.size += right.size;
+            right.size = 0;
         }
     }
 
