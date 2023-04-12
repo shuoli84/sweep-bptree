@@ -9,13 +9,23 @@ use std::{
 /// Tree's inner node, it contains a list of keys and a list of child node id
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
-#[derive(Debug, Copy)]
-#[repr(C)]
+#[derive(Debug)]
 pub struct InnerNode<K: Key, const N: usize, const C: usize> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
     child_id: [MaybeUninit<NodeId>; C],
+}
+
+impl<K: Key, const N: usize, const C: usize> Drop for InnerNode<K, N, C> {
+    fn drop(&mut self) {
+        // Satefy: The keys in range ..self.len() is initialized
+        unsafe {
+            for k in self.key_area_mut(..self.len()) {
+                k.assume_init_drop();
+            }
+        }
+    }
 }
 
 impl<K: Key, const N: usize, const C: usize> Clone for InnerNode<K, N, C> {
@@ -26,7 +36,7 @@ impl<K: Key, const N: usize, const C: usize> Clone for InnerNode<K, N, C> {
         for i in 0..self.len() {
             unsafe {
                 *new_key.get_unchecked_mut(i) =
-                    MaybeUninit::new(self.key_area(i).assume_init_read().clone());
+                    MaybeUninit::new(self.key_area(i).assume_init_ref().clone());
             };
         }
 
@@ -118,15 +128,28 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         node
     }
 
+    fn keys(&self) -> &[K] {
+        unsafe {
+            {
+                let slice: &[MaybeUninit<K>] =
+                    self.slot_key.get_unchecked(..usize::from(self.size));
+                // SAFETY: casting `slice` to a `*const [T]` is safe since the caller guarantees that
+                // `slice` is initialized, and `MaybeUninit` is guaranteed to have the same layout as `T`.
+                // The pointer obtained is valid since it refers to memory owned by `slice` which is a
+                // reference and thus guaranteed to be valid for reads.
+                &*(slice as *const [MaybeUninit<K>] as *const [K])
+            }
+        }
+    }
+
     /// returns the child index for k
+    #[inline]
     pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
     where
         K: std::borrow::Borrow<Q>,
         Q: Ord,
     {
-        match unsafe { self.key_area(0..self.size as usize) }
-            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref().borrow() })
-        {
+        match self.keys().binary_search_by_key(&k, |f| f.borrow()) {
             Err(idx) => {
                 // the idx is the place where a matching element could be inserted while maintaining
                 // sorted order. go to left child

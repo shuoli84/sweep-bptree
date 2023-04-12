@@ -1845,6 +1845,56 @@ mod tests {
         (tree, keys)
     }
 
+    struct TestKey {
+        key: i32,
+        counter: Rc<std::sync::atomic::AtomicU64>,
+    }
+
+    impl Ord for TestKey {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.key.cmp(&other.key)
+        }
+    }
+
+    impl PartialOrd for TestKey {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.key.partial_cmp(&other.key)
+        }
+    }
+
+    impl PartialEq for TestKey {
+        fn eq(&self, other: &Self) -> bool {
+            self.key == other.key
+        }
+    }
+
+    impl Eq for TestKey {}
+
+    impl Clone for TestKey {
+        fn clone(&self) -> Self {
+            self.counter
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Self {
+                key: self.key,
+                counter: self.counter.clone(),
+            }
+        }
+    }
+
+    impl TestKey {
+        fn new(key: i32, counter: Rc<std::sync::atomic::AtomicU64>) -> Self {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Self { key, counter }
+        }
+    }
+
+    impl Drop for TestKey {
+        fn drop(&mut self) {
+            self.counter
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
     #[derive(Clone)]
     struct TestValue {
         counter: Rc<std::sync::atomic::AtomicU64>,
@@ -1866,14 +1916,32 @@ mod tests {
     #[test]
     fn test_drop() {
         // test drop
-        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let node_store = NodeStoreVec::<TestKey, TestValue, 8, 9, 6>::new();
         let mut tree = BPlusTree::new(node_store);
-        let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
-        for i in 0..10 {
-            tree.insert(i, TestValue::new(counter.clone()));
+        let drop_counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+        let key_counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
+        for i in 0..100 {
+            tree.insert(
+                TestKey::new(i, key_counter.clone()),
+                TestValue::new(drop_counter.clone()),
+            );
         }
+
+        let key_count_inserted = key_counter.load(std::sync::atomic::Ordering::Relaxed);
+
+        {
+            let another_tree = tree.clone();
+            let key_count_cloned = key_counter.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(key_count_cloned, key_count_inserted * 2);
+            drop(another_tree);
+
+            let key_count_drop_clone = key_counter.load(std::sync::atomic::Ordering::Relaxed);
+            assert_eq!(key_count_drop_clone, key_count_inserted);
+        }
+
         drop(tree);
 
-        assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed), 10);
+        assert_eq!(drop_counter.load(std::sync::atomic::Ordering::Relaxed), 200);
+        assert_eq!(key_counter.load(std::sync::atomic::Ordering::Relaxed), 0);
     }
 }

@@ -7,7 +7,6 @@ use std::{
 };
 
 #[derive(Debug)]
-#[repr(C)]
 pub struct LeafNode<K, V, const N: usize> {
     /// how many data items
     size: u16,
@@ -29,7 +28,7 @@ where
         for i in 0..self.len() {
             unsafe {
                 *new_key.get_unchecked_mut(i) =
-                    MaybeUninit::new(self.key_area(i).assume_init_read().clone());
+                    MaybeUninit::new(self.key_area(i).assume_init_ref().clone());
             };
         }
 
@@ -39,7 +38,7 @@ where
         for i in 0..self.len() {
             unsafe {
                 *new_value.get_unchecked_mut(i) =
-                    MaybeUninit::new(self.value_area(i).assume_init_read().clone());
+                    MaybeUninit::new(self.value_area(i).assume_init_ref().clone());
             };
         }
 
@@ -54,7 +53,7 @@ where
 }
 
 impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
-    pub(crate) fn new() -> Box<Self> {
+    pub fn new() -> Box<Self> {
         let layout = Layout::new::<mem::MaybeUninit<Self>>();
         let ptr: *mut Self = unsafe { alloc(layout).cast() };
         let mut this = unsafe { Box::from_raw(ptr) };
@@ -133,7 +132,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         self.next = id;
     }
 
-    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
+    pub fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
         let mut data = data.into_iter();
         for i in 0..N {
             if let Some((k, v)) = data.next() {
@@ -292,15 +291,16 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
     }
 
+    #[inline]
     pub(crate) fn locate_child_idx<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
     where
         Q: Ord,
         K: std::borrow::Borrow<Q>,
     {
-        unsafe { self.key_area(..self.len()) }
-            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref().borrow() })
+        self.keys().binary_search_by_key(&k, |f| f.borrow())
     }
 
+    #[inline(always)]
     pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
     where
         Q: Ord,
@@ -501,6 +501,20 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         };
         self.size -= 1;
         result
+    }
+
+    fn keys(&self) -> &[K] {
+        unsafe {
+            {
+                let slice: &[MaybeUninit<K>] =
+                    self.slot_key.get_unchecked(..usize::from(self.size));
+                // SAFETY: casting `slice` to a `*const [T]` is safe since the caller guarantees that
+                // `slice` is initialized, and `MaybeUninit` is guaranteed to have the same layout as `T`.
+                // The pointer obtained is valid since it refers to memory owned by `slice` which is a
+                // reference and thus guaranteed to be valid for reads.
+                &*(slice as *const [MaybeUninit<K>] as *const [K])
+            }
+        }
     }
 
     unsafe fn key_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
