@@ -1073,6 +1073,7 @@ pub struct Statistic {
 }
 
 /// Fix action
+#[derive(Debug)]
 enum FixAction {
     RotateRight,
     RotateLeft,
@@ -1848,6 +1849,7 @@ mod tests {
     struct TestKey {
         key: i32,
         counter: Rc<std::sync::atomic::AtomicU64>,
+        panic_flag: Rc<std::sync::atomic::AtomicU64>,
     }
 
     impl Ord for TestKey {
@@ -1876,20 +1878,31 @@ mod tests {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Self {
                 key: self.key,
+                panic_flag: self.panic_flag.clone(),
                 counter: self.counter.clone(),
             }
         }
     }
 
     impl TestKey {
-        fn new(key: i32, counter: Rc<std::sync::atomic::AtomicU64>) -> Self {
+        fn new(
+            key: i32,
+            counter: Rc<std::sync::atomic::AtomicU64>,
+            panic_flag: Rc<std::sync::atomic::AtomicU64>,
+        ) -> Self {
             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Self { key, counter }
+            Self {
+                key,
+                counter,
+                panic_flag,
+            }
         }
     }
 
     impl Drop for TestKey {
         fn drop(&mut self) {
+            self.panic_flag
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
             self.counter
                 .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         }
@@ -1915,23 +1928,31 @@ mod tests {
 
     #[test]
     fn test_drop() {
+        let count: u64 = 16000;
         // test drop
-        let node_store = NodeStoreVec::<TestKey, TestValue, 8, 9, 6>::new();
+        let node_store = NodeStoreVec::<TestKey, TestValue, 4, 5, 4>::new();
         let mut tree = BPlusTree::new(node_store);
         let drop_counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
         let key_counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
-        for i in 0..100 {
+        let panic_flag = Rc::new(std::sync::atomic::AtomicU64::new(0));
+
+        macro_rules! get {
+            ($id: ident) => {
+                $id.load(std::sync::atomic::Ordering::Relaxed)
+            };
+        }
+
+        for i in 0..count {
             tree.insert(
-                TestKey::new(i, key_counter.clone()),
+                TestKey::new(i as i32, key_counter.clone(), panic_flag.clone()),
                 TestValue::new(drop_counter.clone()),
             );
         }
 
-        let key_count_inserted = key_counter.load(std::sync::atomic::Ordering::Relaxed);
-
         {
+            let key_count_inserted = key_counter.load(std::sync::atomic::Ordering::Relaxed);
             let another_tree = tree.clone();
-            let key_count_cloned = key_counter.load(std::sync::atomic::Ordering::Relaxed);
+            let key_count_cloned = get!(key_counter);
             assert_eq!(key_count_cloned, key_count_inserted * 2);
             drop(another_tree);
 
@@ -1939,9 +1960,29 @@ mod tests {
             assert_eq!(key_count_drop_clone, key_count_inserted);
         }
 
+        {
+            let keys = tree.iter().map(|(k, _v)| k.clone()).collect::<Vec<_>>();
+            for k in keys {
+                panic_flag.store(1, std::sync::atomic::Ordering::Relaxed);
+
+                let prev = get!(key_counter);
+                assert!(tree.remove(&k).is_some());
+                let delta = prev - get!(key_counter);
+                if delta > 3 {
+                    panic!();
+                }
+
+                // one for k
+                panic_flag.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+
         drop(tree);
 
-        assert_eq!(drop_counter.load(std::sync::atomic::Ordering::Relaxed), 200);
+        assert_eq!(
+            drop_counter.load(std::sync::atomic::Ordering::Relaxed),
+            count * 2,
+        );
         assert_eq!(key_counter.load(std::sync::atomic::Ordering::Relaxed), 0);
     }
 }
