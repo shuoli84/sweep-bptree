@@ -34,7 +34,11 @@ pub struct Point3<const N: usize> {
     pub x: f64,
     pub y: f64,
     pub z: f64,
-    fill: [u8; N],
+    // used to tune Point3's key size.
+    // If the size is power of 2, then there are about 4% perf gain. The reason
+    // is, (for m1 chip) the compiler will use shift+add to replace madd, which
+    // has higher throughput.
+    _fill: [u8; N],
 }
 
 impl<const N: usize> PartialEq for Point3<N> {
@@ -95,7 +99,7 @@ impl<const N: usize> TestKey for Point3<N> {
             x: i as f64,
             y: i as f64,
             z: i as f64,
-            fill: [0; N],
+            _fill: [0; N],
         }
     }
 
