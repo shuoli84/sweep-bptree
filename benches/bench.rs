@@ -13,7 +13,7 @@ const RAND_SEED: u64 = 123;
 type NodeStoreBench<K> = NodeStoreVec<K, Value, 64, 65, 32>;
 
 fn bench_ordered_insert<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("ordered_insert_{}", K::name()));
+    let mut group = c.benchmark_group(format!("ordered_insert/{}", K::name()));
 
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
@@ -28,7 +28,7 @@ fn bench_ordered_insert<K: TestKey>(c: &mut Criterion) {
         });
 
         group.bench_with_input(
-            BenchmarkId::new("bptree bulk", count),
+            BenchmarkId::new("bptree_bulk", count),
             &count,
             |b, count| {
                 b.iter(|| {
@@ -60,7 +60,7 @@ fn bench_ordered_insert<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_random_insert<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("random_insert_{}", K::name()));
+    let mut group = c.benchmark_group(format!("random_insert/{}", K::name()));
 
     for count in COUNTS {
         let mut keys = vec![];
@@ -85,7 +85,7 @@ fn bench_random_insert<K: TestKey>(c: &mut Criterion) {
             });
         });
 
-        group.bench_function(BenchmarkId::new("bptree sort_load", count), |b| {
+        group.bench_function(BenchmarkId::new("bptree_sort_load", count), |b| {
             b.iter_batched(
                 || keys.clone(),
                 |mut keys| {
@@ -114,7 +114,7 @@ fn bench_random_insert<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_clone<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("clone_{}", K::name()));
+    let mut group = c.benchmark_group(format!("clone/{}", K::name()));
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
             let tree = create_bptree::<K>(*count);
@@ -129,7 +129,7 @@ fn bench_clone<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_drop<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("drop_{}", K::name()));
+    let mut group = c.benchmark_group(format!("drop/{}", K::name()));
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
             b.iter_batched(
@@ -154,7 +154,7 @@ fn bench_drop<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_iter<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("iter_{}", K::name()));
+    let mut group = c.benchmark_group(format!("iter/{}", K::name()));
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
             let tree = create_bptree::<K>(*count);
@@ -176,7 +176,7 @@ fn bench_iter<K: TestKey>(c: &mut Criterion) {
 
 fn bench_into_iter<K: TestKey>(c: &mut Criterion) {
     // note: into_iter is slower than iter, mostly due to heavy drop
-    let mut group = c.benchmark_group(format!("into_iter_{}", K::name()));
+    let mut group = c.benchmark_group(format!("into_iter/{}", K::name()));
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
             b.iter_batched(
@@ -205,7 +205,7 @@ fn bench_into_iter<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_ordered_remove<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("ordered_remove_{}", K::name()));
+    let mut group = c.benchmark_group(format!("ordered_remove/{}", K::name()));
 
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
@@ -239,7 +239,7 @@ fn bench_ordered_remove<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_random_remove<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("random_remove_{}", K::name()));
+    let mut group = c.benchmark_group(format!("random_remove/{}", K::name()));
 
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
@@ -285,7 +285,7 @@ fn bench_random_remove<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_ordered_get<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("ordered_get_{}", K::name()));
+    let mut group = c.benchmark_group(format!("ordered_get/{}", K::name()));
 
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
@@ -311,7 +311,7 @@ fn bench_ordered_get<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_random_get<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("random_get_{}", K::name()));
+    let mut group = c.benchmark_group(format!("random_get/{}", K::name()));
 
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
@@ -345,7 +345,7 @@ fn bench_random_get<K: TestKey>(c: &mut Criterion) {
 }
 
 fn bench_cursor<K: TestKey>(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("cursor_{}", K::name()));
+    let mut group = c.benchmark_group(format!("cursor/{}", K::name()));
     for count in COUNTS {
         group.bench_with_input(BenchmarkId::new("bptree", count), &count, |b, count| {
             let tree = create_bptree::<K>(*count);
