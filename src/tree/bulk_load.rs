@@ -1,6 +1,7 @@
-use crate::{INode, LNode, LeafNodeId, NodeId, NodeStore};
+use super::{INode, LNode, LeafNodeId, NodeId, NodeStore};
 
 impl<S: NodeStore> crate::BPlusTree<S> {
+    /// bulk load data into a new `BPlusTree`, the loaded tree's leaf with fill rate 1.0
     pub fn bulk_load(data: Vec<(S::K, S::V)>) -> Self {
         let mut node_store = S::default();
 
@@ -98,6 +99,28 @@ mod tests {
     fn test_bulk_load() {
         type Tree = BPlusTree<NodeStoreVec<i32, i32, 4, 5, 4>>;
         let data = (0..400).map(|i| (i, i * 2)).collect::<Vec<_>>();
+        let loaded_tree = Tree::bulk_load(data.clone());
+        let mut inserted_tree = Tree::new(NodeStoreVec::default());
+        for (k, v) in data.clone().into_iter() {
+            inserted_tree.insert(k, v);
+        }
+        assert_eq!(loaded_tree.len(), inserted_tree.len());
+
+        for (k, v) in &data {
+            assert_eq!(loaded_tree.get(k).unwrap(), v);
+        }
+
+        let loaded_kvs = loaded_tree.into_iter().collect::<Vec<_>>();
+        let inserted_kvs = inserted_tree.into_iter().collect::<Vec<_>>();
+        assert_eq!(loaded_kvs, inserted_kvs);
+    }
+
+    #[test]
+    fn test_bulk_load_string() {
+        type Tree = BPlusTree<NodeStoreVec<String, i32, 4, 5, 4>>;
+        let data = (0..400)
+            .map(|i| (format!("{i:010}"), i * 2))
+            .collect::<Vec<_>>();
         let loaded_tree = Tree::bulk_load(data.clone());
         let mut inserted_tree = Tree::new(NodeStoreVec::default());
         for (k, v) in data.clone().into_iter() {

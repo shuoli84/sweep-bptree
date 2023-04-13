@@ -1,7 +1,7 @@
+use crate::tree::LNode;
+use crate::tree::LeafNodeId;
 use crate::BPlusTree;
 use crate::Key;
-use crate::LNode;
-use crate::LeafNodeId;
 use crate::NodeStore;
 
 /// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
@@ -17,7 +17,8 @@ pub struct Cursor<K: Key> {
     offset_hint: usize,
 }
 
-impl<K: Key> Cursor<K> {
+impl<'k, K: Key + 'k> Cursor<K> {
+    /// Create a new cursor
     #[inline(always)]
     pub(crate) fn new(k: K, leaf_id: LeafNodeId, offset: usize) -> Self {
         Self {
@@ -34,7 +35,10 @@ impl<K: Key> Cursor<K> {
     }
 
     /// Create a `Cursor` pointing to the first key-value pair in the tree.
-    pub fn first<'a, 'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
+    pub fn first<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let leaf_id = tree.first_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
 
@@ -52,7 +56,10 @@ impl<K: Key> Cursor<K> {
 
     /// Create a `Cursor` pointing to the last key-value pair in the tree. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just larger than the deleted key.
-    pub fn last<'a, 'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)> {
+    pub fn last<'b, S: NodeStore<K = K>>(tree: &'b BPlusTree<S>) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let leaf_id = tree.last_leaf()?;
         let leaf = tree.node_store.get_leaf(leaf_id);
         let kv = leaf.data_at(leaf.len() - 1);
@@ -78,7 +85,10 @@ impl<K: Key> Cursor<K> {
     pub fn prev_with_value<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
-    ) -> Option<(Self, &'b S::V)> {
+    ) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let (leaf_id, leaf) = self.locate_leaf(tree)?;
 
         let (offset, leaf) = match leaf.try_data_at(self.offset_hint) {
@@ -112,7 +122,7 @@ impl<K: Key> Cursor<K> {
         let kv = leaf.data_at(offset);
         Some((
             Self {
-                k: *kv.0,
+                k: kv.0.clone(),
                 leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
@@ -130,7 +140,10 @@ impl<K: Key> Cursor<K> {
     pub fn next_with_value<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
-    ) -> Option<(Self, &'b S::V)> {
+    ) -> Option<(Self, &'b S::V)>
+    where
+        'k: 'b,
+    {
         let (leaf_id, leaf) = self.locate_leaf(tree)?;
 
         let next_offset = match leaf.try_data_at(self.offset_hint) {
@@ -148,7 +161,7 @@ impl<K: Key> Cursor<K> {
             let kv = leaf.data_at(next_offset);
             Some((
                 Self {
-                    k: *kv.0,
+                    k: kv.0.clone(),
                     leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
@@ -161,7 +174,7 @@ impl<K: Key> Cursor<K> {
 
             Some((
                 Self {
-                    k: *kv.0,
+                    k: kv.0.clone(),
                     leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },
@@ -176,10 +189,10 @@ impl<K: Key> Cursor<K> {
     }
 
     /// get the value attached to cursor, if the underlying key is deleted, this returns None
-    pub fn value<'a, 'b, S: NodeStore<K = K>>(
-        &'a self,
-        tree: &'b BPlusTree<S>,
-    ) -> Option<&'b S::V> {
+    pub fn value<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<&'b S::V>
+    where
+        'k: 'b,
+    {
         let (_, leaf) = self.locate_leaf(tree)?;
 
         match leaf.try_data_at(self.offset_hint) {
@@ -213,11 +226,10 @@ impl<K: Key> Cursor<K> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
+    use super::*;
+    use crate::{tree::tests, *};
     use rand::seq::SliceRandom;
-
-    use crate::*;
+    use std::collections::BTreeSet;
 
     #[test]
     fn test_cursor_next() {

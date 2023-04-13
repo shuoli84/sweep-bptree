@@ -1,13 +1,13 @@
-use crate::*;
+use super::*;
 use std::{
     alloc::{alloc, Layout},
+    borrow::Borrow,
     mem::{self, MaybeUninit},
     slice::SliceIndex,
 };
 
 #[derive(Debug)]
-#[repr(C)]
-pub struct LeafNode<K: Key, V: Value, const N: usize> {
+pub struct LeafNode<K, V, const N: usize> {
     /// how many data items
     size: u16,
     slot_key: [MaybeUninit<K>; N],
@@ -17,21 +17,34 @@ pub struct LeafNode<K: Key, V: Value, const N: usize> {
     next: Option<LeafNodeId>,
 }
 
-impl<K: Key, V: Value, const N: usize> Clone for LeafNode<K, V, N> {
+impl<K: Key, V, const N: usize> Clone for LeafNode<K, V, N>
+where
+    V: Clone,
+{
     fn clone(&self) -> Self {
+        // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
+        let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
+
+        for i in 0..self.len() {
+            unsafe {
+                *new_key.get_unchecked_mut(i) =
+                    MaybeUninit::new(self.key_area(i).assume_init_ref().clone());
+            };
+        }
+
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_value = unsafe { MaybeUninit::<[MaybeUninit<V>; N]>::uninit().assume_init() };
 
         for i in 0..self.len() {
             unsafe {
                 *new_value.get_unchecked_mut(i) =
-                    MaybeUninit::new(self.value_area(i).assume_init_read().clone());
+                    MaybeUninit::new(self.value_area(i).assume_init_ref().clone());
             };
         }
 
         Self {
             size: self.size.clone(),
-            slot_key: self.slot_key.clone(),
+            slot_key: new_key,
             slot_value: new_value,
             prev: self.prev.clone(),
             next: self.next.clone(),
@@ -39,8 +52,8 @@ impl<K: Key, V: Value, const N: usize> Clone for LeafNode<K, V, N> {
     }
 }
 
-impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
-    pub(crate) fn new() -> Box<Self> {
+impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
+    pub fn new() -> Box<Self> {
         let layout = Layout::new::<mem::MaybeUninit<Self>>();
         let ptr: *mut Self = unsafe { alloc(layout).cast() };
         let mut this = unsafe { Box::from_raw(ptr) };
@@ -75,18 +88,20 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.size > Self::minimum_size()
     }
 
-    pub fn in_range(&self, k: &K) -> bool {
-        debug_assert!(self.len() > 0);
-
+    pub fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>,
+    {
         let is_lt_start = match self.prev {
-            Some(_) => k.lt(unsafe { self.key_area(0).assume_init_ref() }),
+            Some(_) => k.lt(unsafe { self.key_area(0).assume_init_ref().borrow() }),
             None => false,
         };
         if is_lt_start {
             return false;
         }
         let is_gt_end = match self.next {
-            Some(_) => k.gt(unsafe { self.key_area(self.len() - 1).assume_init_ref() }),
+            Some(_) => k.gt(unsafe { self.key_area(self.len() - 1).assume_init_ref().borrow() }),
             None => false,
         };
         !is_gt_end
@@ -95,11 +110,11 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
         debug_assert!(self.len() > 0);
         let start = match self.prev {
-            Some(_) => Some(unsafe { self.key_area(0).assume_init_read() }),
+            Some(_) => Some(unsafe { self.key_area(0).assume_init_ref().clone() }),
             None => None,
         };
         let end = match self.next {
-            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_read() }),
+            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() }),
             None => None,
         };
         (start, end)
@@ -117,7 +132,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.next = id;
     }
 
-    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
+    pub fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
         let mut data = data.into_iter();
         for i in 0..N {
             if let Some((k, v)) = data.next() {
@@ -162,12 +177,15 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     #[cfg(test)]
-    pub(crate) fn data_vec(&self) -> Vec<(K, V)> {
-        self.iter().map(|(k, v)| (*k, v.clone())).collect()
+    pub(crate) fn data_vec(&self) -> Vec<(K, V)>
+    where
+        V: Clone,
+    {
+        self.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     }
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
-    pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
+    pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
         match self.locate_child_idx(&k) {
             Ok(idx) => {
                 // update existing item
@@ -184,7 +202,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
                     self.size = new_len as u16;
                     LeafUpsertResult::Inserted
                 } else {
-                    LeafUpsertResult::IsFull(idx, v)
+                    LeafUpsertResult::IsFull(idx, k, v)
                 }
             }
         }
@@ -251,7 +269,10 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     /// Delete an item from LeafNode
-    pub(crate) fn delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {
+    pub(crate) fn delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    where
+        K: Borrow<Q>,
+    {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 if self.able_to_lend() {
@@ -271,12 +292,20 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 
     #[inline]
-    pub(crate) fn locate_child_idx(&self, k: &K) -> Result<usize, usize> {
-        unsafe { self.key_area(..self.len()) }
-            .binary_search_by_key(&k, |f| unsafe { f.assume_init_ref() })
+    pub(crate) fn locate_child_idx<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>,
+    {
+        self.keys().binary_search_by_key(&k, |f| f.borrow())
     }
 
-    pub(crate) fn locate_child(&self, k: &K) -> (usize, Option<&V>) {
+    #[inline(always)]
+    pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 // exact match, go to right child.
@@ -295,7 +324,11 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    pub(crate) fn locate_child_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
+    pub(crate) fn locate_child_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         match self.locate_child_idx(k) {
             Ok(idx) => {
                 // exact match, go to right child.
@@ -414,6 +447,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         }
 
         self.next = right.next;
+        right.size = 0;
 
         unsafe { (k.assume_init_read(), v.assume_init_read()) }
     }
@@ -434,6 +468,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         self.extend(data);
 
         self.next = right.next;
+        right.size = 0;
     }
 
     /// This should never called with same slot
@@ -442,7 +477,7 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
 
         // safety: slot is checked against self.len()
         unsafe {
-            let k = self.key_area(slot).clone();
+            let k = std::mem::replace(self.key_area_mut(slot), MaybeUninit::uninit());
             let v = std::mem::replace(self.value_area_mut(slot), MaybeUninit::uninit());
             // special care must be taken to avoid double drop
             (k.assume_init_read(), v.assume_init_read())
@@ -468,6 +503,20 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
         };
         self.size -= 1;
         result
+    }
+
+    fn keys(&self) -> &[K] {
+        unsafe {
+            {
+                let slice: &[MaybeUninit<K>] =
+                    self.slot_key.get_unchecked(..usize::from(self.size));
+                // SAFETY: casting `slice` to a `*const [T]` is safe since the caller guarantees that
+                // `slice` is initialized, and `MaybeUninit` is guaranteed to have the same layout as `T`.
+                // The pointer obtained is valid since it refers to memory owned by `slice` which is a
+                // reference and thus guaranteed to be valid for reads.
+                &*(slice as *const [MaybeUninit<K>] as *const [K])
+            }
+        }
     }
 
     unsafe fn key_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
@@ -511,10 +560,10 @@ impl<K: Key, V: Value, const N: usize> LeafNode<K, V, N> {
     }
 }
 
-pub enum LeafUpsertResult<V> {
+pub enum LeafUpsertResult<K, V> {
     Inserted,
     Updated(V),
-    IsFull(usize, V),
+    IsFull(usize, K, V),
 }
 
 pub enum LeafDeleteResult<K, V> {
@@ -526,7 +575,7 @@ pub enum LeafDeleteResult<K, V> {
     UnderSize(usize),
 }
 
-impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
+impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
     fn new() -> Box<Self> {
         Self::new()
     }
@@ -567,8 +616,11 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         Self::try_data_at(self, idx)
     }
 
-    #[inline(always)]
-    fn in_range(&self, k: &K) -> bool {
+    fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    where
+        Q: Ord,
+        K: std::borrow::Borrow<Q>,
+    {
         Self::in_range(self, k)
     }
 
@@ -585,7 +637,7 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         LeafNode::able_to_lend(self)
     }
 
-    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<V> {
+    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
         LeafNode::try_upsert(self, k, v)
     }
 
@@ -599,19 +651,35 @@ impl<K: Key, V: Value, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> 
         LeafNode::split_new_leaf(self, insert_idx, item, new_leaf_id, self_leaf_id)
     }
 
-    fn locate_slot(&self, k: &K) -> Result<usize, usize> {
+    fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         Self::locate_child_idx(&self, k)
     }
 
-    fn locate_slot_with_value(&self, k: &K) -> (usize, Option<&V>) {
+    fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    where
+        Q: Ord,
+        K: Borrow<Q>,
+    {
         Self::locate_child(self, k)
     }
 
-    fn locate_slot_mut(&mut self, k: &K) -> (usize, Option<&mut V>) {
+    fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         Self::locate_child_mut(self, k)
     }
 
-    fn try_delete(&mut self, k: &K) -> LeafDeleteResult<K, V> {
+    fn try_delete<Q: ?Sized>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    where
+        K: Borrow<Q>,
+        Q: Ord,
+    {
         Self::delete(self, k)
     }
 
