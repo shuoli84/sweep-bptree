@@ -1,41 +1,53 @@
 # Sweep-bptree(under development)
 
-In memory locality aware b+ tree, faster for ordered access.
-
-## Motivation
-
-While developing [poly2tri-rs](https://github.com/shuoli84/poly2tri-rs), I need a better datastructure to maintain "Sweeping Front/Advancing Front". It should:
-
-1. performant to insert and remove.
-2. performant for query, and the query pattern is more local than random. That means the query is more likely to be close to the last accessed node.
-3. Provide floating cursor support, so I can keep a cursor around and modify the tree underlying.
-
-Though it is designed for "Sweeping Front/Advancing Front", it is a general purpose tree, so can be used in other scenarios.
-
-### Why not splaytree
-
-Splaytree is binary tree, so it has relative large number of nodes, which is bad for cache locality.
-
-### Why not std btree
-
-`std::collections::BTreeMap`'s Cursor support is not stablized yet.
-
-Also BTree's value is stored in all nodes, that makes cache invalidate more frequently.
+In memory general purpose b+ tree.
 
 ## Features(Why use this)
 
-* Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered(local) access. (Check out benchmark)
+* Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered/local access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
 * Bulk load, currently the most performant way to build a tree. (Check out benchmark)
 * Faster iteration than `std::collections::BTreeMap`, mostly because it has large leaf node and don't need to visit inner node.
+* Friendlier to non-trivial keys. `std::collections::BTreeMap`'s in-node key searching use a for loop, which has better performance for trivial cmp keys. But it issues more cmp operations. (TODO: add numbers)
 
-## Unsafe
+## Install
 
-This crate utilize unsafe code to improve performance. Mostly for memory initialize, copy and move operations. It is tested with fuzzy testing.
+```toml
+[dependencies]
+sweep-bptree = "0.3"
+```
 
 ## Example
 
-### crud
+### Map
+
+``` rust
+use sweep_bptree::BPlusTreeMap;
+
+let mut map = BPlusTreeMap::<i32, i32>::new();
+map.insert(1, 2);
+
+assert_eq!(map.get(&1).unwrap(), &2);
+assert!(map.get(&2).is_none());
+```
+
+### Set
+
+```rust
+use sweep_bptree::BPlusTreeSet;
+
+let mut set = BPlusTreeSet::<i32>::new();
+set.insert(1);
+assert!(set.contains(&1));
+set.remove(&1);
+assert!(!set.contains(&1));
+```
+
+### Tree
+
+For adanced usage, use `BPlusTree` directly.
+
+#### crud
 
 ```rust
 use sweep_bptree::{BPlusTree, NodeStoreVec};
@@ -56,7 +68,7 @@ assert_eq!(tree.remove(&3).unwrap(), (1.0, 1.0));
 assert!(tree.is_empty());
 ```
 
-### Create multiple owned cursors
+#### Create multiple owned cursors
 
 ``` rust
 use sweep_bptree::{BPlusTree, NodeStoreVec};
@@ -87,6 +99,10 @@ tree.insert(0, (100., 100.));
 // now cursor_1 should retrieve the new value
 assert_eq!(cursor_1.value(&tree).unwrap().0, 100.);
 ```
+
+## Unsafe
+
+This crate utilize unsafe code to improve performance. Mostly for memory initialize, copy and move operations. It is tested with fuzzy testing.
 
 ## Benchmark
 

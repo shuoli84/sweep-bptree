@@ -143,28 +143,6 @@ fn bench_leaf_9_32(c: &mut Criterion) {
 }
 
 #[inline(never)]
-fn bench_leaf_35_32(c: &mut Criterion) {
-    type K = Point3<35>;
-    const N: usize = 32;
-    type V = Value;
-
-    let mut group = c.benchmark_group(format!("a_leaf_node_35_32"));
-
-    let keys = (0..128).map(|i| K::from_i(i)).collect::<Vec<_>>();
-
-    let mut node = LeafNode::<K, Value, N>::new();
-    node.set_data((0..N).map(|i| (K::from_i(i), V::default())));
-
-    group.bench_function("locate_child", |b| {
-        b.iter(|| {
-            bench_leaf_inner_35_32(&keys, &node);
-        })
-    });
-
-    group.finish();
-}
-
-#[inline(never)]
 fn bench_leaf_inner_0_32(keys: &[Point3<0>], node: &LeafNode<Point3<0>, Value, 32>) {
     let mut c = 0;
     for key in keys {
@@ -175,8 +153,6 @@ fn bench_leaf_inner_0_32(keys: &[Point3<0>], node: &LeafNode<Point3<0>, Value, 3
     }
     assert!(c > 0);
 }
-
-struct W(Point3<9>);
 
 #[inline(never)]
 fn bench_leaf_inner_1_32(keys: &[Point3<1>], node: &LeafNode<Point3<1>, Value, 32>) {
@@ -204,18 +180,6 @@ fn bench_leaf_inner_8_32(keys: &[Point3<8>], node: &LeafNode<Point3<8>, Value, 3
 
 #[inline(never)]
 fn bench_leaf_inner_9_32(keys: &[Point3<9>], node: &LeafNode<Point3<9>, Value, 32>) {
-    let mut c = 0;
-    for key in keys {
-        match node.locate_slot(&key) {
-            Ok(_) => c += 1,
-            Err(_) => {}
-        }
-    }
-    assert!(c > 0);
-}
-
-#[inline(never)]
-fn bench_leaf_inner_35_32(keys: &[Point3<35>], node: &LeafNode<Point3<35>, Value, 32>) {
     let mut c = 0;
     for key in keys {
         match node.locate_slot(&key) {
