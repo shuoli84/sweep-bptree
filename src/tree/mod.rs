@@ -16,6 +16,7 @@ pub use node_stores::*;
 
 use self::visit_stack::VisitStackT;
 mod bulk_load;
+mod key_search;
 mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
