@@ -22,3 +22,10 @@ harness = false
 [[bench]]
 name = "bench_node"
 harness = false
+
+[[bench]]
+name = "searcher"
+harness = false
+
+[profile.release]
+opt-level = 3
