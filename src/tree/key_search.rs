@@ -12,7 +12,7 @@ pub struct BinarySearch<K>(std::marker::PhantomData<K>);
 impl<K: Ord> KeySearcher for BinarySearch<K> {
     type Key = K;
 
-    #[inline(never)]
+    // #[inline(never)]
     fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
         keys.binary_search(k)
     }
@@ -26,35 +26,28 @@ fn search<K: Ord, const N: usize>(keys: &[K], k: &K) -> Result<usize, usize> {
     loop {
         len /= 2;
         let pivot = unsafe { keys.get_unchecked(start + len - 1) };
-        let cmp = pivot.partial_cmp(k);
+        let cmp = pivot.cmp(k);
 
-        if matches!(cmp, Some(Ordering::Less)) {
+        if matches!(cmp, Ordering::Less) {
             start += len;
         }
 
         if len == 1 {
             let pivot = unsafe { keys.get_unchecked(start) };
-            let cmp = pivot.partial_cmp(k);
+            let cmp = pivot.cmp(k);
 
             return match cmp {
-                Some(Ordering::Greater) => Err(start),
-                Some(Ordering::Equal) => Ok(start),
-                Some(Ordering::Less) => {
+                Ordering::Greater => Err(start),
+                Ordering::Equal => Ok(start),
+                Ordering::Less => {
                     start += len;
                     let pivot = unsafe { keys.get_unchecked(start) };
-                    let cmp = pivot.partial_cmp(k);
+                    let cmp = pivot.cmp(k);
                     match cmp {
-                        Some(Ordering::Equal) => Ok(start),
-                        Some(Ordering::Less) => Err(start),
-                        Some(Ordering::Greater) => Err(start),
-
-                        None => {
-                            unreachable!()
-                        }
+                        Ordering::Equal => Ok(start),
+                        Ordering::Less => Err(start),
+                        Ordering::Greater => Err(start),
                     }
-                }
-                None => {
-                    unreachable!()
                 }
             };
         }
@@ -64,11 +57,8 @@ fn search<K: Ord, const N: usize>(keys: &[K], k: &K) -> Result<usize, usize> {
 impl<K: Ord + std::fmt::Debug> KeySearcher for BranchlessBinarySearch<K> {
     type Key = K;
 
-    #[inline(never)]
+    // #[inline(never)]
     fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
-        // if keys.len() >= 64 {
-        //     search::<_, 64>(keys, k)
-        // } else if keys.len() >= 48 {
         if keys.len() >= 48 {
             match search::<_, 48>(&keys[..48], &k) {
                 Ok(idx) => Ok(idx),
@@ -78,8 +68,17 @@ impl<K: Ord + std::fmt::Debug> KeySearcher for BranchlessBinarySearch<K> {
                     Err(idx) => Err(48 + idx),
                 },
             }
+        } else if keys.len() >= 32 {
+            match search::<_, 32>(&keys[..32], &k) {
+                Ok(idx) => Ok(idx),
+                Err(idx) if idx < 31 => Err(idx),
+                _ => match keys[32..].binary_search(k) {
+                    Ok(idx) => Ok(32 + idx),
+                    Err(idx) => Err(32 + idx),
+                },
+            }
         } else {
-            search::<_, 64>(keys, k)
+            keys.binary_search(k)
         }
     }
 }
@@ -89,39 +88,31 @@ pub struct Branchless2Search<K>(std::marker::PhantomData<K>);
 impl<K: Ord> KeySearcher for Branchless2Search<K> {
     type Key = K;
 
-    #[inline(never)]
+    // #[inline(never)]
     fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
         let mut start = 0;
-        let mut len = keys.len();
-        loop {
-            len /= 2;
-            let pivot = unsafe { keys.get_unchecked(start + len - 1) };
+        let mut len = 64;
+        let data_len = keys.len();
 
-            let cmp = pivot.cmp(k);
+        for _ in 0..6 {
+            len /= 2;
+            let cmp = if start + len > data_len {
+                Ordering::Greater
+            } else {
+                let pivot = unsafe { keys.get_unchecked(start + len - 1) };
+                pivot.cmp(k)
+            };
 
             if matches!(cmp, Ordering::Less) {
                 start += len;
             }
+        }
 
-            if len == 1 {
-                let pivot = unsafe { keys.get_unchecked(start) };
-                let cmp = pivot.cmp(k);
-
-                return match cmp {
-                    Ordering::Greater => Err(start),
-                    Ordering::Equal => Ok(start),
-                    Ordering::Less => {
-                        start += len;
-                        let pivot = unsafe { keys.get_unchecked(start) };
-                        let cmp = pivot.cmp(k);
-                        match cmp {
-                            Ordering::Equal => Ok(start),
-                            Ordering::Less => Err(start),
-                            Ordering::Greater => Err(start),
-                        }
-                    }
-                };
-            }
+        let pivot = unsafe { keys.get_unchecked(start) };
+        match pivot.cmp(k) {
+            Ordering::Less => Err(start + 1),
+            Ordering::Equal => Ok(start),
+            Ordering::Greater => Err(start),
         }
     }
 }
@@ -195,6 +186,10 @@ mod tests {
         assert_eq!(S::search(&keys, &4), Ok(1));
         assert_eq!(S::search(&keys, &5), Err(2));
         assert_eq!(S::search(&keys, &6), Ok(2));
+        assert_eq!(S::search(&keys, &7), Err(3));
+        assert_eq!(S::search(&keys, &8), Ok(3));
+        assert_eq!(S::search(&keys, &9), Err(4));
+        assert_eq!(S::search(&keys, &10), Ok(4));
         assert_eq!(S::search(&keys, &128), Ok(63));
         assert_eq!(S::search(&keys, &129), Err(64));
         assert_eq!(S::search(&keys, &130), Err(64));
