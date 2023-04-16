@@ -96,35 +96,29 @@ impl<K: Ord> KeySearcher for Branchless2Search<K> {
         loop {
             len /= 2;
             let pivot = unsafe { keys.get_unchecked(start + len - 1) };
-            let cmp = pivot.partial_cmp(k);
 
-            if matches!(cmp, Some(Ordering::Less)) {
+            let cmp = pivot.cmp(k);
+
+            if matches!(cmp, Ordering::Less) {
                 start += len;
             }
 
             if len == 1 {
                 let pivot = unsafe { keys.get_unchecked(start) };
-                let cmp = pivot.partial_cmp(k);
+                let cmp = pivot.cmp(k);
 
                 return match cmp {
-                    Some(Ordering::Greater) => Err(start),
-                    Some(Ordering::Equal) => Ok(start),
-                    Some(Ordering::Less) => {
+                    Ordering::Greater => Err(start),
+                    Ordering::Equal => Ok(start),
+                    Ordering::Less => {
                         start += len;
                         let pivot = unsafe { keys.get_unchecked(start) };
-                        let cmp = pivot.partial_cmp(k);
+                        let cmp = pivot.cmp(k);
                         match cmp {
-                            Some(Ordering::Equal) => Ok(start),
-                            Some(Ordering::Less) => Err(start),
-                            Some(Ordering::Greater) => Err(start),
-
-                            None => {
-                                unreachable!()
-                            }
+                            Ordering::Equal => Ok(start),
+                            Ordering::Less => Err(start),
+                            Ordering::Greater => Err(start),
                         }
-                    }
-                    None => {
-                        unreachable!()
                     }
                 };
             }
