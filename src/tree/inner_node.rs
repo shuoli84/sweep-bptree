@@ -1,3 +1,5 @@
+use crate::key_search::{KeySearcher, UnrolledBinarySearch};
+
 use super::*;
 use std::alloc::alloc;
 use std::slice::SliceIndex;
@@ -149,7 +151,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         K: std::borrow::Borrow<Q>,
         Q: Ord,
     {
-        match self.keys().binary_search_by_key(&k, |f| f.borrow()) {
+        match UnrolledBinarySearch::<_, N>::search(self.keys(), k) {
             Err(idx) => {
                 // the idx is the place where a matching element could be inserted while maintaining
                 // sorted order. go to left child

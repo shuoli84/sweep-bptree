@@ -1,3 +1,5 @@
+use crate::key_search::{KeySearcher, UnrolledBinarySearch};
+
 use super::*;
 use std::{
     alloc::{alloc, Layout},
@@ -297,7 +299,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         Q: Ord,
         K: std::borrow::Borrow<Q>,
     {
-        self.keys().binary_search_by_key(&k, |f| f.borrow())
+        UnrolledBinarySearch::<_, N>::search(self.keys(), k)
     }
 
     #[inline(always)]
@@ -768,6 +770,7 @@ mod tests {
             assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
         }
     }
+
     #[test]
     fn test_in_range() {
         let mut leaf = LeafNode::<i64, i64, 4>::new();

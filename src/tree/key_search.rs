@@ -1,106 +1,66 @@
-use std::cmp::Ordering;
+//! In order to optimize binary search, there are several ways:
+//! 1. branchless
+//! 2. unroll loops to reduce branch mis-prediction
+//! 3. utilize cpu pipeline to reduce overall time cost
+//! 
+//! I've tried 1. and 3. but the result is not optimal, it could be my impl is
+//! not good enough. But I get better result for approach 2. That's `UnrolledBinarySearch`
+use std::{borrow::Borrow, cmp::Ordering};
 
+/// A trait to abstract the key search algorithm
 pub trait KeySearcher {
     type Key: Ord;
 
     /// search the k in search, returns same result as binary search
-    fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize>;
+    fn search<Q: Ord + ?Sized>(keys: &[Self::Key], k: &Q) -> Result<usize, usize>
+    where
+        Self::Key: Borrow<Q>;
 }
 
+/// Standard binary search
 pub struct BinarySearch<K>(std::marker::PhantomData<K>);
 
 impl<K: Ord> KeySearcher for BinarySearch<K> {
     type Key = K;
 
-    // #[inline(never)]
-    fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
-        keys.binary_search(k)
+    fn search<Q: Ord + ?Sized>(keys: &[Self::Key], k: &Q) -> Result<usize, usize>
+    where
+        Self::Key: Borrow<Q>,
+    {
+        keys.binary_search_by_key(&k, |k| k.borrow())
     }
 }
 
-pub struct BranchlessBinarySearch<K>(std::marker::PhantomData<K>);
+/// A binary search impl which unfold by the compiler, it gives about 20% performance
+/// gain over BinarySearch for simple Keys(e.g Primitive Copy types), but not suitable 
+/// for complex keys(e.g: String, Vec etc).
+pub struct UnrolledBinarySearch<K, const N: usize>(std::marker::PhantomData<K>);
 
-fn search<K: Ord, const N: usize>(keys: &[K], k: &K) -> Result<usize, usize> {
-    let mut start = 0;
-    let mut len = N;
-    loop {
-        len /= 2;
-        let pivot = unsafe { keys.get_unchecked(start + len - 1) };
-        let cmp = pivot.cmp(k);
-
-        if matches!(cmp, Ordering::Less) {
-            start += len;
-        }
-
-        if len == 1 {
-            let pivot = unsafe { keys.get_unchecked(start) };
-            let cmp = pivot.cmp(k);
-
-            return match cmp {
-                Ordering::Greater => Err(start),
-                Ordering::Equal => Ok(start),
-                Ordering::Less => {
-                    start += len;
-                    let pivot = unsafe { keys.get_unchecked(start) };
-                    let cmp = pivot.cmp(k);
-                    match cmp {
-                        Ordering::Equal => Ok(start),
-                        Ordering::Less => Err(start),
-                        Ordering::Greater => Err(start),
-                    }
-                }
-            };
-        }
-    }
-}
-
-impl<K: Ord + std::fmt::Debug> KeySearcher for BranchlessBinarySearch<K> {
+impl<K: Ord, const N: usize> KeySearcher for UnrolledBinarySearch<K, N> {
     type Key = K;
 
-    // #[inline(never)]
-    fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
-        if keys.len() >= 48 {
-            match search::<_, 48>(&keys[..48], &k) {
-                Ok(idx) => Ok(idx),
-                Err(idx) if idx < 47 => Err(idx),
-                _ => match keys[48..].binary_search(k) {
-                    Ok(idx) => Ok(48 + idx),
-                    Err(idx) => Err(48 + idx),
-                },
-            }
-        } else if keys.len() >= 32 {
-            match search::<_, 32>(&keys[..32], &k) {
-                Ok(idx) => Ok(idx),
-                Err(idx) if idx < 31 => Err(idx),
-                _ => match keys[32..].binary_search(k) {
-                    Ok(idx) => Ok(32 + idx),
-                    Err(idx) => Err(32 + idx),
-                },
-            }
-        } else {
-            keys.binary_search(k)
-        }
-    }
-}
-
-pub struct Branchless2Search<K>(std::marker::PhantomData<K>);
-
-impl<K: Ord> KeySearcher for Branchless2Search<K> {
-    type Key = K;
-
-    // #[inline(never)]
-    fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
+    fn search<Q: Ord + ?Sized>(keys: &[Self::Key], k: &Q) -> Result<usize, usize>
+    where
+        Self::Key: Borrow<Q>,
+    {
         let mut start = 0;
-        let mut len = 64;
+        // Use the const N, so compiler knows each step's start and len.
+        // for relative small N(64 as tested), the following loop is
+        // unrolled
+        let mut len = N;
         let data_len = keys.len();
+        if keys.is_empty() {
+            return Err(0);
+        }
 
-        for _ in 0..6 {
-            len /= 2;
-            let cmp = if start + len > data_len {
+        while len > 1 {
+            // ceil(len / 2)
+            len = (len - 1) / 2 + 1;
+            let cmp = if start + len >= data_len {
                 Ordering::Greater
             } else {
                 let pivot = unsafe { keys.get_unchecked(start + len - 1) };
-                pivot.cmp(k)
+                pivot.borrow().cmp(k)
             };
 
             if matches!(cmp, Ordering::Less) {
@@ -109,62 +69,11 @@ impl<K: Ord> KeySearcher for Branchless2Search<K> {
         }
 
         let pivot = unsafe { keys.get_unchecked(start) };
-        match pivot.cmp(k) {
+        match pivot.borrow().cmp(k) {
             Ordering::Less => Err(start + 1),
             Ordering::Equal => Ok(start),
             Ordering::Greater => Err(start),
         }
-    }
-}
-
-pub struct LinearSearch<K>(std::marker::PhantomData<K>);
-
-impl<K: Ord> KeySearcher for LinearSearch<K> {
-    type Key = K;
-
-    #[inline(never)]
-    fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
-        keys.iter()
-            .enumerate()
-            .find_map(|(idx, key)| match key.cmp(k) {
-                std::cmp::Ordering::Less => None,
-                std::cmp::Ordering::Equal => Some(Ok(idx)),
-                std::cmp::Ordering::Greater => Some(Err(idx)),
-            })
-            .unwrap_or(Err(keys.len()))
-    }
-}
-
-pub struct SimdLinearSearch<K, const N: usize>(std::marker::PhantomData<K>);
-
-impl<K: Ord, const N: usize> KeySearcher for SimdLinearSearch<K, N> {
-    type Key = K;
-
-    #[inline(never)]
-    fn search(keys: &[Self::Key], k: &Self::Key) -> Result<usize, usize> {
-        // we split this into chunks
-        let chunk_size = N;
-
-        let off = keys
-            .chunks_exact(chunk_size)
-            .take_while(|key_chunk| {
-                let mut all_less: bool = true;
-                key_chunk
-                    .iter()
-                    .for_each(|key| all_less = all_less & (key.cmp(k) == Ordering::Less));
-                all_less
-            })
-            .count()
-            * chunk_size;
-
-        for (idx, key) in unsafe { keys.get_unchecked(off..) }.iter().enumerate() {
-            match key.cmp(k) {
-                std::cmp::Ordering::Less => continue,
-                std::cmp::Ordering::Equal => return Ok(off + idx),
-                std::cmp::Ordering::Greater => return Err(off + idx),
-            }
-        }
-        Err(keys.len())
     }
 }
 
@@ -174,34 +83,38 @@ mod tests {
 
     use super::*;
 
-    fn test_searcher<S: KeySearcher<Key = u32>>() {
-        println!("testing {}", type_name::<S>());
-        let mut keys = [0u32; 64];
-        for i in 0..64 {
-            keys[i] = (i as u32 + 1) * 2;
+    fn test_searcher<S: KeySearcher<Key = u32>, const N: usize>() {
+        println!("testing {} {N}", type_name::<S>());
+        let mut keys = vec![];
+        for i in 0..N {
+            keys.push((i as u32 + 1) * 2);
         }
-        assert_eq!(S::search(&keys, &1), Err(0));
-        assert_eq!(S::search(&keys, &2), Ok(0));
-        assert_eq!(S::search(&keys, &3), Err(1));
-        assert_eq!(S::search(&keys, &4), Ok(1));
-        assert_eq!(S::search(&keys, &5), Err(2));
-        assert_eq!(S::search(&keys, &6), Ok(2));
-        assert_eq!(S::search(&keys, &7), Err(3));
-        assert_eq!(S::search(&keys, &8), Ok(3));
-        assert_eq!(S::search(&keys, &9), Err(4));
-        assert_eq!(S::search(&keys, &10), Ok(4));
-        assert_eq!(S::search(&keys, &128), Ok(63));
-        assert_eq!(S::search(&keys, &129), Err(64));
-        assert_eq!(S::search(&keys, &130), Err(64));
+
+        dbg!(&keys);
+
+        assert_eq!(S::search(&keys, &0), Err(0));
+
+        for i in 0..N {
+            assert_eq!(S::search(&keys, dbg!(&((i as u32 + 1) * 2))), Ok(i));
+            assert_eq!(S::search(&keys, dbg!(&((i as u32 + 1) * 2 - 1))), Err(i));
+        }
+
+        assert_eq!(S::search(&keys, dbg!(&((N as u32 + 1) * 2))), Err(N));
+        assert_eq!(S::search(&keys, dbg!(&((N as u32 + 1) * 2 - 1))), Err(N));
     }
 
     #[test]
     fn test_searchers() {
-        test_searcher::<BinarySearch<_>>();
-        test_searcher::<LinearSearch<_>>();
-        test_searcher::<SimdLinearSearch<_, 4>>();
-        test_searcher::<SimdLinearSearch<_, 8>>();
-        test_searcher::<BranchlessBinarySearch<_>>();
-        test_searcher::<Branchless2Search<_>>();
+        test_searcher::<BinarySearch<_>, 64>();
+        test_searcher::<UnrolledBinarySearch<_, 64>, 64>();
+        test_searcher::<BinarySearch<_>, 32>();
+        test_searcher::<UnrolledBinarySearch<_, 64>, 32>();
+        test_searcher::<UnrolledBinarySearch<_, 6>, 4>();
+        test_searcher::<UnrolledBinarySearch<_, 5>, 4>();
+        test_searcher::<UnrolledBinarySearch<_, 4>, 0>();
+        test_searcher::<UnrolledBinarySearch<_, 4>, 1>();
+        test_searcher::<UnrolledBinarySearch<_, 4>, 2>();
+        test_searcher::<UnrolledBinarySearch<_, 4>, 3>();
+        test_searcher::<UnrolledBinarySearch<_, 4>, 4>();
     }
 }

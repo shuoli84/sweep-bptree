@@ -27,5 +27,3 @@ harness = false
 name = "searcher"
 harness = false
 
-[profile.release]
-opt-level = 3
