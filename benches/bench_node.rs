@@ -8,7 +8,7 @@ use sweep_bptree::tree::{INode, InnerNode, InnerNodeId, LNode, LeafNode, NodeId}
 fn bench_inner<K: TestKey, const N: usize, const C: usize>(c: &mut Criterion) {
     let mut group = c.benchmark_group(format!("inner_node_{}_{N}", K::name()));
 
-    let node = InnerNode::<K, N, C>::new_from_iter(
+    let node = InnerNode::<K, (), N, C>::new_from_iter(
         (0..N).map(|i| K::from_i(i)),
         (0..C).map(|i| NodeId::Inner(InnerNodeId::from_usize(i))),
     );

@@ -10,14 +10,16 @@ use std::{
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
 #[derive(Debug)]
-pub struct InnerNode<K: Key, const N: usize, const C: usize> {
+pub struct InnerNode<K: Key, M, const N: usize, const C: usize> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
     child_id: [MaybeUninit<NodeId>; C],
+    /// The meta data for corresponding child
+    meta: [MaybeUninit<M>; C],
 }
 
-impl<K: Key, const N: usize, const C: usize> Drop for InnerNode<K, N, C> {
+impl<K: Key, M, const N: usize, const C: usize> Drop for InnerNode<K, M, N, C> {
     fn drop(&mut self) {
         // Satefy: The keys in range ..self.len() is initialized
         unsafe {
@@ -28,7 +30,7 @@ impl<K: Key, const N: usize, const C: usize> Drop for InnerNode<K, N, C> {
     }
 }
 
-impl<K: Key, const N: usize, const C: usize> Clone for InnerNode<K, N, C> {
+impl<K: Key, M: Clone, const N: usize, const C: usize> Clone for InnerNode<K, M, N, C> {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
@@ -40,15 +42,26 @@ impl<K: Key, const N: usize, const C: usize> Clone for InnerNode<K, N, C> {
             };
         }
 
+        // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
+        let mut new_meta = unsafe { MaybeUninit::<[MaybeUninit<M>; C]>::uninit().assume_init() };
+
+        for i in 0..self.len() + 1 {
+            unsafe {
+                *new_meta.get_unchecked_mut(i) =
+                    MaybeUninit::new(self.meta_area(i).assume_init_ref().clone());
+            };
+        }
+
         Self {
             size: self.size.clone(),
             slot_key: new_key,
             child_id: self.child_id.clone(),
+            meta: new_meta,
         }
     }
 }
 
-impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
+impl<K: Key, M, const N: usize, const C: usize> InnerNode<K, M, N, C> {
     /// The size of the origin node after split
     pub const fn split_origin_size() -> usize {
         N / 2
@@ -440,6 +453,16 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
         unsafe { self.slot_key.as_slice().get_unchecked(index) }
     }
 
+    unsafe fn meta_area<I, Output: ?Sized>(&self, index: I) -> &Output
+    where
+        I: SliceIndex<[MaybeUninit<M>], Output = Output>,
+    {
+        // SAFETY: the caller will not be able to call further methods on self
+        // until the key slice reference is dropped, as we have unique access
+        // for the lifetime of the borrow.
+        unsafe { self.meta.as_slice().get_unchecked(index) }
+    }
+
     unsafe fn child_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
     where
         I: SliceIndex<[MaybeUninit<NodeId>], Output = Output>,
@@ -479,7 +502,7 @@ impl<K: Key, const N: usize, const C: usize> InnerNode<K, N, C> {
     }
 }
 
-impl<K: Key, const N: usize, const C: usize> super::INode<K> for InnerNode<K, N, C> {
+impl<K: Key, M, const N: usize, const C: usize> super::INode<K> for InnerNode<K, M, N, C> {
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
@@ -568,9 +591,9 @@ pub enum InnerMergeResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    type InnerNode45 = InnerNode<usize, 4, 5>;
+    type InnerNode45 = InnerNode<usize, (), 4, 5>;
 
-    fn new_test_node<const N: usize, const C: usize>() -> Box<InnerNode<usize, N, C>> {
+    fn new_test_node<const N: usize, const C: usize>() -> Box<InnerNode<usize, (), N, C>> {
         let mut slot_keys = [0; N];
         for i in 0..N {
             slot_keys[i] = i * 2;

@@ -4,7 +4,7 @@ use crate::tree::{
 
 #[derive(Debug)]
 pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, const LN: usize> {
-    inner_nodes: Vec<Option<Box<InnerNode<K, IN, IC>>>>,
+    inner_nodes: Vec<Option<Box<InnerNode<K, usize, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
@@ -94,7 +94,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
 {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, IN, IC>;
+    type InnerNode = InnerNode<K, usize, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
 

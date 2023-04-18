@@ -16,6 +16,8 @@ pub use node_stores::*;
 
 use self::visit_stack::VisitStackT;
 mod bulk_load;
+mod meta;
+pub use meta::*;
 mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
@@ -1193,6 +1195,44 @@ pub trait NodeStore: Default {
 pub trait Key: Clone + Ord {}
 
 impl<T> Key for T where T: Clone + Ord {}
+
+/// Meta trait, it is used to store recursive metadata, like 'size'
+pub trait Meta<K: Key>: Clone {
+    /// create a new meta from leaf node's key
+    fn from_leaf_keys(keys: &[K]) -> Self;
+
+    /// create a new meta from inner node and its meta
+    /// e.g: take size as example.
+    /// the root node's meta is created from its children's meta and keys
+    /// the inner node with height 1's meta is created from leaf's keys
+    ///                             [k3][9, 5]
+    ///                [k2][5, 4]                  [k4][3, 2]
+    ///         leaf[0] 5       leaf[1] 4      leaf[2] 3   leaf[2] 2
+    fn from_inner_keys(keys: &[K], meta: &[Self]) -> Self;
+}
+
+impl<K: Key> Meta<K> for () {
+    fn from_leaf_keys(_: &[K]) -> Self {
+        ()
+    }
+
+    fn from_inner_keys(_: &[K], _: &[Self]) -> Self {
+        ()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ElementCount(usize);
+
+impl<K: Key> Meta<K> for ElementCount {
+    fn from_leaf_keys(keys: &[K]) -> Self {
+        Self(keys.len())
+    }
+
+    fn from_inner_keys(_keys: &[K], meta: &[Self]) -> Self {
+        Self(meta.iter().map(|m| m.0).sum())
+    }
+}
 
 /// Inner node trait
 pub trait INode<K: Key> {
