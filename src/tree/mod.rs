@@ -134,29 +134,6 @@ where
 
     /// Insert a new key-value pair into the tree.
     pub fn insert(&mut self, k: S::K, v: S::V) -> Option<S::V> {
-        // quick check if the last accessed leaf is the one to insert
-        if let Some(leaf_id) = self.node_store.try_cache(&k) {
-            let leaf = self.node_store.get_mut_leaf(leaf_id);
-            // Note, if k is already in Leaf, then we actually don't need
-            // to check whether it is full, but that requires a find first
-            if !leaf.is_full() {
-                let result = match leaf.try_upsert(k, v) {
-                    LeafUpsertResult::Inserted => {
-                        self.len += 1;
-                        // no need to update cache, it doesn't changed
-                        None
-                    }
-                    LeafUpsertResult::Updated(v) => Some(v),
-                    LeafUpsertResult::IsFull(..) => unreachable!(),
-                };
-
-                #[cfg(test)]
-                self.validate();
-
-                return result;
-            }
-        }
-
         let node_id = self.root;
 
         let result = match self.descend_insert(node_id, k, v) {
@@ -455,26 +432,6 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        // quick check if the last accessed leaf is the one to remove
-        if let Some(cache_leaf_id) = self.node_store.try_cache(k) {
-            let leaf = self.node_store.get_mut_leaf(cache_leaf_id);
-            if leaf.able_to_lend() {
-                let result = match leaf.try_delete(k) {
-                    LeafDeleteResult::Done(v) => {
-                        self.len -= 1;
-                        Some(v.1)
-                    }
-                    LeafDeleteResult::NotFound => None,
-                    LeafDeleteResult::UnderSize(_) => unreachable!(),
-                };
-
-                #[cfg(test)]
-                self.validate();
-
-                return result;
-            }
-        }
-
         let root_id = self.root;
         let r = match root_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
@@ -1109,12 +1066,15 @@ pub trait NodeStore: Default {
     type V;
 
     /// InnerNode type
-    type InnerNode: INode<Self::K>;
+    type InnerNode: INode<Self::K, Self::ChildMeta>;
     /// LeafNode type
     type LeafNode: LNode<Self::K, Self::V>;
 
     /// The visit stack type
     type VisitStack: VisitStackT;
+
+    /// The child meta type
+    type ChildMeta: Meta<Self::K>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;
@@ -1196,46 +1156,8 @@ pub trait Key: Clone + Ord {}
 
 impl<T> Key for T where T: Clone + Ord {}
 
-/// Meta trait, it is used to store recursive metadata, like 'size'
-pub trait Meta<K: Key>: Clone {
-    /// create a new meta from leaf node's key
-    fn from_leaf_keys(keys: &[K]) -> Self;
-
-    /// create a new meta from inner node and its meta
-    /// e.g: take size as example.
-    /// the root node's meta is created from its children's meta and keys
-    /// the inner node with height 1's meta is created from leaf's keys
-    ///                             [k3][9, 5]
-    ///                [k2][5, 4]                  [k4][3, 2]
-    ///         leaf[0] 5       leaf[1] 4      leaf[2] 3   leaf[2] 2
-    fn from_inner_keys(keys: &[K], meta: &[Self]) -> Self;
-}
-
-impl<K: Key> Meta<K> for () {
-    fn from_leaf_keys(_: &[K]) -> Self {
-        ()
-    }
-
-    fn from_inner_keys(_: &[K], _: &[Self]) -> Self {
-        ()
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ElementCount(usize);
-
-impl<K: Key> Meta<K> for ElementCount {
-    fn from_leaf_keys(keys: &[K]) -> Self {
-        Self(keys.len())
-    }
-
-    fn from_inner_keys(_keys: &[K], meta: &[Self]) -> Self {
-        Self(meta.iter().map(|m| m.0).sum())
-    }
-}
-
 /// Inner node trait
-pub trait INode<K: Key> {
+pub trait INode<K: Key, M: Meta<K>> {
     /// Create a new inner node with `slot_keys` and `child_id`.
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],

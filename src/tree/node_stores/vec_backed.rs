@@ -1,10 +1,17 @@
 use crate::tree::{
-    visit_stack::VisitStack, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore,
+    visit_stack::VisitStack, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, Meta, NodeStore,
 };
 
 #[derive(Debug)]
-pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, const LN: usize> {
-    inner_nodes: Vec<Option<Box<InnerNode<K, usize, IN, IC>>>>,
+pub struct NodeStoreVec<
+    K: Key,
+    V,
+    const IN: usize,
+    const IC: usize,
+    const LN: usize,
+    M: Meta<K> = (),
+> {
+    inner_nodes: Vec<Option<Box<InnerNode<K, M, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
@@ -94,9 +101,10 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
 {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, usize, IN, IC>;
+    type InnerNode = InnerNode<K, (), IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
+    type ChildMeta = ();
 
     fn inner_n() -> u16 {
         IN as u16
