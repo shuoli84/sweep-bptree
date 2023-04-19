@@ -1,11 +1,11 @@
-use super::InnerNodeId;
+use super::{InnerNodeId, NodeId};
 
 /// This trait exists because we want to let NodeStore decides the VisitStack
 /// due to const_generics not stable
 pub trait VisitStackT {
     fn new() -> Self;
-    fn push(&mut self, node_id: InnerNodeId, offset: usize);
-    fn pop(&mut self) -> Option<(InnerNodeId, usize)>;
+    fn push(&mut self, node_id: InnerNodeId, offset: usize, child_id: NodeId);
+    fn pop(&mut self) -> Option<(InnerNodeId, usize, NodeId)>;
 }
 
 /// When searching in the tree, it is temping to think of the stack(0) as a
@@ -29,6 +29,9 @@ pub struct VisitStack<const N: usize> {
 
     /// Offsets
     offsets: [u16; N],
+
+    /// child id
+    child_id: [NodeId; N],
 }
 
 impl<const N: usize> VisitStack<N> {
@@ -50,18 +53,20 @@ impl<const N: usize> VisitStackT for VisitStack<N> {
             len: 0,
             stack: [InnerNodeId::INVALID; N],
             offsets: [0; N],
+            child_id: [NodeId::Inner(InnerNodeId::INVALID); N],
         }
     }
 
-    fn push(&mut self, id: InnerNodeId, offset: usize) {
+    fn push(&mut self, id: InnerNodeId, offset: usize, child_id: NodeId) {
         debug_assert!(self.len < N as u16);
 
         self.stack[self.len as usize] = id;
         self.offsets[self.len as usize] = offset as u16;
+        self.child_id[self.len as usize] = child_id;
         self.len += 1;
     }
 
-    fn pop(&mut self) -> Option<(InnerNodeId, usize)> {
+    fn pop(&mut self) -> Option<(InnerNodeId, usize, NodeId)> {
         if self.len == 0 {
             return None;
         }
@@ -69,7 +74,8 @@ impl<const N: usize> VisitStackT for VisitStack<N> {
         self.len -= 1;
         let id = self.stack[self.len as usize];
         let offset = self.offsets[self.len as usize];
-        Some((id, offset as usize))
+        let child_id = self.child_id[self.len as usize];
+        Some((id, offset as usize, child_id))
     }
 }
 
@@ -84,15 +90,24 @@ mod tests {
         let mut stack = VisitStack::<12>::new();
         assert!(stack.is_empty());
 
-        stack.push(InnerNodeId(1), 1);
-        stack.push(InnerNodeId(2), 2);
-        stack.push(InnerNodeId(3), 3);
+        stack.push(InnerNodeId(1), 1, InnerNodeId(10).into());
+        stack.push(InnerNodeId(2), 2, InnerNodeId(20).into());
+        stack.push(InnerNodeId(3), 3, InnerNodeId(30).into());
 
         assert_eq!(stack.len(), 3);
 
-        assert_eq!(stack.pop().unwrap(), (InnerNodeId(3), 3));
-        assert_eq!(stack.pop().unwrap(), (InnerNodeId(2), 2));
-        assert_eq!(stack.pop().unwrap(), (InnerNodeId(1), 1));
+        assert_eq!(
+            stack.pop().unwrap(),
+            (InnerNodeId(3), 3, NodeId::Inner(InnerNodeId(10)))
+        );
+        assert_eq!(
+            stack.pop().unwrap(),
+            (InnerNodeId(2), 2, NodeId::Inner(InnerNodeId(20)))
+        );
+        assert_eq!(
+            stack.pop().unwrap(),
+            (InnerNodeId(1), 1, NodeId::Inner(InnerNodeId(30)))
+        );
 
         assert!(stack.is_empty());
     }

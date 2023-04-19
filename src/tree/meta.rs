@@ -42,6 +42,13 @@ impl<K: Key> Meta<K> for () {
 #[derive(Clone, Copy, Debug)]
 pub struct ElementCount(usize);
 
+impl ElementCount {
+    /// Get the count value
+    pub fn count(&self) -> usize {
+        self.0
+    }
+}
+
 impl<K: Key> Meta<K> for ElementCount {
     fn from_leaf(keys: &[K]) -> Self {
         Self(keys.len())

@@ -624,6 +624,10 @@ impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
         Self::in_range(self, k)
     }
 
+    fn keys(&self) -> &[K] {
+        Self::keys(self)
+    }
+
     #[inline(always)]
     fn key_range(&self) -> (Option<K>, Option<K>) {
         Self::key_range(self)

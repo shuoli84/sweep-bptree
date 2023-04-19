@@ -31,8 +31,8 @@ impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     }
 }
 
-impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> Default
-    for NodeStoreVec<K, V, IN, IC, LN>
+impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize> Default
+    for NodeStoreVec<K, V, IN, IC, LN, M>
 {
     fn default() -> Self {
         assert!(IN == IC - 1);
@@ -45,7 +45,9 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> Default
     }
 }
 
-impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<K, V, IN, IC, LN> {
+impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize>
+    NodeStoreVec<K, V, IN, IC, LN, M>
+{
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self::default()
@@ -66,15 +68,17 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
     where
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
+        M: std::fmt::Debug,
     {
         use crate::tree::{INode, LNode};
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
-                "inner: {idx} s:{} key: {:?} child: {:?}",
+                "inner: {idx} s:{} key: {:?} child: {:?} meta: {:?}",
                 inner.len(),
                 inner.key_vec(),
-                inner.child_id_vec()
+                inner.child_id_vec(),
+                inner.meta_vec(),
             );
         }
 
@@ -96,15 +100,15 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
     }
 }
 
-impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
-    for NodeStoreVec<K, V, IN, IC, LN>
+impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
+    for NodeStoreVec<K, V, IN, IC, LN, M>
 {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, (), IN, IC>;
+    type InnerNode = InnerNode<K, M, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
-    type ChildMeta = ();
+    type ChildMeta = M;
 
     fn inner_n() -> u16 {
         IN as u16
@@ -119,6 +123,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
     where
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
+        M: std::fmt::Debug,
     {
         self.print()
     }
