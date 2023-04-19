@@ -11,6 +11,7 @@ fn bench_inner<K: TestKey, const N: usize, const C: usize>(c: &mut Criterion) {
     let node = InnerNode::<K, (), N, C>::new_from_iter(
         (0..N).map(|i| K::from_i(i)),
         (0..C).map(|i| NodeId::Inner(InnerNodeId::from_usize(i))),
+        (0..C).map(|_| ()),
     );
 
     group.bench_function("locate_child", |b| {

@@ -110,21 +110,24 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
     pub(crate) fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
+        child_meta: [M; C1],
     ) -> Box<Self> {
         // not sure how to do a constrain in compile time, just put a debug assert here.
         debug_assert!(C == N + 1);
-        Self::new_from_iter(slot_keys, child_id.map(|c| c.into()))
+        Self::new_from_iter(slot_keys, child_id.map(|c| c.into()), child_meta)
     }
 
     /// Create a new inner node from keys and childs iterator
     fn new_from_iter(
         keys: impl IntoIterator<Item = K>,
         childs: impl IntoIterator<Item = NodeId>,
+        child_meta: impl IntoIterator<Item = M>,
     ) -> Box<Self> {
         let mut node = Self::empty();
 
         let keys = keys.into_iter();
         let childs = childs.into_iter();
+        let meta = child_meta.into_iter();
 
         let mut key_size = 0;
         for (idx, k) in keys.enumerate() {
@@ -136,6 +139,9 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
         for (idx, c) in childs.enumerate() {
             node.child_id[idx] = MaybeUninit::new(c);
             child_size += 1;
+        }
+        for (idx, m) in meta.enumerate() {
+            node.child_meta[idx] = MaybeUninit::new(m);
         }
 
         assert!(key_size + 1 == child_size);
@@ -599,15 +605,17 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> super::INode<K, M>
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
+        child_meta: [M; C1],
     ) -> Box<Self> {
-        Self::new(slot_keys, child_id)
+        Self::new(slot_keys, child_id, child_meta)
     }
 
     fn new_from_iter(
         keys: impl Iterator<Item = K>,
         childs: impl Iterator<Item = NodeId>,
+        meta: impl Iterator<Item = M>,
     ) -> Box<Self> {
-        Self::new_from_iter(keys, childs)
+        Self::new_from_iter(keys, childs, meta)
     }
 
     fn len(&self) -> usize {
@@ -713,7 +721,7 @@ mod tests {
         for i in 0..C {
             child_ids[i] = InnerNodeId(i * 10);
         }
-        InnerNode::new(slot_keys, child_ids)
+        InnerNode::new(slot_keys, child_ids, [(); C])
     }
 
     #[test]
@@ -853,6 +861,7 @@ mod tests {
                 InnerNodeId(40),
                 InnerNodeId(50),
             ],
+            [Default::default(); 5],
         );
 
         // child_idx is 1
@@ -891,6 +900,7 @@ mod tests {
                 InnerNodeId(40),
                 InnerNodeId(50),
             ],
+            [Default::default(); 5],
         );
 
         // child_idx is 1

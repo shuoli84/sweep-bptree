@@ -4,7 +4,7 @@ use crate::Key;
 
 /// Meta trait, it is used to store recursive metadata, like 'size'
 /// What is a proper name? 'Meta' is not a good name.
-pub trait Meta<K: Key>: Clone {
+pub trait Meta<K: Key>: Clone + Default {
     /// create a new meta from leaf node's key
     fn from_leaf(keys: &[K]) -> Self;
 
@@ -39,7 +39,7 @@ impl<K: Key> Meta<K> for () {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ElementCount(usize);
 
 impl ElementCount {
@@ -96,7 +96,7 @@ pub trait FromRef<T> {
     fn from_ref(input: &T) -> Self;
 }
 
-impl<K, G> Meta<K> for GroupCount<G>
+impl<K, G> Meta<K> for Option<GroupCount<G>>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord,
@@ -115,15 +115,19 @@ where
             }
         }
         let last_group = last_group.into_owned();
-        Self {
+        Some(GroupCount {
             min_group: first_group,
             max_group: last_group,
             group_count,
-        }
+        })
     }
 
     fn from_inner(_keys: &[K], meta: &[Self]) -> Self {
-        let mut meta_iter = meta.iter();
+        if meta.is_empty() {
+            return None;
+        }
+
+        let mut meta_iter = meta.iter().flatten();
         let first_meta = meta_iter.next().unwrap();
         let mut group_count = first_meta.group_count;
 
@@ -140,11 +144,11 @@ where
             last_group = &m.max_group;
         }
 
-        Self {
+        Some(GroupCount {
             min_group: first_meta.min_group.clone(),
             max_group: last_group.clone(),
             group_count,
-        }
+        })
     }
 }
 
@@ -172,53 +176,53 @@ mod tests {
             }
         }
 
-        let meta = GroupCount::<G>::from_leaf(&[1, 2, 3]);
-        assert_eq!(meta.group_count, 2);
+        let meta = Option::<GroupCount<G>>::from_leaf(&[1, 2, 3]);
+        assert_eq!(meta.unwrap().group_count, 2);
 
-        let meta = GroupCount::<G>::from_inner(
+        let meta = Option::<GroupCount<G>>::from_inner(
             &[1, 2, 3],
             &[
-                GroupCount {
+                Some(GroupCount {
                     min_group: G(0),
                     max_group: G(1),
                     group_count: 2,
-                },
-                GroupCount {
+                }),
+                Some(GroupCount {
                     min_group: G(1),
                     max_group: G(4),
                     group_count: 2,
-                },
-                GroupCount {
+                }),
+                Some(GroupCount {
                     min_group: G(4),
                     max_group: G(10),
                     group_count: 3,
-                },
+                }),
             ],
         );
 
         // 1 and 4 are dup groups in child, so we need to fix the double counting
-        assert_eq!(meta.group_count, 2 + 1 + 2);
+        assert_eq!(meta.unwrap().group_count, 2 + 1 + 2);
 
-        let meta = GroupCount::<G>::from_inner(
+        let meta = Option::<GroupCount<G>>::from_inner(
             &[1, 2, 3],
             &[
-                GroupCount {
+                Some(GroupCount {
                     min_group: G(0),
                     max_group: G(0),
                     group_count: 1,
-                },
-                GroupCount {
+                }),
+                Some(GroupCount {
                     min_group: G(0),
                     max_group: G(0),
                     group_count: 1,
-                },
-                GroupCount {
+                }),
+                Some(GroupCount {
                     min_group: G(0),
                     max_group: G(0),
                     group_count: 1,
-                },
+                }),
             ],
         );
-        assert_eq!(meta.group_count, 1);
+        assert_eq!(meta.unwrap().group_count, 1);
     }
 }

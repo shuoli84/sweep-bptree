@@ -80,7 +80,7 @@ mod visit_stack;
 #[derive(Clone)]
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
-    root_meta: Option<S::ChildMeta>,
+    root_meta: S::ChildMeta,
     len: usize,
     node_store: ManuallyDrop<S>,
     st: Statistic,
@@ -95,7 +95,7 @@ where
         let (root_id, _) = node_store.new_empty_leaf();
         Self {
             root: NodeId::Leaf(root_id),
-            root_meta: None,
+            root_meta: S::ChildMeta::default(),
             node_store: ManuallyDrop::new(node_store),
             len: 0,
 
@@ -104,21 +104,12 @@ where
     }
 
     /// Create a new `BPlusTree` from existing parts
-    fn new_from_parts(node_store: S, root: NodeId, len: usize) -> Self {
+    fn new_from_parts(mut node_store: S, root: NodeId, len: usize) -> Self {
         // consider pass meta in?
         let meta = if len > 0 {
-            Some(match root {
-                NodeId::Inner(inner) => {
-                    let inner = node_store.get_inner(inner);
-                    S::ChildMeta::from_inner(inner.keys(), inner.child_meta())
-                }
-                NodeId::Leaf(leaf) => {
-                    let leaf = node_store.get_leaf(leaf);
-                    S::ChildMeta::from_leaf(leaf.keys())
-                }
-            })
+            Self::meta_for_id(&mut node_store, root)
         } else {
-            None
+            S::ChildMeta::default()
         };
 
         let me = Self {
@@ -157,17 +148,21 @@ where
 
         let result = match self.descend_insert(node_id, k, v) {
             DescendInsertResult::Inserted => {
-                self.root_meta = Some(Self::meta_for_id(&mut self.node_store, node_id));
+                self.root_meta = Self::meta_for_id(&self.node_store, node_id);
                 None
             }
             DescendInsertResult::Updated(prev_v) => Some(prev_v),
             DescendInsertResult::Split(k, new_child_id) => {
-                let new_root = S::InnerNode::new([k], [node_id, new_child_id]);
+                let prev_meta = Self::meta_for_id(&self.node_store, node_id);
+                let new_child_meta = Self::meta_for_id(&self.node_store, new_child_id);
+
+                let new_root =
+                    S::InnerNode::new([k], [node_id, new_child_id], [prev_meta, new_child_meta]);
                 let new_meta = S::ChildMeta::from_inner(new_root.keys(), new_root.child_meta());
 
                 let new_root_id = self.node_store.add_inner(new_root);
                 self.root = new_root_id.into();
-                self.root_meta = Some(new_meta);
+                self.root_meta = new_meta;
                 None
             }
         };
@@ -238,7 +233,8 @@ where
                         let child_meta = Self::meta_for_id(&mut self.node_store, child_id);
 
                         let inner_node = self.node_store.get_mut_inner(id);
-                        // update child meta
+                        // it's easier to update child_meta here, the split logic handles meta split
+                        // too. So the index would not move
                         inner_node.set_child_meta(child_idx, child_meta);
                         // split, the two child_meta both needs to be refreshed
 
@@ -271,7 +267,7 @@ where
         }
     }
 
-    fn meta_for_id(node_store: &mut S, id: NodeId) -> S::ChildMeta {
+    fn meta_for_id(node_store: &S, id: NodeId) -> S::ChildMeta {
         match id {
             NodeId::Inner(inner) => {
                 let inner = node_store.get_inner(inner);
@@ -1215,6 +1211,7 @@ pub trait INode<K: Key, M: Meta<K>> {
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
+        child_meta: [M; C1],
     ) -> Box<Self>;
 
     /// Create a new inner node from Iterators.
@@ -1223,6 +1220,7 @@ pub trait INode<K: Key, M: Meta<K>> {
     fn new_from_iter(
         keys: impl Iterator<Item = K>,
         childs: impl Iterator<Item = NodeId>,
+        meta: impl Iterator<Item = M>,
     ) -> Box<Self>;
 
     /// Get the number of keys
@@ -1411,9 +1409,9 @@ mod tests {
 
         for i in keys {
             tree.insert(i, i % 13);
+            assert_eq!(tree.root_meta.count(), tree.len());
         }
 
-        assert_eq!(tree.root_meta.as_ref().unwrap().count(), tree.len());
         tree.node_store.print();
 
         let mut keys = (0..size).collect::<Vec<_>>();
