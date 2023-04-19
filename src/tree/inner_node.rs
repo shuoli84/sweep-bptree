@@ -420,7 +420,7 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
     }
 
     /// pop the last key and right child
-    pub(crate) fn pop(&mut self) -> (K, NodeId) {
+    pub(crate) fn pop(&mut self) -> (K, NodeId, M) {
         let k = std::mem::replace(
             unsafe { self.key_area_mut(self.size as usize - 1) },
             MaybeUninit::uninit(),
@@ -429,33 +429,46 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
             unsafe { self.child_area_mut(self.size as usize) },
             MaybeUninit::uninit(),
         );
+        let meta = std::mem::replace(
+            unsafe { self.meta_area_mut(self.len()) },
+            MaybeUninit::uninit(),
+        );
         self.size -= 1;
-        unsafe { (k.assume_init_read(), child.assume_init_read()) }
+        unsafe {
+            (
+                k.assume_init_read(),
+                child.assume_init_read(),
+                meta.assume_init_read(),
+            )
+        }
     }
 
-    pub(crate) fn pop_front(&mut self) -> (K, NodeId) {
-        let (k, left_c) = unsafe {
+    pub(crate) fn pop_front(&mut self) -> (K, NodeId, M) {
+        let (k, left_c, left_m) = unsafe {
             let k = utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
             let left_c = utils::slice_remove(self.child_area_mut(..self.size as usize + 1), 0);
-            (k, left_c)
+            let left_m = utils::slice_remove(self.meta_area_mut(..self.size as usize + 1), 0);
+            (k, left_c, left_m)
         };
         self.size -= 1;
 
-        (k, left_c)
+        (k, left_c, left_m)
     }
 
-    pub fn push(&mut self, k: K, child: NodeId) {
+    pub fn push(&mut self, k: K, child: NodeId, meta: M) {
         unsafe {
             *self.key_area_mut(self.size as usize) = MaybeUninit::new(k);
             *self.child_area_mut(self.size as usize + 1) = MaybeUninit::new(child);
+            *self.meta_area_mut(self.size as usize + 1) = MaybeUninit::new(meta);
         };
         self.size += 1;
     }
 
-    pub(crate) fn push_front(&mut self, k: K, child: NodeId) {
+    pub(crate) fn push_front(&mut self, k: K, child: NodeId, meta: M) {
         unsafe {
             utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
             utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
+            utils::slice_insert(self.meta_area_mut(0..self.size as usize + 2), 0, meta);
         }
         self.size += 1;
     }
@@ -664,20 +677,20 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> super::INode<K, M>
         Self::split(self, child_idx, k, new_child_id, new_child_meta)
     }
 
-    fn pop(&mut self) -> (K, NodeId) {
+    fn pop(&mut self) -> (K, NodeId, M) {
         Self::pop(self)
     }
 
-    fn pop_front(&mut self) -> (K, NodeId) {
+    fn pop_front(&mut self) -> (K, NodeId, M) {
         Self::pop_front(self)
     }
 
-    fn push(&mut self, k: K, child: NodeId) {
-        Self::push(self, k, child)
+    fn push(&mut self, k: K, child: NodeId, meta: M) {
+        Self::push(self, k, child, meta)
     }
 
-    fn push_front(&mut self, k: K, child: NodeId) {
-        Self::push_front(self, k, child)
+    fn push_front(&mut self, k: K, child: NodeId, m: M) {
+        Self::push_front(self, k, child, m)
     }
 
     fn merge_next(&mut self, slot_key: K, right: &mut Self) {

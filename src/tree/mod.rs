@@ -552,7 +552,7 @@ where
                     match r {
                         DeleteDescendResult::InnerUnderSize(kv) => {
                             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
-                            //         so we can safely get a mutable ptr to it.
+                            //         so we can safely get a mut ptr to it.
                             let parent =
                                 unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
                             r = self.handle_inner_under_size(parent, child_idx, kv);
@@ -722,17 +722,24 @@ where
         //     1    3  5
         //      ..2  4
         // rotate right
-        //     1 2     5
-        //     ..  3,4
+        //     1    2   5
+        //       ..   3,4
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
 
         let prev_node = node_store.get_mut_inner(left_child_id);
         if prev_node.able_to_lend() {
-            let (k, c) = prev_node.pop();
+            let (k, c, m) = prev_node.pop();
+            let left_meta = S::ChildMeta::from_inner(prev_node.keys(), prev_node.child_meta());
+
             let slot_key = node.set_key(slot, k);
             let right = node_store.get_mut_inner(right_child_id);
-            right.push_front(slot_key, c);
+            right.push_front(slot_key, c, m);
+            let right_meta = S::ChildMeta::from_inner(right.keys(), right.child_meta());
+
+            // update meta
+            node.set_child_meta(slot, left_meta);
+            node.set_child_meta(slot + 1, right_meta);
 
             Some(())
         } else {
@@ -755,10 +762,18 @@ where
 
         let right = node_store.get_mut_inner(right_child_id);
         if right.able_to_lend() {
-            let (k, c) = right.pop_front();
+            let (k, c, m) = right.pop_front();
+
+            let right_meta = S::ChildMeta::from_inner(right.keys(), right.child_meta());
+
             let slot_key = node.set_key(slot, k);
             let left = node_store.get_mut_inner(left_child_id);
-            left.push(slot_key, c);
+            left.push(slot_key, c, m);
+
+            let left_meta = S::ChildMeta::from_inner(left.keys(), left.child_meta());
+
+            node.set_child_meta(slot, left_meta);
+            node.set_child_meta(slot + 1, right_meta);
 
             Some(())
         } else {
@@ -1274,16 +1289,16 @@ pub trait INode<K: Key, M: Meta<K>> {
     ) -> (K, Box<Self>);
 
     /// Remove the last key and its right child id
-    fn pop(&mut self) -> (K, NodeId);
+    fn pop(&mut self) -> (K, NodeId, M);
 
     /// Remove the first key and its left child id
-    fn pop_front(&mut self) -> (K, NodeId);
+    fn pop_front(&mut self) -> (K, NodeId, M);
 
     /// Insert a key and its right child id at the end
-    fn push(&mut self, k: K, child: NodeId);
+    fn push(&mut self, k: K, child: NodeId, meta: M);
 
     /// Insert a key and its left child id at the front
-    fn push_front(&mut self, k: K, child: NodeId);
+    fn push_front(&mut self, k: K, child: NodeId, m: M);
 
     /// Merge the key and its right child id at `slot` with its right sibling
     fn merge_next(&mut self, slot_key: K, right: &mut Self);
