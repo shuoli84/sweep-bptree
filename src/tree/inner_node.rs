@@ -10,7 +10,7 @@ use std::{
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
 #[derive(Debug)]
-pub struct InnerNode<K: Key, M: Meta<K>, const N: usize, const C: usize> {
+pub struct InnerNode<K: Key, M: Argumentation<K>, const N: usize, const C: usize> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
@@ -18,7 +18,7 @@ pub struct InnerNode<K: Key, M: Meta<K>, const N: usize, const C: usize> {
     child_meta: [MaybeUninit<M>; C],
 }
 
-impl<K: Key, M: Meta<K>, const N: usize, const C: usize> Drop for InnerNode<K, M, N, C> {
+impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> Drop for InnerNode<K, M, N, C> {
     fn drop(&mut self) {
         // Satefy: The keys in range ..self.len() is initialized
         unsafe {
@@ -33,7 +33,7 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> Drop for InnerNode<K, M
     }
 }
 
-impl<K: Key, M: Meta<K>, const N: usize, const C: usize> Clone for InnerNode<K, M, N, C> {
+impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> Clone for InnerNode<K, M, N, C> {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
@@ -64,7 +64,7 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> Clone for InnerNode<K, 
     }
 }
 
-impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
+impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
     /// The size of the origin node after split
     pub const fn split_origin_size() -> usize {
         N / 2
@@ -615,7 +615,7 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
     }
 }
 
-impl<K: Key, M: Meta<K>, const N: usize, const C: usize> super::INode<K, M>
+impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> super::INode<K, M>
     for InnerNode<K, M, N, C>
 {
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(

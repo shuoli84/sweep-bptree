@@ -1,5 +1,6 @@
 use crate::tree::{
-    visit_stack::VisitStack, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, Meta, NodeStore,
+    visit_stack::VisitStack, Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId,
+    NodeStore,
 };
 
 #[derive(Debug)]
@@ -9,7 +10,7 @@ pub struct NodeStoreVec<
     const IN: usize,
     const IC: usize,
     const LN: usize,
-    M: Meta<K> = (),
+    M: Argumentation<K> = (),
 > {
     inner_nodes: Vec<Option<Box<InnerNode<K, M, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
@@ -31,7 +32,7 @@ impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     }
 }
 
-impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize> Default
+impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> Default
     for NodeStoreVec<K, V, IN, IC, LN, M>
 {
     fn default() -> Self {
@@ -45,7 +46,7 @@ impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize> D
     }
 }
 
-impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize>
+impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize>
     NodeStoreVec<K, V, IN, IC, LN, M>
 {
     /// Create a new `NodeStoreVec`
@@ -100,7 +101,7 @@ impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize>
     }
 }
 
-impl<K: Key, V, M: Meta<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
+impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
     for NodeStoreVec<K, V, IN, IC, LN, M>
 {
     type K = K;

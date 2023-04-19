@@ -1154,7 +1154,7 @@ pub trait NodeStore: Default {
     type VisitStack: VisitStackT;
 
     /// The child meta type
-    type ChildMeta: Meta<Self::K>;
+    type ChildMeta: Argumentation<Self::K>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;
@@ -1238,7 +1238,7 @@ pub trait Key: Clone + Ord {}
 impl<T> Key for T where T: Clone + Ord {}
 
 /// Inner node trait
-pub trait INode<K: Key, M: Meta<K>> {
+pub trait INode<K: Key, M: Argumentation<K>> {
     /// Create a new inner node with `slot_keys` and `child_id`.
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],

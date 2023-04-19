@@ -2,13 +2,12 @@ use std::borrow::Cow;
 
 use crate::Key;
 
-/// Meta trait, it is used to store recursive metadata, like 'size'
-/// What is a proper name? 'Meta' is not a good name.
-pub trait Meta<K: Key>: Clone + Default + std::fmt::Debug {
-    /// create a new meta from leaf node's key
+/// Augument trait, it is used to store augumentation, like 'size'
+pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
+    /// create a new Argumentation from leaf node's key
     fn from_leaf(keys: &[K]) -> Self;
 
-    /// create a new meta from inner node and its meta
+    /// create a new Argumentation from inner node and its meta
     /// e.g: take size as example.
     /// the root node's meta is created from its children's meta and keys
     /// the inner node with height 1's meta is created from leaf's keys
@@ -18,10 +17,8 @@ pub trait Meta<K: Key>: Clone + Default + std::fmt::Debug {
     fn from_inner(keys: &[K], meta: &[Self]) -> Self;
 }
 
-/// A meta that can be used to search elements.
-/// e.g: if each node stores a `ElementCount` size, then it can be used to
-///      query the element at index `i` in the tree.
-pub trait SearchableMeta<K: Key>: Meta<K> {
+/// Whether the argumentation able to locate element
+pub trait SearchableMeta<K: Key>: Argumentation<K> {
     /// locate the offset of the element in leaf node
     fn locate_in_leaf(&self, query: Self, keys: &[K]) -> Option<usize>;
 
@@ -29,7 +26,7 @@ pub trait SearchableMeta<K: Key>: Meta<K> {
     fn locate_in_inner(&self, query: Self, keys: &[K], meta: &[Self]) -> Option<(usize, Self)>;
 }
 
-impl<K: Key> Meta<K> for () {
+impl<K: Key> Argumentation<K> for () {
     fn from_leaf(_: &[K]) -> Self {
         ()
     }
@@ -39,6 +36,9 @@ impl<K: Key> Meta<K> for () {
     }
 }
 
+/// Argumentation converts the tree to order statistic tree.
+/// e.g: if each node stores a `ElementCount` size, then it can be used to
+///      query the element at index `i` in the tree.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ElementCount(usize);
 
@@ -49,7 +49,7 @@ impl ElementCount {
     }
 }
 
-impl<K: Key> Meta<K> for ElementCount {
+impl<K: Key> Argumentation<K> for ElementCount {
     fn from_leaf(keys: &[K]) -> Self {
         Self(keys.len())
     }
@@ -96,7 +96,7 @@ pub trait FromRef<T> {
     fn from_ref(input: &T) -> Self;
 }
 
-impl<K, G> Meta<K> for Option<GroupCount<G>>
+impl<K, G> Argumentation<K> for Option<GroupCount<G>>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
