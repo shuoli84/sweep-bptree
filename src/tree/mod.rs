@@ -501,6 +501,7 @@ where
         };
 
         if r.is_some() {
+            self.root_meta = Self::meta_for_id(&self.node_store, self.root);
             self.len -= 1;
         }
 
@@ -527,20 +528,26 @@ where
 
             match child_id {
                 NodeId::Inner(inner_id) => {
-                    // we only track inner node, because leaf node is always processed in this loop
                     stack.push(node_id, child_idx, child_id);
+
+                    // we only track inner node, because leaf node is always processed in this loop
                     node_id = inner_id;
                     continue;
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_mut_leaf(leaf_id);
-                    match leaf.try_delete(k) {
-                        LeafDeleteResult::Done(kv) => return DeleteDescendResult::Done(kv),
-                        LeafDeleteResult::NotFound => return DeleteDescendResult::None,
-                        LeafDeleteResult::UnderSize(idx) => {
-                            break self.handle_leaf_under_size(inner_node, child_idx, idx);
+                    break match leaf.try_delete(k) {
+                        LeafDeleteResult::Done(kv) => {
+                            // we need to
+                            inner_node
+                                .set_child_meta(child_idx, S::ChildMeta::from_leaf(leaf.keys()));
+                            DeleteDescendResult::Done(kv)
                         }
-                    }
+                        LeafDeleteResult::NotFound => DeleteDescendResult::None,
+                        LeafDeleteResult::UnderSize(idx) => {
+                            self.handle_leaf_under_size(inner_node, child_idx, idx)
+                        }
+                    };
                 }
             }
         };
@@ -550,22 +557,20 @@ where
             match stack.pop() {
                 Some((parent_id, child_idx, child_id)) => {
                     match r {
+                        DeleteDescendResult::Done(_) => {
+                            let child_meta = Self::meta_for_id(&mut self.node_store, child_id);
+                            let inner_node = self.node_store.get_mut_inner(parent_id);
+                            // update child meta
+                            inner_node.set_child_meta(child_idx, child_meta);
+                        }
                         DeleteDescendResult::InnerUnderSize(kv) => {
                             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
                             //         so we can safely get a mut ptr to it.
                             let parent =
                                 unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
                             r = self.handle_inner_under_size(parent, child_idx, kv);
-                            continue;
                         }
-                        DeleteDescendResult::Done(_) => {
-                            let child_meta = Self::meta_for_id(&mut self.node_store, child_id);
-                            let inner_node = self.node_store.get_mut_inner(parent_id);
-                            // update child meta
-                            inner_node.set_child_meta(child_idx, child_meta);
-                            continue;
-                        }
-                        DeleteDescendResult::None => continue,
+                        DeleteDescendResult::None => {}
                     }
                 }
                 None => return r,
@@ -803,6 +808,9 @@ where
         let left = node_store.get_mut_inner(left_child_id);
         left.merge_next(slot_key, &mut right);
 
+        let left_meta = S::ChildMeta::from_inner(left.keys(), left.child_meta());
+        node.set_child_meta(slot, left_meta);
+
         result
     }
 
@@ -819,9 +827,12 @@ where
         debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
+        node.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
+
         let new_slot_key = kv.0.clone();
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
+        node.set_child_meta(slot + 1, S::ChildMeta::from_leaf(right.keys()));
 
         node_store.cache_leaf(right_id);
 
@@ -844,9 +855,12 @@ where
         debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
+        parent.set_child_meta(slot + 1, S::ChildMeta::from_leaf(right.keys()));
+
         let new_slot_key = right.data_at(0).0.clone();
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
+        parent.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
 
         // the prev key is dropped here
         let _ = parent.set_key(slot, new_slot_key);
@@ -867,6 +881,7 @@ where
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.merge_right_delete_first(delete_idx, &mut right);
+        parent.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -894,6 +909,8 @@ where
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.delete_at(delete_idx);
         left.merge_right(&mut right);
+
+        parent.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -1427,8 +1444,6 @@ mod tests {
             assert_eq!(tree.root_meta.count(), tree.len());
         }
 
-        tree.node_store.print();
-
         let mut keys = (0..size).collect::<Vec<_>>();
         keys.shuffle(&mut rand::thread_rng());
         for i in keys {
@@ -1440,9 +1455,11 @@ mod tests {
 
         for i in keys {
             let k = i;
+            println!("\ndeleting {i}");
 
             let delete_result = tree.remove(&k);
             assert!(delete_result.is_some());
+            assert_eq!(tree.root_meta.count(), tree.len());
         }
 
         assert!(tree.is_empty());
@@ -1881,8 +1898,6 @@ mod tests {
 
         let mut keys = (0..size).collect::<Vec<_>>();
         keys.shuffle(&mut rand::thread_rng());
-
-        // println!("{:?}", keys);
 
         for i in keys.iter() {
             tree.insert(*i, i % 13);

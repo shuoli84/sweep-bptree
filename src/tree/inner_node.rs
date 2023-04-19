@@ -315,14 +315,12 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
                     self.key_area_mut(prompt_key_index + 1..prompt_key_index + new_slot_idx + 1),
                     new_node.key_area_mut(..new_slot_idx),
                 );
-
                 utils::move_to_slice(
                     self.child_area_mut(
                         split_origin_size + 1..split_origin_size + 1 + new_child_idx,
                     ),
                     new_node.child_area_mut(0..new_child_idx),
                 );
-
                 utils::move_to_slice(
                     self.meta_area_mut(
                         split_origin_size + 1..split_origin_size + 1 + new_child_idx,
@@ -384,6 +382,7 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
         let k = unsafe {
             let k = utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
             utils::slice_remove(self.child_area_mut(..self.size as usize + 1), slot + 1);
+            utils::slice_remove(self.meta_area_mut(..self.size as usize + 1), slot + 1);
             k
         };
         self.size -= 1;
@@ -414,6 +413,10 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
                 right.child_area_mut(..right_size + 1),
                 self.child_area_mut(self_size..self_size + right_size + 1),
             );
+            utils::move_to_slice(
+                right.meta_area_mut(..right_size + 1),
+                self.meta_area_mut(self_size..self_size + right_size + 1),
+            );
             self.size += right.size;
             right.size = 0;
         }
@@ -430,7 +433,7 @@ impl<K: Key, M: Meta<K>, const N: usize, const C: usize> InnerNode<K, M, N, C> {
             MaybeUninit::uninit(),
         );
         let meta = std::mem::replace(
-            unsafe { self.meta_area_mut(self.len()) },
+            unsafe { self.meta_area_mut(self.size as usize) },
             MaybeUninit::uninit(),
         );
         self.size -= 1;

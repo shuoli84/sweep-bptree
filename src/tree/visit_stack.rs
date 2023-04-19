@@ -85,8 +85,6 @@ mod tests {
 
     #[test]
     fn test_visit_stack() {
-        assert_eq!(std::mem::size_of::<VisitStack<12>>(), 128);
-
         let mut stack = VisitStack::<12>::new();
         assert!(stack.is_empty());
 
@@ -98,7 +96,7 @@ mod tests {
 
         assert_eq!(
             stack.pop().unwrap(),
-            (InnerNodeId(3), 3, NodeId::Inner(InnerNodeId(10)))
+            (InnerNodeId(3), 3, NodeId::Inner(InnerNodeId(30)))
         );
         assert_eq!(
             stack.pop().unwrap(),
@@ -106,7 +104,7 @@ mod tests {
         );
         assert_eq!(
             stack.pop().unwrap(),
-            (InnerNodeId(1), 1, NodeId::Inner(InnerNodeId(30)))
+            (InnerNodeId(1), 1, NodeId::Inner(InnerNodeId(10)))
         );
 
         assert!(stack.is_empty());

@@ -4,7 +4,7 @@ use crate::Key;
 
 /// Meta trait, it is used to store recursive metadata, like 'size'
 /// What is a proper name? 'Meta' is not a good name.
-pub trait Meta<K: Key>: Clone + Default {
+pub trait Meta<K: Key>: Clone + Default + std::fmt::Debug {
     /// create a new meta from leaf node's key
     fn from_leaf(keys: &[K]) -> Self;
 
@@ -86,7 +86,7 @@ impl<K: Key> SearchableMeta<K> for ElementCount {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct GroupCount<G: Clone + Ord> {
+pub struct GroupCount<G: Clone + Ord + std::fmt::Debug> {
     min_group: G,
     max_group: G,
     group_count: usize,
@@ -99,7 +99,7 @@ pub trait FromRef<T> {
 impl<K, G> Meta<K> for Option<GroupCount<G>>
 where
     K: Key,
-    G: FromRef<K> + Clone + Ord,
+    G: FromRef<K> + Clone + Ord + std::fmt::Debug,
 {
     fn from_leaf(keys: &[K]) -> Self {
         let mut keys_iter = keys.iter();
