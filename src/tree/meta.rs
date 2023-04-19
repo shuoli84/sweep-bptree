@@ -89,7 +89,7 @@ impl<K: Key> SearchableMeta<K> for ElementCount {
 pub struct GroupCount<G: Clone + Ord + std::fmt::Debug> {
     min_group: G,
     max_group: G,
-    group_count: usize,
+    pub count: usize,
 }
 
 pub trait FromRef<T> {
@@ -103,7 +103,7 @@ where
 {
     fn from_leaf(keys: &[K]) -> Self {
         let mut keys_iter = keys.iter();
-        let first_group = G::from_ref(keys_iter.next().unwrap());
+        let first_group = G::from_ref(keys_iter.next()?);
         let mut group_count = 1;
         let mut last_group = Cow::Borrowed(&first_group);
 
@@ -118,7 +118,7 @@ where
         Some(GroupCount {
             min_group: first_group,
             max_group: last_group,
-            group_count,
+            count: group_count,
         })
     }
 
@@ -129,16 +129,16 @@ where
 
         let mut meta_iter = meta.iter().flatten();
         let first_meta = meta_iter.next().unwrap();
-        let mut group_count = first_meta.group_count;
+        let mut group_count = first_meta.count;
 
         let mut last_group = &first_meta.max_group;
 
         for m in meta_iter {
             if last_group.eq(&m.min_group) {
                 // one group crossed two nodes
-                group_count += m.group_count - 1;
+                group_count += m.count - 1;
             } else {
-                group_count += m.group_count;
+                group_count += m.count;
             }
 
             last_group = &m.max_group;
@@ -147,13 +147,15 @@ where
         Some(GroupCount {
             min_group: first_meta.min_group.clone(),
             max_group: last_group.clone(),
-            group_count,
+            count: group_count,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::{BPlusTree, NodeStoreVec};
+
     use super::*;
 
     #[test]
@@ -177,7 +179,7 @@ mod tests {
         }
 
         let meta = Option::<GroupCount<G>>::from_leaf(&[1, 2, 3]);
-        assert_eq!(meta.unwrap().group_count, 2);
+        assert_eq!(meta.unwrap().count, 2);
 
         let meta = Option::<GroupCount<G>>::from_inner(
             &[1, 2, 3],
@@ -185,23 +187,23 @@ mod tests {
                 Some(GroupCount {
                     min_group: G(0),
                     max_group: G(1),
-                    group_count: 2,
+                    count: 2,
                 }),
                 Some(GroupCount {
                     min_group: G(1),
                     max_group: G(4),
-                    group_count: 2,
+                    count: 2,
                 }),
                 Some(GroupCount {
                     min_group: G(4),
                     max_group: G(10),
-                    group_count: 3,
+                    count: 3,
                 }),
             ],
         );
 
         // 1 and 4 are dup groups in child, so we need to fix the double counting
-        assert_eq!(meta.unwrap().group_count, 2 + 1 + 2);
+        assert_eq!(meta.unwrap().count, 2 + 1 + 2);
 
         let meta = Option::<GroupCount<G>>::from_inner(
             &[1, 2, 3],
@@ -209,20 +211,53 @@ mod tests {
                 Some(GroupCount {
                     min_group: G(0),
                     max_group: G(0),
-                    group_count: 1,
+                    count: 1,
                 }),
                 Some(GroupCount {
                     min_group: G(0),
                     max_group: G(0),
-                    group_count: 1,
+                    count: 1,
                 }),
                 Some(GroupCount {
                     min_group: G(0),
                     max_group: G(0),
-                    group_count: 1,
+                    count: 1,
                 }),
             ],
         );
-        assert_eq!(meta.unwrap().group_count, 1);
+        assert_eq!(meta.unwrap().count, 1);
+    }
+
+    #[test]
+    fn test_group_count_in_tree() {
+        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+        struct Group(u64);
+
+        impl FromRef<(u64, u64)> for Group {
+            fn from_ref(input: &(u64, u64)) -> Self {
+                Group(input.0)
+            }
+        }
+
+        let node_store = NodeStoreVec::<(u64, u64), i64, 8, 9, 6, Option<GroupCount<Group>>>::new();
+        let mut tree = BPlusTree::new(node_store);
+
+        tree.insert((1, 1), 100);
+        assert_eq!(tree.root_meta.as_ref().unwrap().count, 1);
+        tree.remove(&(1, 1));
+        assert!(tree.root_meta.is_none());
+
+        tree.insert((1, 1), 100);
+        tree.insert((1, 2), 100);
+        assert_eq!(tree.root_meta.as_ref().unwrap().count, 1);
+
+        tree.insert((1, 3), 100);
+        tree.insert((2, 4), 100);
+        assert_eq!(tree.root_meta.as_ref().unwrap().count, 2);
+        tree.insert((3, 5), 100);
+        tree.insert((4, 6), 100);
+        assert_eq!(tree.root_meta.as_ref().unwrap().count, 4);
+        tree.remove(&(4, 6));
+        assert_eq!(tree.root_meta.as_ref().unwrap().count, 3);
     }
 }
