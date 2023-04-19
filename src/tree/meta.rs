@@ -18,12 +18,18 @@ pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
 }
 
 /// Whether the argumentation able to locate element
-pub trait SearchableMeta<K: Key>: Argumentation<K> {
+pub trait SearchArgumentation<K: Key>: Argumentation<K> {
+    type Query;
+
     /// locate the offset of the element in leaf node
-    fn locate_in_leaf(&self, query: Self, keys: &[K]) -> Option<usize>;
+    fn locate_in_leaf(query: Self::Query, keys: &[K]) -> Option<usize>;
 
     /// locate the child index of query in inner node, with new query
-    fn locate_in_inner(&self, query: Self, keys: &[K], meta: &[Self]) -> Option<(usize, Self)>;
+    fn locate_in_inner(
+        query: Self::Query,
+        keys: &[K],
+        meta: &[Self],
+    ) -> Option<(usize, Self::Query)>;
 }
 
 impl<K: Key> Argumentation<K> for () {
@@ -59,9 +65,11 @@ impl<K: Key> Argumentation<K> for ElementCount {
     }
 }
 
-impl<K: Key> SearchableMeta<K> for ElementCount {
-    fn locate_in_leaf(&self, query: Self, keys: &[K]) -> Option<usize> {
-        let idx = query.0;
+impl<K: Key> SearchArgumentation<K> for ElementCount {
+    /// Query for ElementCount is index
+    type Query = usize;
+
+    fn locate_in_leaf(idx: usize, keys: &[K]) -> Option<usize> {
         if idx < keys.len() {
             Some(idx)
         } else {
@@ -69,14 +77,12 @@ impl<K: Key> SearchableMeta<K> for ElementCount {
         }
     }
 
-    fn locate_in_inner(&self, query: Self, _keys: &[K], meta: &[Self]) -> Option<(usize, Self)> {
-        let mut offset = query.0;
-
+    fn locate_in_inner(mut idx: usize, _keys: &[K], meta: &[Self]) -> Option<(usize, usize)> {
         for (i, m) in meta.iter().enumerate() {
-            if offset > m.0 {
-                offset -= m.0;
+            if idx >= m.0 {
+                idx -= m.0;
             } else {
-                return Some((i, Self(offset)));
+                return Some((i, idx));
             }
         }
 
@@ -165,6 +171,29 @@ mod tests {
 
         let meta = ElementCount::from_inner(&[1, 2, 3], &[meta, meta, meta]);
         assert_eq!(meta.0, 9);
+    }
+
+    #[test]
+    fn test_element_count_in_tree() {
+        let node_store = NodeStoreVec::<i64, u32, 4, 5, 4, ElementCount>::new();
+        let mut tree = BPlusTree::new(node_store);
+        tree.insert(1, 101);
+        assert_eq!(tree.root_meta.count(), 1);
+
+        tree.remove(&1);
+        assert_eq!(tree.root_meta.count(), 0);
+
+        for i in 2..500 {
+            tree.insert(i, i as u32 + 100);
+        }
+
+        let expected_size = 498;
+        assert_eq!(tree.len(), expected_size);
+
+        for i in 0..expected_size {
+            assert_eq!(tree.get_by_argument(i).unwrap(), &(100 + 2 + i as u32));
+        }
+        assert!(tree.get_by_argument(expected_size + 1).is_none());
     }
 
     #[test]

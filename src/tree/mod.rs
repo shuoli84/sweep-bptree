@@ -1063,6 +1063,40 @@ where
         std::mem::drop(std::mem::replace(self, Self::new(S::default())));
     }
 
+    /// get by argument
+    pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<&S::V>
+    where
+        S::ChildMeta: SearchArgumentation<S::K, Query = Q>,
+    {
+        let mut node_id = self.root;
+
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    dbg!(inner_id);
+
+                    let inner = self.node_store.get_inner(inner_id);
+                    let (offset, new_query) =
+                        <S::ChildMeta as SearchArgumentation<_>>::locate_in_inner(
+                            query,
+                            inner.keys(),
+                            inner.child_meta(),
+                        )?;
+                    node_id = inner.child_id(offset);
+                    query = new_query;
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf = self.node_store.get_leaf(leaf_id);
+                    let slot = <S::ChildMeta as SearchArgumentation<_>>::locate_in_leaf(
+                        query,
+                        leaf.keys(),
+                    )?;
+                    return Some(leaf.data_at(slot).1);
+                }
+            }
+        }
+    }
+
     #[cfg(test)]
     fn validate(&self) {
         let Some(mut leaf_id) = self.first_leaf() else { return; };
@@ -1427,7 +1461,7 @@ mod tests {
     #[test]
     fn test_round_trip_one() {
         round_trip_one::<4, 5, 4>();
-        // round_trip_one::<5, 6, 5>();
+        round_trip_one::<5, 6, 5>();
     }
 
     fn round_trip_one<const N: usize, const C: usize, const L: usize>() {
