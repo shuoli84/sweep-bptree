@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load() {
-        type Tree = BPlusTree<NodeStoreVec<i32, i32, 4, 5, 4>>;
+        type Tree = BPlusTree<NodeStoreVec<i32, i32, 4, 5>>;
         let data = (0..400).map(|i| (i, i * 2)).collect::<Vec<_>>();
         let loaded_tree = Tree::bulk_load(data.clone());
         let mut inserted_tree = Tree::new(NodeStoreVec::default());
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load_string() {
-        type Tree = BPlusTree<NodeStoreVec<String, i32, 4, 5, 4>>;
+        type Tree = BPlusTree<NodeStoreVec<String, i32, 4, 5>>;
         let data = (0..400)
             .map(|i| (format!("{i:010}"), i * 2))
             .collect::<Vec<_>>();

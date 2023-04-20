@@ -6,8 +6,10 @@ use std::{
     slice::SliceIndex,
 };
 
+const N: usize = 64;
+
 #[derive(Debug)]
-pub struct LeafNode<K, V, const N: usize> {
+pub struct LeafNode<K, V> {
     /// how many data items
     size: u16,
     slot_key: [MaybeUninit<K>; N],
@@ -17,7 +19,7 @@ pub struct LeafNode<K, V, const N: usize> {
     next: Option<LeafNodeId>,
 }
 
-impl<K: Key, V, const N: usize> Clone for LeafNode<K, V, N>
+impl<K: Key, V> Clone for LeafNode<K, V>
 where
     V: Clone,
 {
@@ -52,7 +54,7 @@ where
     }
 }
 
-impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
+impl<K: Key, V> LeafNode<K, V> {
     pub fn new() -> Box<Self> {
         let layout = Layout::new::<mem::MaybeUninit<Self>>();
         let ptr: *mut Self = unsafe { alloc(layout).cast() };
@@ -67,6 +69,11 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
 
     const fn split_origin_size() -> u16 {
         (N / 2) as u16
+    }
+
+    /// Returns the maximum capacity of the leaf node
+    pub const fn max_capacity() -> u16 {
+        N as u16
     }
 
     /// the minimum size for Leaf Node, if the node size lower than this, then
@@ -575,7 +582,7 @@ pub enum LeafDeleteResult<K, V> {
     UnderSize(usize),
 }
 
-impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
+impl<K: Key, V> super::LNode<K, V> for LeafNode<K, V> {
     fn new() -> Box<Self> {
         Self::new()
     }
@@ -720,73 +727,104 @@ impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
 mod tests {
     use super::*;
 
+    /// create a leaf with data [2, 4, 6..]
+    fn test_leaf() -> Box<LeafNode<i64, i64>> {
+        let mut leaf = LeafNode::<i64, i64>::new();
+        leaf.set_data((0..N as i64).map(|i| ((i + 1) * 2, 0)).collect::<Vec<_>>());
+        leaf
+    }
+
+    fn assert_ascend(data: Vec<(i64, i64)>) {
+        for i in 0..data.len() - 1 {
+            assert!(data[i].0 < data[i + 1].0);
+        }
+    }
+
+    fn assert_ascend_2(mut data_0: Vec<(i64, i64)>, data_1: Vec<(i64, i64)>) {
+        data_0.extend(data_1);
+        assert_ascend(data_0);
+    }
+
     #[test]
     fn test_split_leaf() {
-        {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        let split_left_size = LeafNode::<i64, i64>::split_origin_size() as usize;
 
+        {
+            let mut leaf = test_leaf();
             let new_leaf = leaf.split_new_leaf(0, (0, 0), LeafNodeId(2), LeafNodeId(1));
 
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0), (2, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2 + 1);
+            assert_eq!(new_leaf.data_vec().len(), N / 2);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (2, 0), (3, 0), (4, 0)]);
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(1, (3, 0), LeafNodeId(2), LeafNodeId(1));
 
-            let new_leaf = leaf.split_new_leaf(1, (1, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0), (2, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2 + 1);
+            assert_eq!(new_leaf.data_vec().len(), N / 2);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (1, 0), (3, 0), (4, 0)]);
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(
+                split_left_size,
+                (split_left_size as i64 * 2 + 1, 0),
+                LeafNodeId(2),
+                LeafNodeId(1),
+            );
 
-            let new_leaf = leaf.split_new_leaf(2, (2, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2);
+            assert_eq!(new_leaf.data_vec().len(), N / 2 + 1);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (1, 0), (2, 0), (4, 0)]);
+            // split at left half's last element
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(
+                split_left_size - 1,
+                ((split_left_size - 1) as i64 * 2 + 1, 0),
+                LeafNodeId(2),
+                LeafNodeId(1),
+            );
 
-            let new_leaf = leaf.split_new_leaf(3, (3, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2 + 1);
+            assert_eq!(new_leaf.data_vec().len(), N / 2);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (1, 0), (2, 0), (3, 0)]);
+            // split at last
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(
+                N - 1,
+                ((N as i64 - 1) * 2 + 1, 0),
+                LeafNodeId(2),
+                LeafNodeId(1),
+            );
 
-            let new_leaf = leaf.split_new_leaf(4, (4, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2);
+            assert_eq!(new_leaf.data_vec().len(), N / 2 + 1);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
     }
     #[test]
     fn test_in_range() {
-        let mut leaf = LeafNode::<i64, i64, 4>::new();
-        leaf.set_data([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        let mut leaf = test_leaf();
         // prev and next both none, so all keys should considered in range
         assert!(leaf.in_range(&0));
-        assert!(leaf.in_range(&5));
+        assert!(leaf.in_range(&(129)));
 
         leaf.set_prev(Some(LeafNodeId(1)));
         // now had prev, so all keys less than min should be out of range
         assert!(!leaf.in_range(&0));
-        assert!(leaf.in_range(&5));
+        assert!(leaf.in_range(&129));
 
         leaf.set_next(Some(LeafNodeId(2)));
         assert!(!leaf.in_range(&0));
-        assert!(!leaf.in_range(&5));
+        assert!(!leaf.in_range(&129));
     }
 }

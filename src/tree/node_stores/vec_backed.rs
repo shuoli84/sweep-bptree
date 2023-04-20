@@ -4,23 +4,14 @@ use crate::tree::{
 };
 
 #[derive(Debug)]
-pub struct NodeStoreVec<
-    K: Key,
-    V,
-    const IN: usize,
-    const IC: usize,
-    const LN: usize,
-    A: Argumentation<K> = (),
-> {
+pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, A: Argumentation<K> = ()> {
     inner_nodes: Vec<Option<Box<InnerNode<K, A, IN, IC>>>>,
-    leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
+    leaf_nodes: Vec<Option<Box<LeafNode<K, V>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
-impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
-    for NodeStoreVec<K, V, IN, IC, LN>
-{
+impl<K: Key, V: Clone, const IN: usize, const IC: usize> Clone for NodeStoreVec<K, V, IN, IC> {
     fn clone(&self) -> Self {
         Self {
             inner_nodes: self.inner_nodes.clone(),
@@ -32,8 +23,8 @@ impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> Default
-    for NodeStoreVec<K, V, IN, IC, LN, A>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> Default
+    for NodeStoreVec<K, V, IN, IC, A>
 {
     fn default() -> Self {
         assert!(IN == IC - 1);
@@ -46,8 +37,8 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize>
-    NodeStoreVec<K, V, IN, IC, LN, A>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize>
+    NodeStoreVec<K, V, IN, IC, A>
 {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
@@ -101,13 +92,13 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
-    for NodeStoreVec<K, V, IN, IC, LN, A>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> NodeStore
+    for NodeStoreVec<K, V, IN, IC, A>
 {
     type K = K;
     type V = V;
     type InnerNode = InnerNode<K, A, IN, IC>;
-    type LeafNode = LeafNode<K, V, LN>;
+    type LeafNode = LeafNode<K, V>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
     type Argument = A;
 
@@ -116,7 +107,7 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 
     fn leaf_n() -> u16 {
-        LN as u16
+        LeafNode::<K, V>::max_capacity()
     }
 
     #[cfg(test)]
@@ -274,5 +265,5 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
 /// ensure NodeStoreVec is send for send v
 fn _ensure_send<V: Send>() {
     fn _assert_send<T: Send>() {}
-    _assert_send::<NodeStoreVec<u64, V, 4, 5, 4>>();
+    _assert_send::<NodeStoreVec<u64, V, 4, 5>>();
 }
