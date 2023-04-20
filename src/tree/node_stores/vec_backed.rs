@@ -1,26 +1,14 @@
-use crate::tree::{
-    visit_stack::VisitStack, Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId,
-    NodeStore,
-};
+use crate::tree::{Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
 
 #[derive(Debug)]
-pub struct NodeStoreVec<
-    K: Key,
-    V,
-    const IN: usize,
-    const IC: usize,
-    const LN: usize,
-    A: Argumentation<K> = (),
-> {
-    inner_nodes: Vec<Option<Box<InnerNode<K, A, IN, IC>>>>,
-    leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
+pub struct NodeStoreVec<K: Key, V, A: Argumentation<K> = ()> {
+    inner_nodes: Vec<Option<Box<InnerNode<K, A>>>>,
+    leaf_nodes: Vec<Option<Box<LeafNode<K, V>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
-impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
-    for NodeStoreVec<K, V, IN, IC, LN>
-{
+impl<K: Key, V: Clone> Clone for NodeStoreVec<K, V> {
     fn clone(&self) -> Self {
         Self {
             inner_nodes: self.inner_nodes.clone(),
@@ -32,12 +20,8 @@ impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> Default
-    for NodeStoreVec<K, V, IN, IC, LN, A>
-{
+impl<K: Key, V, A: Argumentation<K>> Default for NodeStoreVec<K, V, A> {
     fn default() -> Self {
-        assert!(IN == IC - 1);
-
         Self {
             inner_nodes: Default::default(),
             leaf_nodes: Default::default(),
@@ -46,9 +30,7 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize>
-    NodeStoreVec<K, V, IN, IC, LN, A>
-{
+impl<K: Key, V, A: Argumentation<K>> NodeStoreVec<K, V, A> {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self::default()
@@ -71,8 +53,6 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
         V: std::fmt::Debug + Clone,
         A: std::fmt::Debug,
     {
-        use crate::tree::{INode, LNode};
-
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?} argument: {:?}",
@@ -101,22 +81,17 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
-    for NodeStoreVec<K, V, IN, IC, LN, A>
-{
+impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, A, IN, IC>;
-    type LeafNode = LeafNode<K, V, LN>;
-    type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
     type Argument = A;
 
     fn inner_n() -> u16 {
-        IN as u16
+        InnerNode::<K, A>::max_capacity()
     }
 
     fn leaf_n() -> u16 {
-        LN as u16
+        LeafNode::<K, V>::max_capacity()
     }
 
     #[cfg(test)]
@@ -132,26 +107,26 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
-        let node = Self::InnerNode::empty();
+        let node = InnerNode::<K, A>::empty();
         self.inner_nodes.push(Some(node));
         id
     }
 
-    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
+    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut LeafNode<K, V>) {
         let id = LeafNodeId::from_usize(self.leaf_nodes.len());
-        let node = Self::LeafNode::new();
+        let node = LeafNode::<Self::K, Self::V>::new();
         self.leaf_nodes.push(Some(node));
         (id, self.get_mut_leaf(id))
     }
 
-    fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId {
+    fn add_inner(&mut self, node: Box<InnerNode<K, A>>) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
         self.inner_nodes.push(Some(node));
         id
     }
 
     #[inline(always)]
-    fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode {
+    fn get_inner(&self, id: InnerNodeId) -> &InnerNode<K, A> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, and it is always valid
@@ -163,13 +138,13 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
         }
     }
 
-    fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode> {
+    fn try_get_inner(&self, id: InnerNodeId) -> Option<&InnerNode<K, A>> {
         let node = self.inner_nodes.get(id.as_usize())?.as_ref()?;
         Some(node)
     }
 
     #[inline(always)]
-    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode {
+    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<K, A> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, and it is always valid
@@ -181,11 +156,11 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
         }
     }
 
-    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<InnerNode<K, A>> {
         std::mem::take(&mut self.inner_nodes[id.as_usize()]).unwrap()
     }
 
-    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>) {
+    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<InnerNode<K, A>>) {
         self.inner_nodes[id.as_usize()] = Some(node);
     }
 
@@ -196,7 +171,7 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 
     #[inline(always)]
-    fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode {
+    fn get_leaf(&self, id: LeafNodeId) -> &LeafNode<Self::K, Self::V> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
@@ -208,13 +183,13 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
         }
     }
 
-    fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
+    fn try_get_leaf(&self, id: LeafNodeId) -> Option<&LeafNode<K, V>> {
         let leaf_node = self.leaf_nodes.get(id.as_usize())?.as_ref()?;
         Some(leaf_node)
     }
 
     #[inline(always)]
-    fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode {
+    fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut LeafNode<K, V> {
         // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
         unsafe {
             self.leaf_nodes
@@ -224,16 +199,16 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
         }
     }
 
-    fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode> {
+    fn take_leaf(&mut self, id: LeafNodeId) -> Box<LeafNode<K, V>> {
         std::mem::take(&mut self.leaf_nodes[id.as_usize()]).unwrap()
     }
 
-    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>) {
+    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<LeafNode<K, V>>) {
         self.leaf_nodes[id.as_usize()] = Some(leaf);
     }
 
     #[inline(always)]
-    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut Self::InnerNode {
+    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut InnerNode<K, A> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
@@ -242,7 +217,7 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
                 .get_unchecked_mut(id.as_usize())
                 .as_mut()
                 .unwrap_or_else(|| std::hint::unreachable_unchecked())
-                .as_mut() as *mut Self::InnerNode
+                .as_mut() as *mut _
         }
     }
 
@@ -274,5 +249,5 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN:
 /// ensure NodeStoreVec is send for send v
 fn _ensure_send<V: Send>() {
     fn _assert_send<T: Send>() {}
-    _assert_send::<NodeStoreVec<u64, V, 4, 5, 4>>();
+    _assert_send::<NodeStoreVec<u64, V>>();
 }

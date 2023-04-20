@@ -4,7 +4,7 @@ use crate::{BPlusTree, Key, NodeStoreVec};
 
 /// A B+ tree based set
 pub struct BPlusTreeSet<K: crate::Key> {
-    tree: BPlusTree<NodeStoreVec<K, (), 64, 65, 64>>,
+    tree: BPlusTree<NodeStoreVec<K, ()>>,
 }
 
 impl<K: Key> Default for BPlusTreeSet<K> {
@@ -264,7 +264,7 @@ mod iter {
     /// An iterator over the references of keys in a `BPlusTreeSet`
     #[derive(Clone)]
     pub struct Iter<'a, K: crate::Key> {
-        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, (), 64, 65, 64>>,
+        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, ()>>,
     }
 
     impl<'a, K: crate::Key> Iterator for Iter<'a, K> {
@@ -291,7 +291,7 @@ mod iter {
 
     /// An iterator over the keys in a `BPlusTreeSet`
     pub struct IntoIter<K: crate::Key> {
-        pub(super) inner: crate::tree::IntoIter<NodeStoreVec<K, (), 64, 65, 64>>,
+        pub(super) inner: crate::tree::IntoIter<NodeStoreVec<K, ()>>,
     }
 
     impl<K: crate::Key> Iterator for IntoIter<K> {

@@ -6,8 +6,10 @@ use std::{
     slice::SliceIndex,
 };
 
+const N: usize = 64;
+
 #[derive(Debug)]
-pub struct LeafNode<K, V, const N: usize> {
+pub struct LeafNode<K, V> {
     /// how many data items
     size: u16,
     slot_key: [MaybeUninit<K>; N],
@@ -17,7 +19,7 @@ pub struct LeafNode<K, V, const N: usize> {
     next: Option<LeafNodeId>,
 }
 
-impl<K: Key, V, const N: usize> Clone for LeafNode<K, V, N>
+impl<K: Key, V> Clone for LeafNode<K, V>
 where
     V: Clone,
 {
@@ -52,7 +54,7 @@ where
     }
 }
 
-impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
+impl<K: Key, V> LeafNode<K, V> {
     pub fn new() -> Box<Self> {
         let layout = Layout::new::<mem::MaybeUninit<Self>>();
         let ptr: *mut Self = unsafe { alloc(layout).cast() };
@@ -65,8 +67,17 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         this
     }
 
+    pub fn len(&self) -> usize {
+        self.size as usize
+    }
+
     const fn split_origin_size() -> u16 {
         (N / 2) as u16
+    }
+
+    /// Returns the maximum capacity of the leaf node
+    pub const fn max_capacity() -> u16 {
+        N as u16
     }
 
     /// the minimum size for Leaf Node, if the node size lower than this, then
@@ -128,8 +139,16 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         self.prev = id;
     }
 
+    pub fn prev(&self) -> Option<LeafNodeId> {
+        self.prev
+    }
+
     pub fn set_next(&mut self, id: Option<LeafNodeId>) {
         self.next = id;
+    }
+
+    pub fn next(&self) -> Option<LeafNodeId> {
+        self.next
     }
 
     pub fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
@@ -147,7 +166,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    fn data_at(&self, slot: usize) -> (&K, &V) {
+    pub fn data_at(&self, slot: usize) -> (&K, &V) {
         unsafe {
             (
                 self.key_area(slot).assume_init_ref(),
@@ -186,7 +205,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
     pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
-        match self.locate_child_idx(&k) {
+        match self.locate_slot(&k) {
             Ok(idx) => {
                 // update existing item
                 let prev_v =
@@ -208,7 +227,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    fn split_new_leaf(
+    pub(crate) fn split_new_leaf(
         &mut self,
         insert_idx: usize,
         item: (K, V),
@@ -269,11 +288,11 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     /// Delete an item from LeafNode
-    pub(crate) fn delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    pub(crate) fn try_delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
     where
         K: Borrow<Q>,
     {
-        match self.locate_child_idx(k) {
+        match self.locate_slot(k) {
             Ok(idx) => {
                 if self.able_to_lend() {
                     let result = unsafe {
@@ -292,7 +311,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     #[inline]
-    pub(crate) fn locate_child_idx<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    pub fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
     where
         Q: Ord,
         K: std::borrow::Borrow<Q>,
@@ -301,12 +320,12 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     #[inline(always)]
-    pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    pub fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
     where
         Q: Ord,
         K: Borrow<Q>,
     {
-        match self.locate_child_idx(k) {
+        match self.locate_slot(k) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -324,12 +343,12 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         }
     }
 
-    pub(crate) fn locate_child_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    pub(crate) fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
     where
         Q: Ord,
         K: Borrow<Q>,
     {
-        match self.locate_child_idx(k) {
+        match self.locate_slot(k) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -399,7 +418,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     /// Delete the item at idx, then merge with right
-    pub(crate) fn merge_with_right_with_delete(
+    pub(crate) fn merge_right_delete_first(
         &mut self,
         delete_idx: usize,
         right: &mut Self,
@@ -472,7 +491,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
     }
 
     /// This should never called with same slot
-    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+    pub unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
         debug_assert!(slot < self.len());
 
         // safety: slot is checked against self.len()
@@ -505,7 +524,7 @@ impl<K: Key, V, const N: usize> LeafNode<K, V, N> {
         result
     }
 
-    fn keys(&self) -> &[K] {
+    pub fn keys(&self) -> &[K] {
         unsafe {
             {
                 let slice: &[MaybeUninit<K>] =
@@ -575,218 +594,108 @@ pub enum LeafDeleteResult<K, V> {
     UnderSize(usize),
 }
 
-impl<K: Key, V, const N: usize> super::LNode<K, V> for LeafNode<K, V, N> {
-    fn new() -> Box<Self> {
-        Self::new()
-    }
-
-    fn len(&self) -> usize {
-        self.size as usize
-    }
-
-    fn prev(&self) -> Option<LeafNodeId> {
-        self.prev
-    }
-
-    fn set_prev(&mut self, id: Option<LeafNodeId>) {
-        Self::set_prev(self, id)
-    }
-
-    fn next(&self) -> Option<LeafNodeId> {
-        self.next
-    }
-
-    fn set_next(&mut self, id: Option<LeafNodeId>) {
-        Self::set_next(self, id)
-    }
-
-    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
-        Self::set_data(self, data)
-    }
-
-    fn data_at(&self, slot: usize) -> (&K, &V) {
-        Self::data_at(self, slot)
-    }
-
-    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
-        Self::take_data(self, slot)
-    }
-
-    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
-        Self::try_data_at(self, idx)
-    }
-
-    fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>,
-    {
-        Self::in_range(self, k)
-    }
-
-    fn keys(&self) -> &[K] {
-        Self::keys(self)
-    }
-
-    #[inline(always)]
-    fn key_range(&self) -> (Option<K>, Option<K>) {
-        Self::key_range(self)
-    }
-
-    fn is_full(&self) -> bool {
-        LeafNode::is_full(self)
-    }
-
-    fn able_to_lend(&self) -> bool {
-        LeafNode::able_to_lend(self)
-    }
-
-    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
-        LeafNode::try_upsert(self, k, v)
-    }
-
-    fn split_new_leaf(
-        &mut self,
-        insert_idx: usize,
-        item: (K, V),
-        new_leaf_id: LeafNodeId,
-        self_leaf_id: LeafNodeId,
-    ) -> Box<Self> {
-        LeafNode::split_new_leaf(self, insert_idx, item, new_leaf_id, self_leaf_id)
-    }
-
-    fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
-    where
-        Q: Ord,
-        K: Borrow<Q>,
-    {
-        Self::locate_child_idx(&self, k)
-    }
-
-    fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
-    where
-        Q: Ord,
-        K: Borrow<Q>,
-    {
-        Self::locate_child(self, k)
-    }
-
-    fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
-    where
-        K: Borrow<Q>,
-        Q: Ord,
-    {
-        Self::locate_child_mut(self, k)
-    }
-
-    fn try_delete<Q: ?Sized>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
-    where
-        K: Borrow<Q>,
-        Q: Ord,
-    {
-        Self::delete(self, k)
-    }
-
-    fn delete_at(&mut self, idx: usize) -> (K, V) {
-        Self::delete_at(self, idx)
-    }
-
-    fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V) {
-        Self::delete_with_push_front(self, idx, item)
-    }
-
-    fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V) {
-        Self::delete_with_push(self, idx, item)
-    }
-
-    fn merge_right_delete_first(&mut self, delete_idx_in_next: usize, right: &mut Self) -> (K, V) {
-        Self::merge_with_right_with_delete(self, delete_idx_in_next, right)
-    }
-
-    fn merge_right(&mut self, right: &mut Self) {
-        Self::merge_right(self, right)
-    }
-
-    fn pop(&mut self) -> (K, V) {
-        Self::pop(self)
-    }
-
-    fn pop_front(&mut self) -> (K, V) {
-        Self::pop_front(self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// create a leaf with data [2, 4, 6..]
+    fn test_leaf() -> Box<LeafNode<i64, i64>> {
+        let mut leaf = LeafNode::<i64, i64>::new();
+        leaf.set_data((0..N as i64).map(|i| ((i + 1) * 2, 0)).collect::<Vec<_>>());
+        leaf
+    }
+
+    fn assert_ascend(data: Vec<(i64, i64)>) {
+        for i in 0..data.len() - 1 {
+            assert!(data[i].0 < data[i + 1].0);
+        }
+    }
+
+    fn assert_ascend_2(mut data_0: Vec<(i64, i64)>, data_1: Vec<(i64, i64)>) {
+        data_0.extend(data_1);
+        assert_ascend(data_0);
+    }
+
     #[test]
     fn test_split_leaf() {
-        {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        let split_left_size = LeafNode::<i64, i64>::split_origin_size() as usize;
 
+        {
+            let mut leaf = test_leaf();
             let new_leaf = leaf.split_new_leaf(0, (0, 0), LeafNodeId(2), LeafNodeId(1));
 
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0), (2, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2 + 1);
+            assert_eq!(new_leaf.data_vec().len(), N / 2);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (2, 0), (3, 0), (4, 0)]);
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(1, (3, 0), LeafNodeId(2), LeafNodeId(1));
 
-            let new_leaf = leaf.split_new_leaf(1, (1, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0), (2, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2 + 1);
+            assert_eq!(new_leaf.data_vec().len(), N / 2);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (1, 0), (3, 0), (4, 0)]);
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(
+                split_left_size,
+                (split_left_size as i64 * 2 + 1, 0),
+                LeafNodeId(2),
+                LeafNodeId(1),
+            );
 
-            let new_leaf = leaf.split_new_leaf(2, (2, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2);
+            assert_eq!(new_leaf.data_vec().len(), N / 2 + 1);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (1, 0), (2, 0), (4, 0)]);
+            // split at left half's last element
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(
+                split_left_size - 1,
+                ((split_left_size - 1) as i64 * 2 + 1, 0),
+                LeafNodeId(2),
+                LeafNodeId(1),
+            );
 
-            let new_leaf = leaf.split_new_leaf(3, (3, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2 + 1);
+            assert_eq!(new_leaf.data_vec().len(), N / 2);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
 
         {
-            let mut leaf = LeafNode::<i64, i64, 4>::new();
-            leaf.set_data([(0, 0), (1, 0), (2, 0), (3, 0)]);
+            // split at last
+            let mut leaf = test_leaf();
+            let new_leaf = leaf.split_new_leaf(
+                N - 1,
+                ((N as i64 - 1) * 2 + 1, 0),
+                LeafNodeId(2),
+                LeafNodeId(1),
+            );
 
-            let new_leaf = leaf.split_new_leaf(4, (4, 0), LeafNodeId(2), LeafNodeId(1));
-
-            assert_eq!(leaf.data_vec(), vec![(0, 0), (1, 0)]);
-            assert_eq!(new_leaf.data_vec(), vec![(2, 0), (3, 0), (4, 0)]);
+            assert_eq!(leaf.data_vec().len(), N / 2);
+            assert_eq!(new_leaf.data_vec().len(), N / 2 + 1);
+            assert_ascend_2(leaf.data_vec(), new_leaf.data_vec());
         }
     }
     #[test]
     fn test_in_range() {
-        let mut leaf = LeafNode::<i64, i64, 4>::new();
-        leaf.set_data([(1, 0), (2, 0), (3, 0), (4, 0)]);
+        let mut leaf = test_leaf();
         // prev and next both none, so all keys should considered in range
         assert!(leaf.in_range(&0));
-        assert!(leaf.in_range(&5));
+        assert!(leaf.in_range(&(129)));
 
         leaf.set_prev(Some(LeafNodeId(1)));
         // now had prev, so all keys less than min should be out of range
         assert!(!leaf.in_range(&0));
-        assert!(leaf.in_range(&5));
+        assert!(leaf.in_range(&129));
 
         leaf.set_next(Some(LeafNodeId(2)));
         assert!(!leaf.in_range(&0));
-        assert!(!leaf.in_range(&5));
+        assert!(!leaf.in_range(&129));
     }
 }

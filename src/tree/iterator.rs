@@ -9,10 +9,10 @@ use super::*;
 pub struct Iter<'a, S: NodeStore> {
     tree: &'a BPlusTree<S>,
     len: usize,
-    leaf: Option<&'a S::LeafNode>,
+    leaf: Option<&'a LeafNode<S::K, S::V>>,
     leaf_offset: usize,
 
-    end: Option<(&'a S::LeafNode, usize)>,
+    end: Option<(&'a LeafNode<S::K, S::V>, usize)>,
 }
 
 impl<'a, S: NodeStore> Iter<'a, S> {
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_into_iter_collect() {
         // test collect and drop
-        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let node_store = NodeStoreVec::<i64, TestValue>::new();
         let mut tree = BPlusTree::new(node_store);
         let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
         for i in 0..10 {
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn test_into_iter_drop() {
         // test drop
-        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let node_store = NodeStoreVec::<i64, TestValue>::new();
         let mut tree = BPlusTree::new(node_store);
         let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
         for i in 0..10 {
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn test_into_iter_double_ended() {
-        let node_store = NodeStoreVec::<i64, TestValue, 8, 9, 6>::new();
+        let node_store = NodeStoreVec::<i64, TestValue>::new();
         let mut tree = BPlusTree::new(node_store);
         let counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
         for i in 0..10 {
