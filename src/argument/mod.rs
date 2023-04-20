@@ -230,10 +230,10 @@ mod tests {
         let node_store = NodeStoreVec::<i64, u32, ElementCount>::new();
         let mut tree = BPlusTree::new(node_store);
         tree.insert(1, 101);
-        assert_eq!(tree.root_argument.count(), 1);
+        assert_eq!(tree.root_argument().count(), 1);
 
         tree.remove(&1);
-        assert_eq!(tree.root_argument.count(), 0);
+        assert_eq!(tree.root_argument().count(), 0);
 
         for i in 2..500 {
             tree.insert(i, i as u32 + 100);
@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(tree.len(), expected_size);
 
         for i in 0..expected_size {
-            assert_eq!(tree.get_by_argument(i).unwrap(), &(100 + 2 + i as u32));
+            assert_eq!(tree.get_by_argument(i).unwrap().1, &(100 + 2 + i as u32));
         }
         assert!(tree.get_by_argument(expected_size + 1).is_none());
 
@@ -331,21 +331,21 @@ mod tests {
         let mut tree = BPlusTree::new(node_store);
 
         tree.insert((1, 1), 100);
-        assert_eq!(tree.root_argument.as_ref().unwrap().count, 1);
+        assert_eq!(tree.root_argument().as_ref().unwrap().count, 1);
         tree.remove(&(1, 1));
-        assert!(tree.root_argument.is_none());
+        assert!(tree.root_argument().is_none());
 
         tree.insert((1, 1), 100);
         tree.insert((1, 2), 100);
-        assert_eq!(tree.root_argument.as_ref().unwrap().count, 1);
+        assert_eq!(tree.root_argument().as_ref().unwrap().count, 1);
 
         tree.insert((1, 3), 100);
         tree.insert((2, 4), 100);
-        assert_eq!(tree.root_argument.as_ref().unwrap().count, 2);
+        assert_eq!(tree.root_argument().as_ref().unwrap().count, 2);
         tree.insert((3, 5), 100);
         tree.insert((4, 6), 100);
-        assert_eq!(tree.root_argument.as_ref().unwrap().count, 4);
+        assert_eq!(tree.root_argument().as_ref().unwrap().count, 4);
         tree.remove(&(4, 6));
-        assert_eq!(tree.root_argument.as_ref().unwrap().count, 3);
+        assert_eq!(tree.root_argument().as_ref().unwrap().count, 3);
     }
 }

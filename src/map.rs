@@ -1,9 +1,13 @@
 use std::borrow::Borrow;
 
-use crate::{BPlusTree, Key, NodeStoreVec};
+use crate::{
+    argument::RankArgumentation,
+    tree::{Argumentation, SearchArgumentation},
+    BPlusTree, Key, NodeStoreVec,
+};
 
-pub struct BPlusTreeMap<K: Key, V> {
-    inner: BPlusTree<NodeStoreVec<K, V>>,
+pub struct BPlusTreeMap<K: Key, V, A: Argumentation<K> = ()> {
+    inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }
 
 impl<K: Key, V> Default for BPlusTreeMap<K, V> {
@@ -12,7 +16,7 @@ impl<K: Key, V> Default for BPlusTreeMap<K, V> {
     }
 }
 
-impl<K: Key, V> BPlusTreeMap<K, V> {
+impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// Create a new BPlusTreeMap
     ///
     /// # Examples
@@ -144,24 +148,83 @@ impl<K: Key, V> BPlusTreeMap<K, V> {
     /// assert_eq!(kvs, vec![(1, 2), (2, 3)]);
     /// ```
     #[inline]
-    pub fn iter(&self) -> iter::Iter<K, V> {
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         iter::Iter {
             inner: self.inner.iter(),
         }
+    }
+
+    /// Get value by argument's query
+    ///
+    /// # Example
+    /// ```rust
+    ///
+    /// use sweep_bptree::BPlusTreeMap;
+    /// use sweep_bptree::argument::ElementCount;
+    ///
+    ///
+    /// let mut map = BPlusTreeMap::<i32, i32, ElementCount>::new();
+    /// map.insert(1, 2);
+    /// map.insert(2, 3);
+    /// map.insert(3, 4);
+    ///
+    /// assert_eq!(map.get_by_argument(0), Some((&1, &2)));
+    /// assert_eq!(map.get_by_argument(1), Some((&2, &3)));
+    /// assert_eq!(map.get_by_argument(2), Some((&3, &4)));
+    ///
+    /// ```
+    pub fn get_by_argument<Q>(&self, query: Q) -> Option<(&K, &V)>
+    where
+        A: SearchArgumentation<K, Query = Q>,
+    {
+        self.inner.get_by_argument(query)
+    }
+
+    /// Get the rank for key
+    ///
+    /// # Example
+    ///
+    /// ``` rust
+    ///
+    /// use sweep_bptree::BPlusTreeMap;
+    /// use sweep_bptree::argument::ElementCount;
+    ///
+    /// let mut map = BPlusTreeMap::<i32, i32, ElementCount>::new();
+    /// map.insert(1, 2);
+    /// map.insert(2, 3);
+    /// map.insert(3, 4);
+    ///
+    /// // 0 does not exists
+    /// assert_eq!(map.rank_by_argument(&0), Err(0));
+    ///
+    /// // 1's rank is 0
+    /// assert_eq!(map.rank_by_argument(&1), Ok(0));
+    /// assert_eq!(map.rank_by_argument(&2), Ok(1));
+    /// assert_eq!(map.rank_by_argument(&3), Ok(2));
+    ///
+    /// // 4 does not exists
+    /// assert_eq!(map.rank_by_argument(&4), Err(3));
+    ///
+    /// ```
+    pub fn rank_by_argument<R>(&self, k: &K) -> Result<R, R>
+    where
+        A: RankArgumentation<K, Rank = R>,
+    {
+        self.inner.rank_by_argument(k)
     }
 }
 
 mod iter {
     use std::iter::FusedIterator;
 
-    use super::*;
+    use crate::NodeStore;
 
-    pub struct Iter<'a, K: Key, V> {
-        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, V>>,
+    pub struct Iter<'a, S: NodeStore> {
+        pub(super) inner: crate::tree::Iter<'a, S>,
     }
 
-    impl<'a, K: Key, V> Iterator for Iter<'a, K, V> {
-        type Item = (&'a K, &'a V);
+    impl<'a, S: NodeStore> Iterator for Iter<'a, S> {
+        type Item = (&'a S::K, &'a S::V);
 
         #[inline]
         fn size_hint(&self) -> (usize, Option<usize>) {
@@ -174,12 +237,12 @@ mod iter {
         }
     }
 
-    impl<'a, K: Key, V> DoubleEndedIterator for Iter<'a, K, V> {
+    impl<'a, S: NodeStore> DoubleEndedIterator for Iter<'a, S> {
         fn next_back(&mut self) -> Option<Self::Item> {
             self.inner.next_back()
         }
     }
 
-    impl<'a, K: Key, V> ExactSizeIterator for Iter<'a, K, V> {}
-    impl<'a, K: Key, V> FusedIterator for Iter<'a, K, V> {}
+    impl<'a, S: NodeStore> ExactSizeIterator for Iter<'a, S> {}
+    impl<'a, S: NodeStore> FusedIterator for Iter<'a, S> {}
 }

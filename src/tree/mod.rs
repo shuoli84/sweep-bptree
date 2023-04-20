@@ -14,9 +14,8 @@ pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
 
-mod argument;
 mod bulk_load;
-pub use argument::*;
+pub use crate::argument::*;
 
 use self::visit_stack::VisitStack;
 mod visit_stack;
@@ -140,6 +139,11 @@ where
     /// Returns true if the tree contains no elements.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Returns a reference to root argument
+    pub fn root_argument(&self) -> &S::Argument {
+        &self.root_argument
     }
 
     /// Insert a new key-value pair into the tree.
@@ -1067,7 +1071,7 @@ where
     }
 
     /// get by argument
-    pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<&S::V>
+    pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<(&S::K, &S::V)>
     where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
@@ -1076,8 +1080,6 @@ where
         loop {
             match node_id {
                 NodeId::Inner(inner_id) => {
-                    dbg!(inner_id);
-
                     let inner = self.node_store.get_inner(inner_id);
                     let (offset, new_query) =
                         <S::Argument as SearchArgumentation<_>>::locate_in_inner(
@@ -1094,7 +1096,7 @@ where
                         query,
                         leaf.keys(),
                     )?;
-                    return Some(leaf.data_at(slot).1);
+                    return Some(leaf.data_at(slot));
                 }
             }
         }
