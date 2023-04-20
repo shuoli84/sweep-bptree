@@ -2,6 +2,8 @@ use std::borrow::Cow;
 
 use crate::Key;
 
+use super::LNode;
+
 /// Augument trait, it is used to store augumentation, like 'size'
 pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
     /// create a new Argumentation from leaf node's key
@@ -32,6 +34,30 @@ pub trait SearchArgumentation<K: Key>: Argumentation<K> {
     ) -> Option<(usize, Self::Query)>;
 }
 
+/// Whether the argumentation able to rank element(like the index of key)
+pub trait RankArgumentation<K: Key>: Argumentation<K> {
+    type Rank: Default;
+
+    /// Initial rank value, e.g: 0 for size
+    /// it will be passed to the first call of `combine_rank`
+    fn initial_value() -> Self::Rank;
+
+    /// combine rank with all ranks for prev sibling meta.
+    /// The passed in meta slice doesn't contain the meta 'k' belongs
+    /// The result will be passed to `combine_rank` for inner layer
+    /// and finally to `rank_in_leaf`
+    fn fold_inner(rank: Self::Rank, meta: &[Self]) -> Self::Rank;
+
+    /// Get rank of the key in leaf node
+    /// Returns Ok(Rank) for existing key, Err(Rank) for non-existing key
+    fn fold_leaf<V, N: LNode<K, V>>(
+        k: &K,
+        leaf: &N,
+        rank: Self::Rank,
+    ) -> Result<Self::Rank, Self::Rank>;
+}
+
+/// Unit is a dummy argumentation, it doesn't store any meta
 impl<K: Key> Argumentation<K> for () {
     fn from_leaf(_: &[K]) -> Self {
         ()
@@ -88,6 +114,34 @@ impl<K: Key> SearchArgumentation<K> for ElementCount {
 
         // offset is larger than the sum of all meta
         None
+    }
+}
+
+impl<K: Key> RankArgumentation<K> for ElementCount {
+    /// The rank for ElementCount is index
+    type Rank = usize;
+
+    fn initial_value() -> Self::Rank {
+        0
+    }
+
+    fn fold_leaf<V, N: LNode<K, V>>(
+        k: &K,
+        leaf: &N,
+        rank: Self::Rank,
+    ) -> Result<Self::Rank, Self::Rank> {
+        match leaf.locate_slot(k) {
+            Ok(idx) => Ok(idx + rank),
+            Err(idx) => Err(idx + rank),
+        }
+    }
+
+    /// combine the rank of child and the rank of all prev siblings
+    fn fold_inner(mut rank: Self::Rank, meta: &[Self]) -> Self::Rank {
+        for m in meta {
+            rank += m.0
+        }
+        rank
     }
 }
 
@@ -194,6 +248,13 @@ mod tests {
             assert_eq!(tree.get_by_argument(i).unwrap(), &(100 + 2 + i as u32));
         }
         assert!(tree.get_by_argument(expected_size + 1).is_none());
+
+        // 1 is not in the tree
+        assert_eq!(tree.rank_by_argument(&1), Err(0));
+        for i in 2..500 {
+            assert_eq!(tree.rank_by_argument(&i), Ok(i as usize - 2));
+        }
+        assert_eq!(tree.rank_by_argument(&500), Err(expected_size));
     }
 
     #[test]

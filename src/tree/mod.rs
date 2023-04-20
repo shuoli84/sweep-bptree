@@ -1097,6 +1097,31 @@ where
         }
     }
 
+    /// Get rank for argument
+    pub fn rank_by_argument<R>(&self, k: &S::K) -> Result<R, R>
+    where
+        S::ChildMeta: RankArgumentation<S::K, Rank = R>,
+    {
+        let mut node_id = self.root;
+        let mut rank = <S::ChildMeta as RankArgumentation<S::K>>::initial_value();
+
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    let inner = self.node_store.get_inner(inner_id);
+                    let (child_idx, child_id) = inner.locate_child(k);
+                    node_id = child_id;
+                    let metas = &inner.child_meta()[0..child_idx];
+                    rank = <S::ChildMeta as RankArgumentation<S::K>>::fold_inner(rank, metas);
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf = self.node_store.get_leaf(leaf_id);
+                    return <S::ChildMeta as RankArgumentation<_>>::fold_leaf(k, leaf, rank);
+                }
+            }
+        }
+    }
+
     #[cfg(test)]
     fn validate(&self) {
         let Some(mut leaf_id) = self.first_leaf() else { return; };
