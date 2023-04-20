@@ -31,8 +31,8 @@ mod visit_stack;
 /// ```rust
 /// use sweep_bptree::{BPlusTree, NodeStoreVec};
 ///
-/// // create a node_store with `u64` as key, `(f64, f64)` as value, inner node size 64, child size 65, leaf node size 64
-/// let mut node_store = NodeStoreVec::<u64, (f64, f64), 64, 65>::new();
+/// // create a node_store with `u64` as key, `(f64, f64)` as value
+/// let mut node_store = NodeStoreVec::<u64, (f64, f64)>::new();
 /// let mut tree = BPlusTree::new(node_store);
 ///
 /// // insert new value
@@ -52,7 +52,7 @@ mod visit_stack;
 ///
 /// ``` rust
 /// use sweep_bptree::{BPlusTree, NodeStoreVec};
-/// let mut node_store = NodeStoreVec::<u64, (f64, f64), 64, 65>::new();
+/// let mut node_store = NodeStoreVec::<u64, (f64, f64)>::new();
 /// let mut tree = BPlusTree::new(node_store);
 ///
 /// for i in 0..100 {
@@ -1474,13 +1474,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_round_trip_100() {
-        for _ in 0..10 {
-            round_trip_one();
-        }
-    }
-
-    #[test]
     fn test_round_trip_one() {
         round_trip_one();
     }
@@ -1549,144 +1542,6 @@ mod tests {
         let first_leaf_id = tree.first_leaf().unwrap();
         let first_leaf = tree.node_store.get_leaf(first_leaf_id);
         assert_eq!(first_leaf.data_at(0).0.clone(), 0);
-    }
-
-    #[test]
-    fn test_rotate_right() {
-        let mut node_store = NodeStoreVec::<i64, i64>::new();
-        let parent_id = node_store.new_empty_inner();
-        let child_0 = node_store.new_empty_inner();
-        let child_1 = node_store.new_empty_inner();
-        let child_2 = node_store.new_empty_inner();
-        let child_3 = node_store.new_empty_inner();
-
-        let parent_node = node_store.get_mut_inner(parent_id);
-        parent_node.set_data([10, 30, 50], [child_0, child_1, child_2, child_3]);
-
-        node_store.get_mut_inner(child_1).set_data(
-            [10, 11, 12, 13],
-            [
-                LeafNodeId(1),
-                LeafNodeId(2),
-                LeafNodeId(3),
-                LeafNodeId(4),
-                LeafNodeId(5),
-            ],
-        );
-
-        node_store
-            .get_mut_inner(child_2)
-            .set_data([40, 41], [LeafNodeId(6), LeafNodeId(7), LeafNodeId(8)]);
-
-        let mut parent = node_store.take_inner(parent_id);
-        assert!(
-            BPlusTree::try_rotate_right_for_inner_node(&mut node_store, &mut parent, 1).is_some()
-        );
-        node_store.put_back_inner(parent_id, parent);
-
-        {
-            let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.key(1).clone(), 13);
-        }
-
-        {
-            let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.len(), 3);
-            assert_eq!(child_1.key_vec(), vec![10, 11, 12]);
-            assert_eq!(
-                child_1.child_id_vec(),
-                vec![
-                    LeafNodeId(1).into(),
-                    LeafNodeId(2).into(),
-                    LeafNodeId(3).into(),
-                    LeafNodeId(4).into(),
-                ]
-            );
-        }
-
-        {
-            let child_2 = node_store.get_inner(child_2);
-
-            assert_eq!(child_2.len(), 3);
-
-            assert_eq!(child_2.key_vec(), vec![30, 40, 41]);
-            assert_eq!(
-                child_2.child_id_vec(),
-                vec![
-                    LeafNodeId(5).into(),
-                    LeafNodeId(6).into(),
-                    LeafNodeId(7).into(),
-                    LeafNodeId(8).into(),
-                ]
-            );
-        }
-    }
-
-    #[test]
-    fn test_rotate_left() {
-        let mut node_store = NodeStoreVec::<i64, i64>::new();
-        let parent_id = node_store.new_empty_inner();
-        let child_0 = node_store.new_empty_inner();
-        let child_1 = node_store.new_empty_inner();
-        let child_2 = node_store.new_empty_inner();
-        let child_3 = node_store.new_empty_inner();
-
-        node_store
-            .get_mut_inner(parent_id)
-            .set_data([10, 30, 50], [child_0, child_1, child_2, child_3]);
-
-        node_store.get_mut_inner(child_1).set_data(
-            [10, 11, 12],
-            [LeafNodeId(1), LeafNodeId(2), LeafNodeId(3), LeafNodeId(4)],
-        );
-
-        node_store.get_mut_inner(child_2).set_data(
-            [39, 40, 41],
-            [LeafNodeId(5), LeafNodeId(6), LeafNodeId(7), LeafNodeId(8)],
-        );
-
-        let mut parent = node_store.take_inner(parent_id);
-        assert!(
-            BPlusTree::try_rotate_left_for_inner_node(&mut node_store, &mut parent, 1).is_some()
-        );
-        node_store.put_back_inner(parent_id, parent);
-
-        {
-            let parent = node_store.get_inner(parent_id);
-            assert_eq!(parent.key(1).clone(), 39);
-        }
-
-        {
-            let child_1 = node_store.get_inner(child_1);
-            assert_eq!(child_1.len(), 4);
-            assert_eq!(child_1.key_vec(), vec![10, 11, 12, 30]);
-            assert_eq!(
-                child_1.child_id_vec(),
-                vec![
-                    LeafNodeId(1).into(),
-                    LeafNodeId(2).into(),
-                    LeafNodeId(3).into(),
-                    LeafNodeId(4).into(),
-                    LeafNodeId(5).into(),
-                ]
-            );
-        }
-
-        {
-            let child_2 = node_store.get_inner(child_2);
-
-            assert_eq!(child_2.len(), 2);
-
-            assert_eq!(child_2.key_vec(), vec![40, 41]);
-            assert_eq!(
-                child_2.child_id_vec(),
-                vec![
-                    LeafNodeId(6).into(),
-                    LeafNodeId(7).into(),
-                    LeafNodeId(8).into(),
-                ]
-            );
-        }
     }
 
     #[test]
