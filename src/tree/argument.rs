@@ -1,8 +1,6 @@
-use std::borrow::Cow;
-
 use crate::Key;
 
-use super::LeafNode;
+use std::borrow::Cow;
 
 /// Augument trait, it is used to store augumentation, like 'size'
 pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
@@ -44,16 +42,16 @@ pub trait RankArgumentation<K: Key>: Argumentation<K> {
 
     /// combine rank with all ranks for prev sibling arguments.
     /// The passed in argument slice doesn't contain the argument 'k' belongs
-    /// The result will be passed to `combine_rank` for inner layer
-    /// and finally to `rank_in_leaf`
+    /// The result will be passed to `fold_inner` for inner layer
+    /// and finally to `fold_leaf`
     fn fold_inner(rank: Self::Rank, arguments: &[Self]) -> Self::Rank;
 
     /// Get rank of the key in leaf node
     /// Returns Ok(Rank) for existing key, Err(Rank) for non-existing key
-    fn fold_leaf<V>(
-        k: &K,
-        leaf: &LeafNode<K, V>,
+    fn fold_leaf(
         rank: Self::Rank,
+        slot: Result<usize, usize>,
+        keys: &[K],
     ) -> Result<Self::Rank, Self::Rank>;
 }
 
@@ -125,23 +123,23 @@ impl<K: Key> RankArgumentation<K> for ElementCount {
         0
     }
 
-    fn fold_leaf<V>(
-        k: &K,
-        leaf: &LeafNode<K, V>,
-        rank: Self::Rank,
-    ) -> Result<Self::Rank, Self::Rank> {
-        match leaf.locate_slot(k) {
-            Ok(idx) => Ok(idx + rank),
-            Err(idx) => Err(idx + rank),
-        }
-    }
-
     /// combine the rank of child and the rank of all prev siblings
     fn fold_inner(mut rank: Self::Rank, arguments: &[Self]) -> Self::Rank {
         for a in arguments {
             rank += a.0
         }
         rank
+    }
+
+    fn fold_leaf(
+        rank: Self::Rank,
+        slot: Result<usize, usize>,
+        _keys: &[K],
+    ) -> Result<Self::Rank, Self::Rank> {
+        match slot {
+            Ok(idx) => Ok(idx + rank),
+            Err(idx) => Err(idx + rank),
+        }
     }
 }
 

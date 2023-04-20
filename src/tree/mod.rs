@@ -1119,7 +1119,12 @@ where
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
-                    return <S::Argument as RankArgumentation<_>>::fold_leaf(k, leaf, rank);
+                    let slot = leaf.locate_slot(k);
+                    return <S::Argument as RankArgumentation<_>>::fold_leaf(
+                        rank,
+                        slot,
+                        leaf.keys(),
+                    );
                 }
             }
         }
