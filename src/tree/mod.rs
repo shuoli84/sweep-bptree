@@ -1464,7 +1464,7 @@ pub trait LNode<K: Key, V> {
 /// ensure NodeStoreVec is send for send v
 fn _ensure_send<V: Send>() {
     fn _assert_send<T: Send>() {}
-    _assert_send::<BPlusTree<NodeStoreVec<u64, V, 4, 5>>>();
+    _assert_send::<BPlusTree<NodeStoreVec<u64, V>>>();
 }
 
 #[cfg(test)]
@@ -1477,23 +1477,21 @@ mod tests {
 
     #[test]
     fn test_round_trip_100() {
-        for _ in 0..100 {
-            round_trip_one::<4, 5>();
-            round_trip_one::<5, 6>();
+        for _ in 0..10 {
+            round_trip_one();
         }
     }
 
     #[test]
     fn test_round_trip_one() {
-        round_trip_one::<4, 5>();
-        round_trip_one::<5, 6>();
+        round_trip_one();
     }
 
-    fn round_trip_one<const N: usize, const C: usize>() {
-        let node_store = NodeStoreVec::<i64, i64, N, C, ElementCount>::new();
+    fn round_trip_one() {
+        let node_store = NodeStoreVec::<i64, i64, ElementCount>::new();
         let mut tree = BPlusTree::new(node_store);
 
-        let size: i64 = 10000;
+        let size: i64 = 100000;
 
         let mut keys = (0..size).collect::<Vec<_>>();
         keys.shuffle(&mut rand::thread_rng());
@@ -1542,7 +1540,7 @@ mod tests {
 
     #[test]
     fn test_first_leaf() {
-        let node_store = NodeStoreVec::<i64, i64, 8, 9>::new();
+        let node_store = NodeStoreVec::<i64, i64>::new();
         let mut tree = BPlusTree::new(node_store);
         let size: i64 = 500;
         let keys = (0..size).collect::<Vec<_>>();
@@ -1557,7 +1555,7 @@ mod tests {
 
     #[test]
     fn test_rotate_right() {
-        let mut node_store = NodeStoreVec::<i64, i64, 4, 5>::new();
+        let mut node_store = NodeStoreVec::<i64, i64>::new();
         let parent_id = node_store.new_empty_inner();
         let child_0 = node_store.new_empty_inner();
         let child_1 = node_store.new_empty_inner();
@@ -1628,7 +1626,7 @@ mod tests {
 
     #[test]
     fn test_rotate_left() {
-        let mut node_store = NodeStoreVec::<i64, i64, 4, 5>::new();
+        let mut node_store = NodeStoreVec::<i64, i64>::new();
         let parent_id = node_store.new_empty_inner();
         let child_0 = node_store.new_empty_inner();
         let child_1 = node_store.new_empty_inner();
@@ -1695,7 +1693,7 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let mut node_store = NodeStoreVec::<i64, i64, 4, 5>::new();
+        let mut node_store = NodeStoreVec::<i64, i64>::new();
         let parent_id = node_store.new_empty_inner();
         let child_0 = node_store.new_empty_inner();
         let child_1 = node_store.new_empty_inner();
@@ -1749,7 +1747,7 @@ mod tests {
 
     #[test]
     fn test_merge_leaf_with_right() {
-        let mut node_store = NodeStoreVec::<i64, i64, 4, 5>::new();
+        let mut node_store = NodeStoreVec::<i64, i64>::new();
         let parent_id = node_store.new_empty_inner();
         let (child_0, _) = node_store.new_empty_leaf();
         let (child_1, _) = node_store.new_empty_leaf();
@@ -1785,7 +1783,7 @@ mod tests {
 
     #[test]
     fn test_merge_leaf_with_left() {
-        let mut node_store = NodeStoreVec::<i64, i64, 4, 5>::new();
+        let mut node_store = NodeStoreVec::<i64, i64>::new();
         let parent_id = node_store.new_empty_inner();
         let (child_0, _) = node_store.new_empty_leaf();
         let (child_1, _) = node_store.new_empty_leaf();
@@ -1861,9 +1859,8 @@ mod tests {
         assert!(kv.is_none());
     }
 
-    pub fn create_test_tree<const N: usize>() -> (BPlusTree<NodeStoreVec<i64, i64, 8, 9>>, Vec<i64>)
-    {
-        let node_store = NodeStoreVec::<i64, i64, 8, 9>::new();
+    pub fn create_test_tree<const N: usize>() -> (BPlusTree<NodeStoreVec<i64, i64>>, Vec<i64>) {
+        let node_store = NodeStoreVec::<i64, i64>::new();
         let mut tree = BPlusTree::new(node_store);
 
         let size: i64 = N as i64;
@@ -1964,7 +1961,7 @@ mod tests {
     fn test_drop() {
         let count: u64 = 16000;
         // test drop
-        let node_store = NodeStoreVec::<TestKey, TestValue, 4, 5>::new();
+        let node_store = NodeStoreVec::<TestKey, TestValue>::new();
         let mut tree = BPlusTree::new(node_store);
         let drop_counter = Rc::new(std::sync::atomic::AtomicU64::new(0));
         let key_counter = Rc::new(std::sync::atomic::AtomicU64::new(0));

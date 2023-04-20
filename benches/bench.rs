@@ -10,7 +10,7 @@ use sweep_bptree::{BPlusTree, NodeStoreVec};
 const COUNTS: [usize; 3] = [1000, 10000, 10_0000];
 const RAND_SEED: u64 = 123;
 
-type NodeStoreBench<K> = NodeStoreVec<K, Value, 64, 65>;
+type NodeStoreBench<K> = NodeStoreVec<K, Value>;
 
 fn bench_ordered_insert<K: TestKey>(c: &mut Criterion) {
     let mut group = c.benchmark_group(format!("ordered_insert/{}", K::name()));

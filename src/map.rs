@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use crate::{BPlusTree, Key, NodeStoreVec};
 
 pub struct BPlusTreeMap<K: Key, V> {
-    inner: BPlusTree<NodeStoreVec<K, V, 64, 65>>,
+    inner: BPlusTree<NodeStoreVec<K, V>>,
 }
 
 impl<K: Key, V> Default for BPlusTreeMap<K, V> {
@@ -157,7 +157,7 @@ mod iter {
     use super::*;
 
     pub struct Iter<'a, K: Key, V> {
-        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, V, 64, 65>>,
+        pub(super) inner: crate::tree::Iter<'a, NodeStoreVec<K, V>>,
     }
 
     impl<'a, K: Key, V> Iterator for Iter<'a, K, V> {

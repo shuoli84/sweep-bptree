@@ -6,11 +6,14 @@ use std::{
     mem::{self, MaybeUninit},
 };
 
+const N: usize = 64;
+const C: usize = N + 1;
+
 /// Tree's inner node, it contains a list of keys and a list of child node id
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
 #[derive(Debug)]
-pub struct InnerNode<K: Key, A: Argumentation<K>, const N: usize, const C: usize> {
+pub struct InnerNode<K: Key, A: Argumentation<K>> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
@@ -19,7 +22,7 @@ pub struct InnerNode<K: Key, A: Argumentation<K>, const N: usize, const C: usize
     arguments: [MaybeUninit<A>; C],
 }
 
-impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> Drop for InnerNode<K, A, N, C> {
+impl<K: Key, A: Argumentation<K>> Drop for InnerNode<K, A> {
     fn drop(&mut self) {
         // Satefy: The keys in range ..self.len() is initialized
         unsafe {
@@ -34,7 +37,7 @@ impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> Drop for Inner
     }
 }
 
-impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> Clone for InnerNode<K, A, N, C> {
+impl<K: Key, A: Argumentation<K>> Clone for InnerNode<K, A> {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
@@ -66,7 +69,17 @@ impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> Clone for Inne
     }
 }
 
-impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> InnerNode<K, A, N, C> {
+impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
+    /// Size of keys in inner node
+    pub fn len(&self) -> usize {
+        self.size as usize
+    }
+
+    /// Max key capacity
+    pub const fn max_capacity() -> u16 {
+        N as u16
+    }
+
     /// The size of the origin node after split
     pub const fn split_origin_size() -> usize {
         N / 2
@@ -621,9 +634,7 @@ impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> InnerNode<K, A
     }
 }
 
-impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> super::INode<K, A>
-    for InnerNode<K, A, N, C>
-{
+impl<K: Key, A: Argumentation<K>> super::INode<K, A> for InnerNode<K, A> {
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
@@ -732,9 +743,9 @@ pub enum InnerMergeResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    type InnerNode45 = InnerNode<usize, (), 4, 5>;
+    type InnerNode45 = InnerNode<usize, ()>;
 
-    fn new_test_node<const N: usize, const C: usize>() -> Box<InnerNode<usize, (), N, C>> {
+    fn new_test_node() -> Box<InnerNode<usize, ()>> {
         let mut slot_keys = [0; N];
         for i in 0..N {
             slot_keys[i] = i * 2;
@@ -748,7 +759,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_origin_even() {
-        let mut inner_node = new_test_node::<4, 5>();
+        let mut inner_node = new_test_node();
 
         let test_key = 3;
         let test_child = InnerNodeId(333);
@@ -777,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_origin_odd() {
-        let mut inner_node = new_test_node::<5, 6>();
+        let mut inner_node = new_test_node();
 
         let test_key = 3;
         let test_child = InnerNodeId(333);
@@ -807,7 +818,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_new_last_even() {
-        let mut inner_node = new_test_node::<4, 5>();
+        let mut inner_node = new_test_node();
 
         //   0 2  4  6
         // 0 10 20 30 40
@@ -842,7 +853,7 @@ mod tests {
 
     #[test]
     fn test_inner_split_new_key_in_new_last_odd() {
-        let mut inner_node = new_test_node::<5, 6>();
+        let mut inner_node = new_test_node();
 
         //  0  2  4  6  8
         // 0 10 20 30 40 50

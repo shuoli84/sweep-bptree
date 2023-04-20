@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_element_count_in_tree() {
-        let node_store = NodeStoreVec::<i64, u32, 4, 5, ElementCount>::new();
+        let node_store = NodeStoreVec::<i64, u32, ElementCount>::new();
         let mut tree = BPlusTree::new(node_store);
         tree.insert(1, 101);
         assert_eq!(tree.root_argument.count(), 1);
@@ -329,7 +329,7 @@ mod tests {
             }
         }
 
-        let node_store = NodeStoreVec::<(u64, u64), i64, 8, 9, Option<GroupCount<Group>>>::new();
+        let node_store = NodeStoreVec::<(u64, u64), i64, Option<GroupCount<Group>>>::new();
         let mut tree = BPlusTree::new(node_store);
 
         tree.insert((1, 1), 100);
