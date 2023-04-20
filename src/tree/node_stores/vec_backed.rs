@@ -10,9 +10,9 @@ pub struct NodeStoreVec<
     const IN: usize,
     const IC: usize,
     const LN: usize,
-    M: Argumentation<K> = (),
+    A: Argumentation<K> = (),
 > {
-    inner_nodes: Vec<Option<Box<InnerNode<K, M, IN, IC>>>>,
+    inner_nodes: Vec<Option<Box<InnerNode<K, A, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
@@ -32,8 +32,8 @@ impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     }
 }
 
-impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> Default
-    for NodeStoreVec<K, V, IN, IC, LN, M>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> Default
+    for NodeStoreVec<K, V, IN, IC, LN, A>
 {
     fn default() -> Self {
         assert!(IN == IC - 1);
@@ -46,8 +46,8 @@ impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 }
 
-impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize>
-    NodeStoreVec<K, V, IN, IC, LN, M>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize>
+    NodeStoreVec<K, V, IN, IC, LN, A>
 {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
@@ -69,7 +69,7 @@ impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     where
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
-        M: std::fmt::Debug,
+        A: std::fmt::Debug,
     {
         use crate::tree::{INode, LNode};
 

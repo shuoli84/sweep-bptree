@@ -19,7 +19,7 @@ pub struct InnerNode<K: Key, A: Argumentation<K>, const N: usize, const C: usize
     arguments: [MaybeUninit<A>; C],
 }
 
-impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> Drop for InnerNode<K, M, N, C> {
+impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> Drop for InnerNode<K, A, N, C> {
     fn drop(&mut self) {
         // Satefy: The keys in range ..self.len() is initialized
         unsafe {
@@ -34,7 +34,7 @@ impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> Drop for Inner
     }
 }
 
-impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> Clone for InnerNode<K, M, N, C> {
+impl<K: Key, A: Argumentation<K>, const N: usize, const C: usize> Clone for InnerNode<K, A, N, C> {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
@@ -48,7 +48,7 @@ impl<K: Key, M: Argumentation<K>, const N: usize, const C: usize> Clone for Inne
 
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_arguments =
-            unsafe { MaybeUninit::<[MaybeUninit<M>; C]>::uninit().assume_init() };
+            unsafe { MaybeUninit::<[MaybeUninit<A>; C]>::uninit().assume_init() };
 
         for i in 0..self.len() + 1 {
             unsafe {

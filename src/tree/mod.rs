@@ -1331,7 +1331,7 @@ pub trait INode<K: Key, A: Argumentation<K>> {
     fn arguments(&self) -> &[A];
 
     /// Set argument for idx
-    fn set_argument(&mut self, idx: usize, m: A);
+    fn set_argument(&mut self, idx: usize, argument: A);
 
     /// Get the key at `slot`
     fn key(&self, slot: usize) -> &K;
