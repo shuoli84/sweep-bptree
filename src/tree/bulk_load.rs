@@ -1,4 +1,6 @@
-use super::{Argumentation, INode, LeafNode, LeafNodeId, NodeId, NodeStore};
+use crate::tree::InnerNode;
+
+use super::{Argumentation, LeafNode, LeafNodeId, NodeId, NodeStore};
 
 impl<S: NodeStore> crate::BPlusTree<S> {
     /// bulk load data into a new `BPlusTree`, the loaded tree's leaf with fill rate 1.0
@@ -85,7 +87,11 @@ impl<S: NodeStore> crate::BPlusTree<S> {
             let childs_iter = childs.iter().map(|(child, _, _)| *child);
             let child_argument_iter = childs.iter().map(|(_, _, m)| m.clone());
 
-            let inner = S::InnerNode::new_from_iter(keys_iter, childs_iter, child_argument_iter);
+            let inner = InnerNode::<S::K, S::Argument>::new_from_iter(
+                keys_iter,
+                childs_iter,
+                child_argument_iter,
+            );
             let argument = S::Argument::from_inner(inner.keys(), inner.arguments());
             let node_id = node_store.add_inner(inner);
 

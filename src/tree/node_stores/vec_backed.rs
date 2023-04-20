@@ -84,7 +84,6 @@ impl<K: Key, V, A: Argumentation<K>> NodeStoreVec<K, V, A> {
 impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, A>;
     type Argument = A;
 
     fn inner_n() -> u16 {
@@ -108,7 +107,7 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
     #[cfg(test)]
     fn new_empty_inner(&mut self) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
-        let node = Self::InnerNode::empty();
+        let node = InnerNode::<K, A>::empty();
         self.inner_nodes.push(Some(node));
         id
     }
@@ -120,14 +119,14 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
         (id, self.get_mut_leaf(id))
     }
 
-    fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId {
+    fn add_inner(&mut self, node: Box<InnerNode<K, A>>) -> InnerNodeId {
         let id = InnerNodeId::from_usize(self.inner_nodes.len());
         self.inner_nodes.push(Some(node));
         id
     }
 
     #[inline(always)]
-    fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode {
+    fn get_inner(&self, id: InnerNodeId) -> &InnerNode<K, A> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, and it is always valid
@@ -139,13 +138,13 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
         }
     }
 
-    fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode> {
+    fn try_get_inner(&self, id: InnerNodeId) -> Option<&InnerNode<K, A>> {
         let node = self.inner_nodes.get(id.as_usize())?.as_ref()?;
         Some(node)
     }
 
     #[inline(always)]
-    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode {
+    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<K, A> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, and it is always valid
@@ -157,11 +156,11 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
         }
     }
 
-    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode> {
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<InnerNode<K, A>> {
         std::mem::take(&mut self.inner_nodes[id.as_usize()]).unwrap()
     }
 
-    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>) {
+    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<InnerNode<K, A>>) {
         self.inner_nodes[id.as_usize()] = Some(node);
     }
 
@@ -209,7 +208,7 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
     }
 
     #[inline(always)]
-    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut Self::InnerNode {
+    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut InnerNode<K, A> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
@@ -218,7 +217,7 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
                 .get_unchecked_mut(id.as_usize())
                 .as_mut()
                 .unwrap_or_else(|| std::hint::unreachable_unchecked())
-                .as_mut() as *mut Self::InnerNode
+                .as_mut() as *mut _
         }
     }
 

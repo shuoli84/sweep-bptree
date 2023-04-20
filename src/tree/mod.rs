@@ -156,7 +156,7 @@ where
                 let prev_root_argument = Self::new_argument_for_id(&self.node_store, node_id);
                 let new_argument = Self::new_argument_for_id(&self.node_store, new_child_id);
 
-                let new_root = S::InnerNode::new(
+                let new_root = InnerNode::<S::K, S::Argument>::new(
                     [k],
                     [node_id, new_child_id],
                     [prev_root_argument, new_argument],
@@ -485,7 +485,7 @@ where
                 DeleteDescendResult::InnerUnderSize(deleted_item) => {
                     let root = self.node_store.get_mut_inner(inner_id);
 
-                    if root.is_empty() {
+                    if root.len() == 0 {
                         self.root = root.child_id(0);
                     }
 
@@ -584,7 +584,7 @@ where
 
     fn handle_inner_under_size(
         &mut self,
-        node: &mut S::InnerNode,
+        node: &mut InnerNode<S::K, S::Argument>,
         child_idx: usize,
         deleted_item: (S::K, S::V),
     ) -> DeleteDescendResult<S::K, S::V> {
@@ -620,7 +620,7 @@ where
 
     fn handle_leaf_under_size(
         &mut self,
-        node: &mut S::InnerNode,
+        node: &mut InnerNode<S::K, S::Argument>,
         child_idx: usize,
         key_idx_in_child: usize,
     ) -> DeleteDescendResult<<S as NodeStore>::K, <S as NodeStore>::V> {
@@ -725,7 +725,7 @@ where
 
     fn try_rotate_right_for_inner_node(
         node_store: &mut S,
-        node: &mut S::InnerNode,
+        node: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
     ) -> Option<()> {
         //     1    3  5
@@ -757,7 +757,7 @@ where
 
     fn try_rotate_left_for_inner_node(
         node_store: &mut S,
-        node: &mut S::InnerNode,
+        node: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
     ) -> Option<()> {
         //     1  3  5
@@ -791,7 +791,7 @@ where
 
     fn merge_inner_node(
         node_store: &mut S,
-        node: &mut S::InnerNode,
+        node: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
     ) -> InnerMergeResult {
         //     1  3  5
@@ -819,7 +819,7 @@ where
 
     fn rotate_right_for_leaf(
         node_store: &mut S,
-        node: &mut S::InnerNode,
+        node: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
         delete_idx: usize,
     ) -> (S::K, S::V) {
@@ -847,7 +847,7 @@ where
 
     fn rotate_left_for_leaf(
         node_store: &mut S,
-        parent: &mut S::InnerNode,
+        parent: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
         delete_idx: usize,
     ) -> (S::K, S::V) {
@@ -874,7 +874,7 @@ where
 
     fn merge_leaf_node_left(
         node_store: &mut S,
-        parent: &mut S::InnerNode,
+        parent: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
         delete_idx: usize,
     ) -> DeleteDescendResult<S::K, S::V> {
@@ -901,7 +901,7 @@ where
 
     fn merge_leaf_node_with_right(
         node_store: &mut S,
-        parent: &mut S::InnerNode,
+        parent: &mut InnerNode<S::K, S::Argument>,
         slot: usize,
         delete_idx: usize,
     ) -> DeleteDescendResult<S::K, S::V> {
@@ -1006,7 +1006,7 @@ where
     fn descend_visit_inner(
         &self,
         mut node_id: InnerNodeId,
-        mut f: impl FnMut(&S::InnerNode) -> Option<InnerNodeId>,
+        mut f: impl FnMut(&InnerNode<S::K, S::Argument>) -> Option<InnerNodeId>,
     ) -> Option<()> {
         loop {
             let inner = self.node_store.get_inner(node_id);
@@ -1207,9 +1207,6 @@ pub trait NodeStore: Default {
     /// Value type for the tree
     type V;
 
-    /// InnerNode type
-    type InnerNode: INode<Self::K, Self::Argument>;
-
     /// The Argument type
     type Argument: Argumentation<Self::K>;
 
@@ -1223,29 +1220,32 @@ pub trait NodeStore: Default {
     fn new_empty_inner(&mut self) -> InnerNodeId;
 
     /// Add the inner node to the store and returns its id
-    fn add_inner(&mut self, node: Box<Self::InnerNode>) -> InnerNodeId;
+    fn add_inner(&mut self, node: Box<InnerNode<Self::K, Self::Argument>>) -> InnerNodeId;
 
     /// Get the inner node
     /// # Panics
     /// if id is invalid or the node is already removed, panic
-    fn get_inner(&self, id: InnerNodeId) -> &Self::InnerNode;
+    fn get_inner(&self, id: InnerNodeId) -> &InnerNode<Self::K, Self::Argument>;
 
     /// Get the inner node
     /// if id is invalid or the node already removed, remove None
-    fn try_get_inner(&self, id: InnerNodeId) -> Option<&Self::InnerNode>;
+    fn try_get_inner(&self, id: InnerNodeId) -> Option<&InnerNode<Self::K, Self::Argument>>;
 
     /// Get a mut reference to the `InnerNode`
-    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut Self::InnerNode;
+    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<Self::K, Self::Argument>;
 
     /// Get a mut pointer to inner node.
     /// User must ensure there is non shared reference to the node co-exists
-    unsafe fn get_mut_inner_ptr(&mut self, id: InnerNodeId) -> *mut Self::InnerNode;
+    unsafe fn get_mut_inner_ptr(
+        &mut self,
+        id: InnerNodeId,
+    ) -> *mut InnerNode<Self::K, Self::Argument>;
 
     /// Take the inner node out of the store
-    fn take_inner(&mut self, id: InnerNodeId) -> Box<Self::InnerNode>;
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<InnerNode<Self::K, Self::Argument>>;
 
     /// Put back the inner node
-    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>);
+    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<InnerNode<Self::K, Self::Argument>>);
 
     /// Create a new empty leaf node and returns its id
     fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut LeafNode<Self::K, Self::V>);
@@ -1293,171 +1293,6 @@ pub trait NodeStore: Default {
 pub trait Key: Clone + Ord {}
 
 impl<T> Key for T where T: Clone + Ord {}
-
-/// Inner node trait
-pub trait INode<K: Key, A: Argumentation<K>> {
-    /// Create a new inner node with `slot_keys` and `child_id`.
-    fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
-        slot_keys: [K; N1],
-        child_id: [I; C1],
-        arguments: [A; C1],
-    ) -> Box<Self>;
-
-    /// Create a new inner node from Iterators.
-    /// Note: the count for keys must less than `IN`, and count for childs must be keys's count plus 1.
-    /// Otherwise this method will panic!
-    fn new_from_iter(
-        keys: impl Iterator<Item = K>,
-        childs: impl Iterator<Item = NodeId>,
-        arguments: impl Iterator<Item = A>,
-    ) -> Box<Self>;
-
-    /// Get the number of keys
-    fn len(&self) -> usize;
-
-    /// Check if the node is empty
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Get keys slice
-    fn keys(&self) -> &[K];
-
-    /// Get arguments slice
-    fn arguments(&self) -> &[A];
-
-    /// Set argument for idx
-    fn set_argument(&mut self, idx: usize, argument: A);
-
-    /// Get the key at `slot`
-    fn key(&self, slot: usize) -> &K;
-
-    /// Set the key at `slot`
-    fn set_key(&mut self, slot: usize, key: K) -> K;
-
-    /// Get the child id at `idx`
-    fn child_id(&self, idx: usize) -> NodeId;
-
-    /// Locate the child node that contains the key
-    fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>;
-
-    /// Check if the node is full
-    fn is_full(&self) -> bool;
-
-    /// Check if the node is able to lend a key to its sibling
-    fn able_to_lend(&self) -> bool;
-
-    /// Insert a key and the right child id at `slot`
-    fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId, right_child_argument: A);
-
-    /// Split the node at `child_idx` and return the key to be inserted to parent
-    fn split(
-        &mut self,
-        child_idx: usize,
-        k: K,
-        new_child_id: NodeId,
-        new_child_argument: A,
-    ) -> (K, Box<Self>);
-
-    /// Remove the last key and its right child id
-    fn pop(&mut self) -> (K, NodeId, A);
-
-    /// Remove the first key and its left child id
-    fn pop_front(&mut self) -> (K, NodeId, A);
-
-    /// Insert a key and its right child id at the end
-    fn push(&mut self, k: K, child: NodeId, argument: A);
-
-    /// Insert a key and its left child id at the front
-    fn push_front(&mut self, k: K, child: NodeId, a: A);
-
-    /// Merge the key and its right child id at `slot` with its right sibling
-    fn merge_next(&mut self, slot_key: K, right: &mut Self);
-
-    /// Remove the key at `slot` and it's right child
-    fn remove_slot_with_right(&mut self, slot: usize) -> (InnerMergeResult, K);
-}
-
-/// Leaf node trait
-/// This is not supposed to be implemented by user
-pub trait LNode<K: Key, V> {
-    /// Create an empty LeafNode
-    fn new() -> Box<Self>;
-
-    /// Returns size of the leaf
-    fn len(&self) -> usize;
-
-    /// Returns true if the leaf is empty
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Returns prev `LeafNodeId` if exists
-    fn prev(&self) -> Option<LeafNodeId>;
-
-    /// Set prev to `LeafNodeId`
-    fn set_prev(&mut self, id: Option<LeafNodeId>);
-
-    /// Returns next `LeafNodeId` if exists
-    fn next(&self) -> Option<LeafNodeId>;
-
-    /// Set next to `LeafNodeId`
-    fn set_next(&mut self, id: Option<LeafNodeId>);
-
-    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>);
-    fn data_at(&self, slot: usize) -> (&K, &V);
-    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)>;
-
-    /// this takes data at `slot` out, makes original storage `uinit`.
-    /// This should never called for same slot, or double free will happen.
-    unsafe fn take_data(&mut self, slot: usize) -> (K, V);
-
-    fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>;
-
-    fn keys(&self) -> &[K];
-    fn key_range(&self) -> (Option<K>, Option<K>);
-    fn is_full(&self) -> bool;
-    fn able_to_lend(&self) -> bool;
-    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V>;
-    fn split_new_leaf(
-        &mut self,
-        insert_idx: usize,
-        item: (K, V),
-        new_leaf_id: LeafNodeId,
-        self_leaf_id: LeafNodeId,
-    ) -> Box<Self>;
-
-    fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>;
-    fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>;
-    fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>;
-
-    fn try_delete<Q: ?Sized>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>;
-    fn delete_at(&mut self, idx: usize) -> (K, V);
-    fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V);
-    fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V);
-    fn merge_right_delete_first(&mut self, delete_idx_in_next: usize, right: &mut Self) -> (K, V);
-    fn merge_right(&mut self, right: &mut Self);
-    fn pop(&mut self) -> (K, V);
-    fn pop_front(&mut self) -> (K, V);
-}
 
 /// ensure NodeStoreVec is send for send v
 fn _ensure_send<V: Send>() {

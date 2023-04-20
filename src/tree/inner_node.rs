@@ -133,7 +133,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
     }
 
     /// Create a new inner node from keys and childs iterator
-    fn new_from_iter(
+    pub fn new_from_iter(
         keys: impl IntoIterator<Item = K>,
         childs: impl IntoIterator<Item = NodeId>,
         arguments: impl IntoIterator<Item = A>,
@@ -165,7 +165,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         node
     }
 
-    fn keys(&self) -> &[K] {
+    pub(crate) fn keys(&self) -> &[K] {
         unsafe {
             {
                 let slice: &[MaybeUninit<K>] =
@@ -179,7 +179,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         }
     }
 
-    fn arguments(&self) -> &[A] {
+    pub(crate) fn arguments(&self) -> &[A] {
         unsafe {
             {
                 let slice: &[MaybeUninit<A>] =
@@ -194,7 +194,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
     }
 
     /// Update the argument at index. The previous argument will be dropped.
-    fn set_argument(&mut self, idx: usize, a: A) {
+    pub(crate) fn set_argument(&mut self, idx: usize, a: A) {
         // Safety: the caller must ensure that the index is valid
         unsafe {
             std::mem::replace(self.arguments_area_mut(idx), MaybeUninit::new(a)).assume_init_drop()
@@ -203,7 +203,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
 
     /// returns the child index for k
     #[inline]
-    pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
+    pub fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
     where
         K: std::borrow::Borrow<Q>,
         Q: Ord,
@@ -541,7 +541,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         self.iter_argument().collect()
     }
 
-    fn key(&self, idx: usize) -> &K {
+    pub fn key(&self, idx: usize) -> &K {
         unsafe { self.key_area(idx).assume_init_ref() }
     }
 
@@ -551,7 +551,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         }
     }
 
-    fn child_id(&self, idx: usize) -> NodeId {
+    pub(crate) fn child_id(&self, idx: usize) -> NodeId {
         unsafe { self.child_area(idx).assume_init_read() }
     }
 
@@ -631,106 +631,6 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         for c in 0..C1 {
             self.child_id[c] = MaybeUninit::new(child_id[c].into());
         }
-    }
-}
-
-impl<K: Key, A: Argumentation<K>> super::INode<K, A> for InnerNode<K, A> {
-    fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
-        slot_keys: [K; N1],
-        child_id: [I; C1],
-        arguments: [A; C1],
-    ) -> Box<Self> {
-        Self::new(slot_keys, child_id, arguments)
-    }
-
-    fn new_from_iter(
-        keys: impl Iterator<Item = K>,
-        childs: impl Iterator<Item = NodeId>,
-        argument: impl Iterator<Item = A>,
-    ) -> Box<Self> {
-        Self::new_from_iter(keys, childs, argument)
-    }
-
-    fn len(&self) -> usize {
-        self.size as usize
-    }
-
-    fn key(&self, idx: usize) -> &K {
-        Self::key(self, idx)
-    }
-
-    fn set_key(&mut self, idx: usize, key: K) -> K {
-        Self::set_key(self, idx, key)
-    }
-
-    fn child_id(&self, idx: usize) -> NodeId {
-        Self::child_id(self, idx)
-    }
-
-    fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>,
-    {
-        Self::locate_child(self, k)
-    }
-
-    fn is_full(&self) -> bool {
-        Self::is_full(self)
-    }
-
-    fn able_to_lend(&self) -> bool {
-        Self::able_to_lend(self)
-    }
-
-    fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId, right_child_argument: A) {
-        Self::insert_at(self, slot, key, right_child, right_child_argument)
-    }
-
-    fn split(
-        &mut self,
-        child_idx: usize,
-        k: K,
-        new_child_id: NodeId,
-        new_child_argument: A,
-    ) -> (K, Box<Self>) {
-        Self::split(self, child_idx, k, new_child_id, new_child_argument)
-    }
-
-    fn pop(&mut self) -> (K, NodeId, A) {
-        Self::pop(self)
-    }
-
-    fn pop_front(&mut self) -> (K, NodeId, A) {
-        Self::pop_front(self)
-    }
-
-    fn push(&mut self, k: K, child: NodeId, argument: A) {
-        Self::push(self, k, child, argument)
-    }
-
-    fn push_front(&mut self, k: K, child: NodeId, argument: A) {
-        Self::push_front(self, k, child, argument)
-    }
-
-    fn merge_next(&mut self, slot_key: K, right: &mut Self) {
-        Self::merge_next(self, slot_key, right)
-    }
-
-    fn remove_slot_with_right(&mut self, slot: usize) -> (InnerMergeResult, K) {
-        Self::remove_slot_with_right(self, slot)
-    }
-
-    fn keys(&self) -> &[K] {
-        Self::keys(self)
-    }
-
-    fn arguments(&self) -> &[A] {
-        Self::arguments(self)
-    }
-
-    fn set_argument(&mut self, idx: usize, argument: A) {
-        Self::set_argument(self, idx, argument)
     }
 }
 

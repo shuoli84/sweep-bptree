@@ -3,7 +3,7 @@ use models::*;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use sweep_bptree::tree::{INode, InnerNode, InnerNodeId, LeafNode, NodeId};
+use sweep_bptree::tree::{InnerNode, InnerNodeId, LeafNode, NodeId};
 
 fn bench_inner<K: TestKey, const N: usize, const C: usize>(c: &mut Criterion) {
     let mut group = c.benchmark_group(format!("inner_node_{}_{N}", K::name()));
