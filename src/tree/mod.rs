@@ -14,10 +14,11 @@ pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
 
-use self::visit_stack::VisitStackT;
 mod argument;
 mod bulk_load;
 pub use argument::*;
+
+use self::visit_stack::VisitStack;
 mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
@@ -212,7 +213,7 @@ where
         k: S::K,
         v: S::V,
     ) -> DescendInsertResult<S::K, S::V> {
-        let mut stack = S::VisitStack::new();
+        let mut stack = VisitStack::new();
         let mut r = loop {
             let node = self.node_store.get_inner(id);
             let (child_idx, child_id) = node.locate_child(&k);
@@ -521,7 +522,7 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        let mut stack = S::VisitStack::new();
+        let mut stack = VisitStack::new();
 
         let mut r = loop {
             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
@@ -1208,9 +1209,6 @@ pub trait NodeStore: Default {
 
     /// InnerNode type
     type InnerNode: INode<Self::K, Self::Argument>;
-
-    /// The visit stack type
-    type VisitStack: VisitStackT;
 
     /// The Argument type
     type Argument: Argumentation<Self::K>;

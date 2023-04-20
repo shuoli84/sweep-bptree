@@ -1,7 +1,4 @@
-use crate::tree::{
-    visit_stack::VisitStack, Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId,
-    NodeStore,
-};
+use crate::tree::{Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
 
 #[derive(Debug)]
 pub struct NodeStoreVec<K: Key, V, A: Argumentation<K> = ()> {
@@ -56,8 +53,6 @@ impl<K: Key, V, A: Argumentation<K>> NodeStoreVec<K, V, A> {
         V: std::fmt::Debug + Clone,
         A: std::fmt::Debug,
     {
-        use crate::tree::INode;
-
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
                 "inner: {idx} s:{} key: {:?} child: {:?} argument: {:?}",
@@ -90,7 +85,6 @@ impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
     type K = K;
     type V = V;
     type InnerNode = InnerNode<K, A>;
-    type VisitStack = VisitStack<13>; // use 64 as default, which is the maximum possible value
     type Argument = A;
 
     fn inner_n() -> u16 {
