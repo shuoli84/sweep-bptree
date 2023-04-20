@@ -15,7 +15,9 @@ mod node_stores;
 pub use node_stores::*;
 
 use self::visit_stack::VisitStackT;
+mod argument;
 mod bulk_load;
+pub use argument::*;
 mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
@@ -78,6 +80,7 @@ mod visit_stack;
 #[derive(Clone)]
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
+    root_argument: S::Argument,
     len: usize,
     node_store: ManuallyDrop<S>,
     st: Statistic,
@@ -92,6 +95,7 @@ where
         let (root_id, _) = node_store.new_empty_leaf();
         Self {
             root: NodeId::Leaf(root_id),
+            root_argument: S::Argument::default(),
             node_store: ManuallyDrop::new(node_store),
             len: 0,
 
@@ -100,9 +104,16 @@ where
     }
 
     /// Create a new `BPlusTree` from existing parts
-    fn new_from_parts(node_store: S, root: NodeId, len: usize) -> Self {
+    fn new_from_parts(mut node_store: S, root: NodeId, len: usize) -> Self {
+        let argument = if len > 0 {
+            Self::new_argument_for_id(&mut node_store, root)
+        } else {
+            S::Argument::default()
+        };
+
         let me = Self {
             root,
+            root_argument: argument,
             node_store: ManuallyDrop::new(node_store),
             len,
 
@@ -132,38 +143,29 @@ where
 
     /// Insert a new key-value pair into the tree.
     pub fn insert(&mut self, k: S::K, v: S::V) -> Option<S::V> {
-        // quick check if the last accessed leaf is the one to insert
-        if let Some(leaf_id) = self.node_store.try_cache(&k) {
-            let leaf = self.node_store.get_mut_leaf(leaf_id);
-            // Note, if k is already in Leaf, then we actually don't need
-            // to check whether it is full, but that requires a find first
-            if !leaf.is_full() {
-                let result = match leaf.try_upsert(k, v) {
-                    LeafUpsertResult::Inserted => {
-                        self.len += 1;
-                        // no need to update cache, it doesn't changed
-                        None
-                    }
-                    LeafUpsertResult::Updated(v) => Some(v),
-                    LeafUpsertResult::IsFull(..) => unreachable!(),
-                };
-
-                #[cfg(test)]
-                self.validate();
-
-                return result;
-            }
-        }
-
         let node_id = self.root;
 
         let result = match self.descend_insert(node_id, k, v) {
-            DescendInsertResult::Inserted => None,
+            DescendInsertResult::Inserted => {
+                self.root_argument = Self::new_argument_for_id(&self.node_store, node_id);
+                None
+            }
             DescendInsertResult::Updated(prev_v) => Some(prev_v),
             DescendInsertResult::Split(k, new_child_id) => {
-                let new_root = S::InnerNode::new([k], [node_id, new_child_id]);
+                let prev_root_argument = Self::new_argument_for_id(&self.node_store, node_id);
+                let new_argument = Self::new_argument_for_id(&self.node_store, new_child_id);
+
+                let new_root = S::InnerNode::new(
+                    [k],
+                    [node_id, new_child_id],
+                    [prev_root_argument, new_argument],
+                );
+                let new_root_argument =
+                    S::Argument::from_inner(new_root.keys(), new_root.arguments());
+
                 let new_root_id = self.node_store.add_inner(new_root);
                 self.root = new_root_id.into();
+                self.root_argument = new_root_argument;
                 None
             }
         };
@@ -210,53 +212,74 @@ where
         k: S::K,
         v: S::V,
     ) -> DescendInsertResult<S::K, S::V> {
-        // todo: fix this, now hard code as 64's stack
         let mut stack = S::VisitStack::new();
         let mut r = loop {
             let node = self.node_store.get_inner(id);
             let (child_idx, child_id) = node.locate_child(&k);
-            stack.push(id, child_idx);
+            stack.push(id, child_idx, child_id);
 
             match child_id {
                 NodeId::Inner(child_inner) => {
                     id = child_inner;
                     continue;
                 }
-                NodeId::Leaf(leaf_id) => match self.insert_leaf(leaf_id, k, v) {
-                    r @ (DescendInsertResult::Updated(_) | DescendInsertResult::Inserted) => {
-                        return r;
-                    }
-                    DescendInsertResult::Split(key, right_child) => {
-                        break (key, right_child);
-                    }
-                },
+                NodeId::Leaf(leaf_id) => break self.insert_leaf(leaf_id, k, v),
             }
         };
 
         loop {
-            match r {
-                (key, right_child) => {
-                    // handle split
-                    match stack.pop() {
-                        Some((id, child_idx)) => {
-                            let inner_node = self.node_store.get_mut_inner(id);
+            // ascend process. Need to process split and update argument
+            match stack.pop() {
+                Some((id, child_idx, child_id)) => match r {
+                    DescendInsertResult::Split(key, right_child) => {
+                        let right_child_argument =
+                            Self::new_argument_for_id(&mut self.node_store, right_child);
+                        let child_argument =
+                            Self::new_argument_for_id(&mut self.node_store, child_id);
 
-                            if !inner_node.is_full() {
-                                let slot = child_idx;
-                                inner_node.insert_at(slot, key, right_child);
-                                return DescendInsertResult::Inserted;
-                            } else {
-                                let (prompt_k, new_node) =
-                                    inner_node.split(child_idx, key, right_child);
+                        let inner_node = self.node_store.get_mut_inner(id);
+                        // it's easier to update argument here, the split logic handles arguments split
+                        // too.
+                        inner_node.set_argument(child_idx, child_argument);
 
-                                let new_node_id = self.node_store.add_inner(new_node);
-                                r = (prompt_k, NodeId::Inner(new_node_id));
-                                continue;
-                            }
+                        if !inner_node.is_full() {
+                            let slot = child_idx;
+                            inner_node.insert_at(slot, key, right_child, right_child_argument);
+                            r = DescendInsertResult::Inserted;
+                        } else {
+                            let (prompt_k, new_node) =
+                                inner_node.split(child_idx, key, right_child, right_child_argument);
+                            let new_node_id = self.node_store.add_inner(new_node);
+                            r = DescendInsertResult::Split(prompt_k, NodeId::Inner(new_node_id));
                         }
-                        None => return DescendInsertResult::Split(key, right_child),
                     }
-                }
+                    DescendInsertResult::Inserted => {
+                        let child_argument =
+                            Self::new_argument_for_id(&mut self.node_store, child_id);
+                        let inner_node = self.node_store.get_mut_inner(id);
+                        inner_node.set_argument(child_idx, child_argument);
+
+                        continue;
+                    }
+                    DescendInsertResult::Updated(_) => {
+                        // the key didn't change, so does the argument
+                        continue;
+                    }
+                },
+                None => return r,
+            }
+        }
+    }
+
+    fn new_argument_for_id(node_store: &S, id: NodeId) -> S::Argument {
+        match id {
+            NodeId::Inner(inner) => {
+                let inner = node_store.get_inner(inner);
+                S::Argument::from_inner(inner.keys(), inner.arguments())
+            }
+            NodeId::Leaf(leaf) => {
+                let leaf = node_store.get_leaf(leaf);
+                S::Argument::from_leaf(leaf.keys())
             }
         }
     }
@@ -453,26 +476,6 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        // quick check if the last accessed leaf is the one to remove
-        if let Some(cache_leaf_id) = self.node_store.try_cache(k) {
-            let leaf = self.node_store.get_mut_leaf(cache_leaf_id);
-            if leaf.able_to_lend() {
-                let result = match leaf.try_delete(k) {
-                    LeafDeleteResult::Done(v) => {
-                        self.len -= 1;
-                        Some(v.1)
-                    }
-                    LeafDeleteResult::NotFound => None,
-                    LeafDeleteResult::UnderSize(_) => unreachable!(),
-                };
-
-                #[cfg(test)]
-                self.validate();
-
-                return result;
-            }
-        }
-
         let root_id = self.root;
         let r = match root_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
@@ -502,6 +505,7 @@ where
         };
 
         if r.is_some() {
+            self.root_argument = Self::new_argument_for_id(&self.node_store, self.root);
             self.len -= 1;
         }
 
@@ -517,7 +521,6 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        // todo: fix, now hard coded as branch factor 64
         let mut stack = S::VisitStack::new();
 
         let mut r = loop {
@@ -529,39 +532,51 @@ where
 
             match child_id {
                 NodeId::Inner(inner_id) => {
+                    stack.push(node_id, child_idx, child_id);
+
                     // we only track inner node, because leaf node is always processed in this loop
-                    stack.push(node_id, child_idx);
                     node_id = inner_id;
                     continue;
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_mut_leaf(leaf_id);
-                    match leaf.try_delete(k) {
-                        LeafDeleteResult::Done(kv) => return DeleteDescendResult::Done(kv),
-                        LeafDeleteResult::NotFound => return DeleteDescendResult::None,
-                        LeafDeleteResult::UnderSize(idx) => {
-                            break self.handle_leaf_under_size(inner_node, child_idx, idx);
+                    break match leaf.try_delete(k) {
+                        LeafDeleteResult::Done(kv) => {
+                            // we need to
+                            inner_node.set_argument(child_idx, S::Argument::from_leaf(leaf.keys()));
+                            DeleteDescendResult::Done(kv)
                         }
-                    }
+                        LeafDeleteResult::NotFound => DeleteDescendResult::None,
+                        LeafDeleteResult::UnderSize(idx) => {
+                            self.handle_leaf_under_size(inner_node, child_idx, idx)
+                        }
+                    };
                 }
             }
         };
 
         // when reach here, means we need to propogate
         loop {
-            match r {
-                DeleteDescendResult::InnerUnderSize(kv) => match stack.pop() {
-                    Some((parent_id, child_idx)) => {
-                        // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
-                        //         so we can safely get a mutable ptr to it.
-                        let parent = unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
-                        r = self.handle_inner_under_size(parent, child_idx, kv);
-                        continue;
+            match stack.pop() {
+                Some((parent_id, child_idx, child_id)) => {
+                    match r {
+                        DeleteDescendResult::Done(_) => {
+                            let child_argument =
+                                Self::new_argument_for_id(&mut self.node_store, child_id);
+                            let inner_node = self.node_store.get_mut_inner(parent_id);
+                            inner_node.set_argument(child_idx, child_argument);
+                        }
+                        DeleteDescendResult::InnerUnderSize(kv) => {
+                            // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
+                            //         so we can safely get a mut ptr to it.
+                            let parent =
+                                unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
+                            r = self.handle_inner_under_size(parent, child_idx, kv);
+                        }
+                        DeleteDescendResult::None => {}
                     }
-                    None => return DeleteDescendResult::InnerUnderSize(kv),
-                },
-                DeleteDescendResult::Done(kv) => return DeleteDescendResult::Done(kv),
-                DeleteDescendResult::None => return DeleteDescendResult::None,
+                }
+                None => return r,
             }
         }
     }
@@ -715,17 +730,23 @@ where
         //     1    3  5
         //      ..2  4
         // rotate right
-        //     1 2     5
-        //     ..  3,4
+        //     1    2   5
+        //       ..   3,4
         let right_child_id = unsafe { node.child_id(slot + 1).inner_id_unchecked() };
         let left_child_id = unsafe { node.child_id(slot).inner_id_unchecked() };
 
         let prev_node = node_store.get_mut_inner(left_child_id);
         if prev_node.able_to_lend() {
-            let (k, c) = prev_node.pop();
+            let (k, c, a) = prev_node.pop();
+            let left_argument = S::Argument::from_inner(prev_node.keys(), prev_node.arguments());
+
             let slot_key = node.set_key(slot, k);
             let right = node_store.get_mut_inner(right_child_id);
-            right.push_front(slot_key, c);
+            right.push_front(slot_key, c, a);
+            let right_argument = S::Argument::from_inner(right.keys(), right.arguments());
+
+            node.set_argument(slot, left_argument);
+            node.set_argument(slot + 1, right_argument);
 
             Some(())
         } else {
@@ -748,10 +769,18 @@ where
 
         let right = node_store.get_mut_inner(right_child_id);
         if right.able_to_lend() {
-            let (k, c) = right.pop_front();
+            let (k, c, m) = right.pop_front();
+
+            let right_argument = S::Argument::from_inner(right.keys(), right.arguments());
+
             let slot_key = node.set_key(slot, k);
             let left = node_store.get_mut_inner(left_child_id);
-            left.push(slot_key, c);
+            left.push(slot_key, c, m);
+
+            let left_argument = S::Argument::from_inner(left.keys(), left.arguments());
+
+            node.set_argument(slot, left_argument);
+            node.set_argument(slot + 1, right_argument);
 
             Some(())
         } else {
@@ -781,6 +810,9 @@ where
         let left = node_store.get_mut_inner(left_child_id);
         left.merge_next(slot_key, &mut right);
 
+        let argument = S::Argument::from_inner(left.keys(), left.arguments());
+        node.set_argument(slot, argument);
+
         result
     }
 
@@ -797,9 +829,12 @@ where
         debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
+        node.set_argument(slot, S::Argument::from_leaf(left.keys()));
+
         let new_slot_key = kv.0.clone();
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
+        node.set_argument(slot + 1, S::Argument::from_leaf(right.keys()));
 
         node_store.cache_leaf(right_id);
 
@@ -822,9 +857,12 @@ where
         debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
+        parent.set_argument(slot + 1, S::Argument::from_leaf(right.keys()));
+
         let new_slot_key = right.data_at(0).0.clone();
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
+        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         // the prev key is dropped here
         let _ = parent.set_key(slot, new_slot_key);
@@ -845,6 +883,7 @@ where
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.merge_right_delete_first(delete_idx, &mut right);
+        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -872,6 +911,8 @@ where
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.delete_at(delete_idx);
         left.merge_right(&mut right);
+
+        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -1024,6 +1065,65 @@ where
         std::mem::drop(std::mem::replace(self, Self::new(S::default())));
     }
 
+    /// get by argument
+    pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<&S::V>
+    where
+        S::Argument: SearchArgumentation<S::K, Query = Q>,
+    {
+        let mut node_id = self.root;
+
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    dbg!(inner_id);
+
+                    let inner = self.node_store.get_inner(inner_id);
+                    let (offset, new_query) =
+                        <S::Argument as SearchArgumentation<_>>::locate_in_inner(
+                            query,
+                            inner.keys(),
+                            inner.arguments(),
+                        )?;
+                    node_id = inner.child_id(offset);
+                    query = new_query;
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf = self.node_store.get_leaf(leaf_id);
+                    let slot = <S::Argument as SearchArgumentation<_>>::locate_in_leaf(
+                        query,
+                        leaf.keys(),
+                    )?;
+                    return Some(leaf.data_at(slot).1);
+                }
+            }
+        }
+    }
+
+    /// Get rank for argument
+    pub fn rank_by_argument<R>(&self, k: &S::K) -> Result<R, R>
+    where
+        S::Argument: RankArgumentation<S::K, Rank = R>,
+    {
+        let mut node_id = self.root;
+        let mut rank = <S::Argument as RankArgumentation<S::K>>::initial_value();
+
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    let inner = self.node_store.get_inner(inner_id);
+                    let (child_idx, child_id) = inner.locate_child(k);
+                    node_id = child_id;
+                    let arguments = &inner.arguments()[0..child_idx];
+                    rank = <S::Argument as RankArgumentation<S::K>>::fold_inner(rank, arguments);
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf = self.node_store.get_leaf(leaf_id);
+                    return <S::Argument as RankArgumentation<_>>::fold_leaf(k, leaf, rank);
+                }
+            }
+        }
+    }
+
     #[cfg(test)]
     fn validate(&self) {
         let Some(mut leaf_id) = self.first_leaf() else { return; };
@@ -1107,12 +1207,15 @@ pub trait NodeStore: Default {
     type V;
 
     /// InnerNode type
-    type InnerNode: INode<Self::K>;
+    type InnerNode: INode<Self::K, Self::Argument>;
     /// LeafNode type
     type LeafNode: LNode<Self::K, Self::V>;
 
     /// The visit stack type
     type VisitStack: VisitStackT;
+
+    /// The Argument type
+    type Argument: Argumentation<Self::K>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;
@@ -1185,7 +1288,8 @@ pub trait NodeStore: Default {
     fn debug(&self)
     where
         Self::K: std::fmt::Debug,
-        Self::V: std::fmt::Debug + Clone;
+        Self::V: std::fmt::Debug + Clone,
+        Self::Argument: std::fmt::Debug;
 }
 
 /// Key trait
@@ -1195,11 +1299,12 @@ pub trait Key: Clone + Ord {}
 impl<T> Key for T where T: Clone + Ord {}
 
 /// Inner node trait
-pub trait INode<K: Key> {
+pub trait INode<K: Key, A: Argumentation<K>> {
     /// Create a new inner node with `slot_keys` and `child_id`.
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
+        arguments: [A; C1],
     ) -> Box<Self>;
 
     /// Create a new inner node from Iterators.
@@ -1208,6 +1313,7 @@ pub trait INode<K: Key> {
     fn new_from_iter(
         keys: impl Iterator<Item = K>,
         childs: impl Iterator<Item = NodeId>,
+        arguments: impl Iterator<Item = A>,
     ) -> Box<Self>;
 
     /// Get the number of keys
@@ -1217,6 +1323,15 @@ pub trait INode<K: Key> {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Get keys slice
+    fn keys(&self) -> &[K];
+
+    /// Get arguments slice
+    fn arguments(&self) -> &[A];
+
+    /// Set argument for idx
+    fn set_argument(&mut self, idx: usize, argument: A);
 
     /// Get the key at `slot`
     fn key(&self, slot: usize) -> &K;
@@ -1240,22 +1355,28 @@ pub trait INode<K: Key> {
     fn able_to_lend(&self) -> bool;
 
     /// Insert a key and the right child id at `slot`
-    fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId);
+    fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId, right_child_argument: A);
 
     /// Split the node at `child_idx` and return the key to be inserted to parent
-    fn split(&mut self, child_idx: usize, k: K, new_child_id: NodeId) -> (K, Box<Self>);
+    fn split(
+        &mut self,
+        child_idx: usize,
+        k: K,
+        new_child_id: NodeId,
+        new_child_argument: A,
+    ) -> (K, Box<Self>);
 
     /// Remove the last key and its right child id
-    fn pop(&mut self) -> (K, NodeId);
+    fn pop(&mut self) -> (K, NodeId, A);
 
     /// Remove the first key and its left child id
-    fn pop_front(&mut self) -> (K, NodeId);
+    fn pop_front(&mut self) -> (K, NodeId, A);
 
     /// Insert a key and its right child id at the end
-    fn push(&mut self, k: K, child: NodeId);
+    fn push(&mut self, k: K, child: NodeId, argument: A);
 
     /// Insert a key and its left child id at the front
-    fn push_front(&mut self, k: K, child: NodeId);
+    fn push_front(&mut self, k: K, child: NodeId, a: A);
 
     /// Merge the key and its right child id at `slot` with its right sibling
     fn merge_next(&mut self, slot_key: K, right: &mut Self);
@@ -1303,6 +1424,7 @@ pub trait LNode<K: Key, V> {
         Q: Ord,
         K: std::borrow::Borrow<Q>;
 
+    fn keys(&self) -> &[K];
     fn key_range(&self) -> (Option<K>, Option<K>);
     fn is_full(&self) -> bool;
     fn able_to_lend(&self) -> bool;
@@ -1370,7 +1492,7 @@ mod tests {
     }
 
     fn round_trip_one<const N: usize, const C: usize, const L: usize>() {
-        let node_store = NodeStoreVec::<i64, i64, N, C, L>::new();
+        let node_store = NodeStoreVec::<i64, i64, N, C, L, ElementCount>::new();
         let mut tree = BPlusTree::new(node_store);
 
         let size: i64 = 500;
@@ -1380,6 +1502,7 @@ mod tests {
 
         for i in keys {
             tree.insert(i, i % 13);
+            assert_eq!(tree.root_argument.count(), tree.len());
         }
 
         let mut keys = (0..size).collect::<Vec<_>>();
@@ -1393,9 +1516,11 @@ mod tests {
 
         for i in keys {
             let k = i;
+            println!("\ndeleting {i}");
 
             let delete_result = tree.remove(&k);
             assert!(delete_result.is_some());
+            assert_eq!(tree.root_argument.count(), tree.len());
         }
 
         assert!(tree.is_empty());
@@ -1834,8 +1959,6 @@ mod tests {
 
         let mut keys = (0..size).collect::<Vec<_>>();
         keys.shuffle(&mut rand::thread_rng());
-
-        // println!("{:?}", keys);
 
         for i in keys.iter() {
             tree.insert(*i, i % 13);

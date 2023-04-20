@@ -1,10 +1,18 @@
 use crate::tree::{
-    visit_stack::VisitStack, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore,
+    visit_stack::VisitStack, Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId,
+    NodeStore,
 };
 
 #[derive(Debug)]
-pub struct NodeStoreVec<K: Key, V, const IN: usize, const IC: usize, const LN: usize> {
-    inner_nodes: Vec<Option<Box<InnerNode<K, IN, IC>>>>,
+pub struct NodeStoreVec<
+    K: Key,
+    V,
+    const IN: usize,
+    const IC: usize,
+    const LN: usize,
+    A: Argumentation<K> = (),
+> {
+    inner_nodes: Vec<Option<Box<InnerNode<K, A, IN, IC>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V, LN>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
@@ -24,8 +32,8 @@ impl<K: Key, V: Clone, const IN: usize, const IC: usize, const LN: usize> Clone
     }
 }
 
-impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> Default
-    for NodeStoreVec<K, V, IN, IC, LN>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> Default
+    for NodeStoreVec<K, V, IN, IC, LN, A>
 {
     fn default() -> Self {
         assert!(IN == IC - 1);
@@ -38,7 +46,9 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> Default
     }
 }
 
-impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<K, V, IN, IC, LN> {
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize>
+    NodeStoreVec<K, V, IN, IC, LN, A>
+{
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self::default()
@@ -59,15 +69,17 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
     where
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
+        A: std::fmt::Debug,
     {
         use crate::tree::{INode, LNode};
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
-                "inner: {idx} s:{} key: {:?} child: {:?}",
+                "inner: {idx} s:{} key: {:?} child: {:?} argument: {:?}",
                 inner.len(),
                 inner.key_vec(),
-                inner.child_id_vec()
+                inner.child_id_vec(),
+                inner.argument_vec(),
             );
         }
 
@@ -89,14 +101,15 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStoreVec<
     }
 }
 
-impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
-    for NodeStoreVec<K, V, IN, IC, LN>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
+    for NodeStoreVec<K, V, IN, IC, LN, A>
 {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, IN, IC>;
+    type InnerNode = InnerNode<K, A, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
+    type Argument = A;
 
     fn inner_n() -> u16 {
         IN as u16
@@ -111,6 +124,7 @@ impl<K: Key, V, const IN: usize, const IC: usize, const LN: usize> NodeStore
     where
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
+        A: std::fmt::Debug,
     {
         self.print()
     }
