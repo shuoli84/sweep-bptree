@@ -9,14 +9,14 @@ pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
     /// create a new Argumentation from leaf node's key
     fn from_leaf(keys: &[K]) -> Self;
 
-    /// create a new Argumentation from inner node and its meta
+    /// create a new Argumentation from inner node and its argument
     /// e.g: take size as example.
-    /// the root node's meta is created from its children's meta and keys
-    /// the inner node with height 1's meta is created from leaf's keys
+    /// the root node's argument is created from its children's argument and keys
+    /// the inner node with height 1's is created from leaf's keys
     ///                             [k3][9, 5]
     ///                [k2][5, 4]                  [k4][3, 2]
     ///         leaf[0] 5       leaf[1] 4      leaf[2] 3   leaf[2] 2
-    fn from_inner(keys: &[K], meta: &[Self]) -> Self;
+    fn from_inner(keys: &[K], arguments: &[Self]) -> Self;
 }
 
 /// Whether the argumentation able to locate element
@@ -30,7 +30,7 @@ pub trait SearchArgumentation<K: Key>: Argumentation<K> {
     fn locate_in_inner(
         query: Self::Query,
         keys: &[K],
-        meta: &[Self],
+        arguments: &[Self],
     ) -> Option<(usize, Self::Query)>;
 }
 
@@ -42,11 +42,11 @@ pub trait RankArgumentation<K: Key>: Argumentation<K> {
     /// it will be passed to the first call of `combine_rank`
     fn initial_value() -> Self::Rank;
 
-    /// combine rank with all ranks for prev sibling meta.
-    /// The passed in meta slice doesn't contain the meta 'k' belongs
+    /// combine rank with all ranks for prev sibling arguments.
+    /// The passed in argument slice doesn't contain the argument 'k' belongs
     /// The result will be passed to `combine_rank` for inner layer
     /// and finally to `rank_in_leaf`
-    fn fold_inner(rank: Self::Rank, meta: &[Self]) -> Self::Rank;
+    fn fold_inner(rank: Self::Rank, arguments: &[Self]) -> Self::Rank;
 
     /// Get rank of the key in leaf node
     /// Returns Ok(Rank) for existing key, Err(Rank) for non-existing key
@@ -57,7 +57,7 @@ pub trait RankArgumentation<K: Key>: Argumentation<K> {
     ) -> Result<Self::Rank, Self::Rank>;
 }
 
-/// Unit is a dummy argumentation, it doesn't store any meta
+/// Unit is a dummy argumentation, it doesn't store any argument
 impl<K: Key> Argumentation<K> for () {
     fn from_leaf(_: &[K]) -> Self {
         ()
@@ -86,8 +86,8 @@ impl<K: Key> Argumentation<K> for ElementCount {
         Self(keys.len())
     }
 
-    fn from_inner(_keys: &[K], meta: &[Self]) -> Self {
-        Self(meta.iter().map(|m| m.0).sum())
+    fn from_inner(_keys: &[K], arguments: &[Self]) -> Self {
+        Self(arguments.iter().map(|a| a.0).sum())
     }
 }
 
@@ -103,16 +103,16 @@ impl<K: Key> SearchArgumentation<K> for ElementCount {
         }
     }
 
-    fn locate_in_inner(mut idx: usize, _keys: &[K], meta: &[Self]) -> Option<(usize, usize)> {
-        for (i, m) in meta.iter().enumerate() {
-            if idx >= m.0 {
-                idx -= m.0;
+    fn locate_in_inner(mut idx: usize, _keys: &[K], arguments: &[Self]) -> Option<(usize, usize)> {
+        for (i, a) in arguments.iter().enumerate() {
+            if idx >= a.0 {
+                idx -= a.0;
             } else {
                 return Some((i, idx));
             }
         }
 
-        // offset is larger than the sum of all meta
+        // offset is larger than the sum of all arguments
         None
     }
 }
@@ -137,9 +137,9 @@ impl<K: Key> RankArgumentation<K> for ElementCount {
     }
 
     /// combine the rank of child and the rank of all prev siblings
-    fn fold_inner(mut rank: Self::Rank, meta: &[Self]) -> Self::Rank {
-        for m in meta {
-            rank += m.0
+    fn fold_inner(mut rank: Self::Rank, arguments: &[Self]) -> Self::Rank {
+        for a in arguments {
+            rank += a.0
         }
         rank
     }
@@ -182,18 +182,18 @@ where
         })
     }
 
-    fn from_inner(_keys: &[K], meta: &[Self]) -> Self {
-        if meta.is_empty() {
+    fn from_inner(_keys: &[K], arguments: &[Self]) -> Self {
+        if arguments.is_empty() {
             return None;
         }
 
-        let mut meta_iter = meta.iter().flatten();
-        let first_meta = meta_iter.next().unwrap();
-        let mut group_count = first_meta.count;
+        let mut argument_iter = arguments.iter().flatten();
+        let first_arguement = argument_iter.next().unwrap();
+        let mut group_count = first_arguement.count;
 
-        let mut last_group = &first_meta.max_group;
+        let mut last_group = &first_arguement.max_group;
 
-        for m in meta_iter {
+        for m in argument_iter {
             if last_group.eq(&m.min_group) {
                 // one group crossed two nodes
                 group_count += m.count - 1;
@@ -205,7 +205,7 @@ where
         }
 
         Some(GroupCount {
-            min_group: first_meta.min_group.clone(),
+            min_group: first_arguement.min_group.clone(),
             max_group: last_group.clone(),
             count: group_count,
         })
@@ -220,11 +220,11 @@ mod tests {
 
     #[test]
     fn test_element_count() {
-        let meta = ElementCount::from_leaf(&[1, 2, 3]);
-        assert_eq!(meta.0, 3);
+        let count = ElementCount::from_leaf(&[1, 2, 3]);
+        assert_eq!(count.0, 3);
 
-        let meta = ElementCount::from_inner(&[1, 2, 3], &[meta, meta, meta]);
-        assert_eq!(meta.0, 9);
+        let count = ElementCount::from_inner(&[1, 2, 3], &[count, count, count]);
+        assert_eq!(count.0, 9);
     }
 
     #[test]
@@ -232,10 +232,10 @@ mod tests {
         let node_store = NodeStoreVec::<i64, u32, 4, 5, 4, ElementCount>::new();
         let mut tree = BPlusTree::new(node_store);
         tree.insert(1, 101);
-        assert_eq!(tree.root_meta.count(), 1);
+        assert_eq!(tree.root_argument.count(), 1);
 
         tree.remove(&1);
-        assert_eq!(tree.root_meta.count(), 0);
+        assert_eq!(tree.root_argument.count(), 0);
 
         for i in 2..500 {
             tree.insert(i, i as u32 + 100);
@@ -268,10 +268,10 @@ mod tests {
             }
         }
 
-        let meta = Option::<GroupCount<G>>::from_leaf(&[1, 2, 3]);
-        assert_eq!(meta.unwrap().count, 2);
+        let argument = Option::<GroupCount<G>>::from_leaf(&[1, 2, 3]);
+        assert_eq!(argument.unwrap().count, 2);
 
-        let meta = Option::<GroupCount<G>>::from_inner(
+        let argument = Option::<GroupCount<G>>::from_inner(
             &[1, 2, 3],
             &[
                 Some(GroupCount {
@@ -293,9 +293,9 @@ mod tests {
         );
 
         // 1 and 4 are dup groups in child, so we need to fix the double counting
-        assert_eq!(meta.unwrap().count, 2 + 1 + 2);
+        assert_eq!(argument.unwrap().count, 2 + 1 + 2);
 
-        let meta = Option::<GroupCount<G>>::from_inner(
+        let argument = Option::<GroupCount<G>>::from_inner(
             &[1, 2, 3],
             &[
                 Some(GroupCount {
@@ -315,7 +315,7 @@ mod tests {
                 }),
             ],
         );
-        assert_eq!(meta.unwrap().count, 1);
+        assert_eq!(argument.unwrap().count, 1);
     }
 
     #[test]
@@ -333,21 +333,21 @@ mod tests {
         let mut tree = BPlusTree::new(node_store);
 
         tree.insert((1, 1), 100);
-        assert_eq!(tree.root_meta.as_ref().unwrap().count, 1);
+        assert_eq!(tree.root_argument.as_ref().unwrap().count, 1);
         tree.remove(&(1, 1));
-        assert!(tree.root_meta.is_none());
+        assert!(tree.root_argument.is_none());
 
         tree.insert((1, 1), 100);
         tree.insert((1, 2), 100);
-        assert_eq!(tree.root_meta.as_ref().unwrap().count, 1);
+        assert_eq!(tree.root_argument.as_ref().unwrap().count, 1);
 
         tree.insert((1, 3), 100);
         tree.insert((2, 4), 100);
-        assert_eq!(tree.root_meta.as_ref().unwrap().count, 2);
+        assert_eq!(tree.root_argument.as_ref().unwrap().count, 2);
         tree.insert((3, 5), 100);
         tree.insert((4, 6), 100);
-        assert_eq!(tree.root_meta.as_ref().unwrap().count, 4);
+        assert_eq!(tree.root_argument.as_ref().unwrap().count, 4);
         tree.remove(&(4, 6));
-        assert_eq!(tree.root_meta.as_ref().unwrap().count, 3);
+        assert_eq!(tree.root_argument.as_ref().unwrap().count, 3);
     }
 }

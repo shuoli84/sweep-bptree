@@ -75,11 +75,11 @@ impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN:
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
-                "inner: {idx} s:{} key: {:?} child: {:?} meta: {:?}",
+                "inner: {idx} s:{} key: {:?} child: {:?} argument: {:?}",
                 inner.len(),
                 inner.key_vec(),
                 inner.child_id_vec(),
-                inner.meta_vec(),
+                inner.argument_vec(),
             );
         }
 
@@ -101,15 +101,15 @@ impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     }
 }
 
-impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
-    for NodeStoreVec<K, V, IN, IC, LN, M>
+impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize, const LN: usize> NodeStore
+    for NodeStoreVec<K, V, IN, IC, LN, A>
 {
     type K = K;
     type V = V;
-    type InnerNode = InnerNode<K, M, IN, IC>;
+    type InnerNode = InnerNode<K, A, IN, IC>;
     type LeafNode = LeafNode<K, V, LN>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
-    type ChildMeta = M;
+    type Argument = A;
 
     fn inner_n() -> u16 {
         IN as u16
@@ -124,7 +124,7 @@ impl<K: Key, V, M: Argumentation<K>, const IN: usize, const IC: usize, const LN:
     where
         K: std::fmt::Debug,
         V: std::fmt::Debug + Clone,
-        M: std::fmt::Debug,
+        A: std::fmt::Debug,
     {
         self.print()
     }

@@ -14,7 +14,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
                 .collect::<Vec<LeafNodeId>>();
 
             let mut data_iter = data.into_iter();
-            let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::ChildMeta)> =
+            let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Argument)> =
                 Vec::with_capacity(leaf_ids.len());
 
             for (idx, leaf_id) in leaf_ids.iter().enumerate() {
@@ -38,7 +38,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
                 nodes.push((
                     NodeId::Leaf(*leaf_id),
                     leaf.key_range(),
-                    S::ChildMeta::from_leaf(leaf.keys()),
+                    S::Argument::from_leaf(leaf.keys()),
                 ));
 
                 node_store.assign_leaf(*leaf_id, leaf);
@@ -56,7 +56,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
     /// Returns the root id
     fn build_inner_layer(
         node_store: &mut S,
-        nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::ChildMeta)>,
+        nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Argument)>,
     ) -> NodeId {
         assert!(!nodes.is_empty());
 
@@ -71,7 +71,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
 
         let mut chunk_iter = nodes.chunks(child_n);
 
-        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::ChildMeta)> =
+        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Argument)> =
             Vec::with_capacity(node_num);
 
         for _ in 0..node_num {
@@ -83,13 +83,13 @@ impl<S: NodeStore> crate::BPlusTree<S> {
                 start_key.clone().expect("the first leaf is skipped")
             });
             let childs_iter = childs.iter().map(|(child, _, _)| *child);
-            let child_meta_iter = childs.iter().map(|(_, _, m)| m.clone());
+            let child_argument_iter = childs.iter().map(|(_, _, m)| m.clone());
 
-            let inner = S::InnerNode::new_from_iter(keys_iter, childs_iter, child_meta_iter);
-            let meta = S::ChildMeta::from_inner(inner.keys(), inner.child_meta());
+            let inner = S::InnerNode::new_from_iter(keys_iter, childs_iter, child_argument_iter);
+            let argument = S::Argument::from_inner(inner.keys(), inner.arguments());
             let node_id = node_store.add_inner(inner);
 
-            nodes.push((NodeId::Inner(node_id), (start_key, end_key), meta));
+            nodes.push((NodeId::Inner(node_id), (start_key, end_key), argument));
         }
 
         Self::build_inner_layer(node_store, nodes)

@@ -15,9 +15,9 @@ mod node_stores;
 pub use node_stores::*;
 
 use self::visit_stack::VisitStackT;
+mod argument;
 mod bulk_load;
-mod meta;
-pub use meta::*;
+pub use argument::*;
 mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
@@ -80,7 +80,7 @@ mod visit_stack;
 #[derive(Clone)]
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
-    root_meta: S::ChildMeta,
+    root_argument: S::Argument,
     len: usize,
     node_store: ManuallyDrop<S>,
     st: Statistic,
@@ -95,7 +95,7 @@ where
         let (root_id, _) = node_store.new_empty_leaf();
         Self {
             root: NodeId::Leaf(root_id),
-            root_meta: S::ChildMeta::default(),
+            root_argument: S::Argument::default(),
             node_store: ManuallyDrop::new(node_store),
             len: 0,
 
@@ -105,16 +105,15 @@ where
 
     /// Create a new `BPlusTree` from existing parts
     fn new_from_parts(mut node_store: S, root: NodeId, len: usize) -> Self {
-        // consider pass meta in?
-        let meta = if len > 0 {
-            Self::meta_for_id(&mut node_store, root)
+        let argument = if len > 0 {
+            Self::new_argument_for_id(&mut node_store, root)
         } else {
-            S::ChildMeta::default()
+            S::Argument::default()
         };
 
         let me = Self {
             root,
-            root_meta: meta,
+            root_argument: argument,
             node_store: ManuallyDrop::new(node_store),
             len,
 
@@ -148,21 +147,25 @@ where
 
         let result = match self.descend_insert(node_id, k, v) {
             DescendInsertResult::Inserted => {
-                self.root_meta = Self::meta_for_id(&self.node_store, node_id);
+                self.root_argument = Self::new_argument_for_id(&self.node_store, node_id);
                 None
             }
             DescendInsertResult::Updated(prev_v) => Some(prev_v),
             DescendInsertResult::Split(k, new_child_id) => {
-                let prev_meta = Self::meta_for_id(&self.node_store, node_id);
-                let new_child_meta = Self::meta_for_id(&self.node_store, new_child_id);
+                let prev_root_argument = Self::new_argument_for_id(&self.node_store, node_id);
+                let new_argument = Self::new_argument_for_id(&self.node_store, new_child_id);
 
-                let new_root =
-                    S::InnerNode::new([k], [node_id, new_child_id], [prev_meta, new_child_meta]);
-                let new_meta = S::ChildMeta::from_inner(new_root.keys(), new_root.child_meta());
+                let new_root = S::InnerNode::new(
+                    [k],
+                    [node_id, new_child_id],
+                    [prev_root_argument, new_argument],
+                );
+                let new_root_argument =
+                    S::Argument::from_inner(new_root.keys(), new_root.arguments());
 
                 let new_root_id = self.node_store.add_inner(new_root);
                 self.root = new_root_id.into();
-                self.root_meta = new_meta;
+                self.root_argument = new_root_argument;
                 None
             }
         };
@@ -225,40 +228,41 @@ where
         };
 
         loop {
-            // ascend process. Need to process split and update child meta
+            // ascend process. Need to process split and update argument
             match stack.pop() {
                 Some((id, child_idx, child_id)) => match r {
                     DescendInsertResult::Split(key, right_child) => {
-                        let right_child_meta = Self::meta_for_id(&mut self.node_store, right_child);
-                        let child_meta = Self::meta_for_id(&mut self.node_store, child_id);
+                        let right_child_argument =
+                            Self::new_argument_for_id(&mut self.node_store, right_child);
+                        let child_argument =
+                            Self::new_argument_for_id(&mut self.node_store, child_id);
 
                         let inner_node = self.node_store.get_mut_inner(id);
-                        // it's easier to update child_meta here, the split logic handles meta split
-                        // too. So the index would not move
-                        inner_node.set_child_meta(child_idx, child_meta);
-                        // split, the two child_meta both needs to be refreshed
+                        // it's easier to update argument here, the split logic handles arguments split
+                        // too.
+                        inner_node.set_argument(child_idx, child_argument);
 
                         if !inner_node.is_full() {
                             let slot = child_idx;
-                            inner_node.insert_at(slot, key, right_child, right_child_meta);
+                            inner_node.insert_at(slot, key, right_child, right_child_argument);
                             r = DescendInsertResult::Inserted;
                         } else {
                             let (prompt_k, new_node) =
-                                inner_node.split(child_idx, key, right_child, right_child_meta);
+                                inner_node.split(child_idx, key, right_child, right_child_argument);
                             let new_node_id = self.node_store.add_inner(new_node);
                             r = DescendInsertResult::Split(prompt_k, NodeId::Inner(new_node_id));
                         }
                     }
                     DescendInsertResult::Inserted => {
-                        let child_meta = Self::meta_for_id(&mut self.node_store, child_id);
+                        let child_argument =
+                            Self::new_argument_for_id(&mut self.node_store, child_id);
                         let inner_node = self.node_store.get_mut_inner(id);
-                        // update child meta
-                        inner_node.set_child_meta(child_idx, child_meta);
+                        inner_node.set_argument(child_idx, child_argument);
 
                         continue;
                     }
                     DescendInsertResult::Updated(_) => {
-                        // the key didn't change, so does the child meta
+                        // the key didn't change, so does the argument
                         continue;
                     }
                 },
@@ -267,15 +271,15 @@ where
         }
     }
 
-    fn meta_for_id(node_store: &S, id: NodeId) -> S::ChildMeta {
+    fn new_argument_for_id(node_store: &S, id: NodeId) -> S::Argument {
         match id {
             NodeId::Inner(inner) => {
                 let inner = node_store.get_inner(inner);
-                S::ChildMeta::from_inner(inner.keys(), inner.child_meta())
+                S::Argument::from_inner(inner.keys(), inner.arguments())
             }
             NodeId::Leaf(leaf) => {
                 let leaf = node_store.get_leaf(leaf);
-                S::ChildMeta::from_leaf(leaf.keys())
+                S::Argument::from_leaf(leaf.keys())
             }
         }
     }
@@ -501,7 +505,7 @@ where
         };
 
         if r.is_some() {
-            self.root_meta = Self::meta_for_id(&self.node_store, self.root);
+            self.root_argument = Self::new_argument_for_id(&self.node_store, self.root);
             self.len -= 1;
         }
 
@@ -539,8 +543,7 @@ where
                     break match leaf.try_delete(k) {
                         LeafDeleteResult::Done(kv) => {
                             // we need to
-                            inner_node
-                                .set_child_meta(child_idx, S::ChildMeta::from_leaf(leaf.keys()));
+                            inner_node.set_argument(child_idx, S::Argument::from_leaf(leaf.keys()));
                             DeleteDescendResult::Done(kv)
                         }
                         LeafDeleteResult::NotFound => DeleteDescendResult::None,
@@ -558,10 +561,10 @@ where
                 Some((parent_id, child_idx, child_id)) => {
                     match r {
                         DeleteDescendResult::Done(_) => {
-                            let child_meta = Self::meta_for_id(&mut self.node_store, child_id);
+                            let child_argument =
+                                Self::new_argument_for_id(&mut self.node_store, child_id);
                             let inner_node = self.node_store.get_mut_inner(parent_id);
-                            // update child meta
-                            inner_node.set_child_meta(child_idx, child_meta);
+                            inner_node.set_argument(child_idx, child_argument);
                         }
                         DeleteDescendResult::InnerUnderSize(kv) => {
                             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
@@ -734,17 +737,16 @@ where
 
         let prev_node = node_store.get_mut_inner(left_child_id);
         if prev_node.able_to_lend() {
-            let (k, c, m) = prev_node.pop();
-            let left_meta = S::ChildMeta::from_inner(prev_node.keys(), prev_node.child_meta());
+            let (k, c, a) = prev_node.pop();
+            let left_argument = S::Argument::from_inner(prev_node.keys(), prev_node.arguments());
 
             let slot_key = node.set_key(slot, k);
             let right = node_store.get_mut_inner(right_child_id);
-            right.push_front(slot_key, c, m);
-            let right_meta = S::ChildMeta::from_inner(right.keys(), right.child_meta());
+            right.push_front(slot_key, c, a);
+            let right_argument = S::Argument::from_inner(right.keys(), right.arguments());
 
-            // update meta
-            node.set_child_meta(slot, left_meta);
-            node.set_child_meta(slot + 1, right_meta);
+            node.set_argument(slot, left_argument);
+            node.set_argument(slot + 1, right_argument);
 
             Some(())
         } else {
@@ -769,16 +771,16 @@ where
         if right.able_to_lend() {
             let (k, c, m) = right.pop_front();
 
-            let right_meta = S::ChildMeta::from_inner(right.keys(), right.child_meta());
+            let right_argument = S::Argument::from_inner(right.keys(), right.arguments());
 
             let slot_key = node.set_key(slot, k);
             let left = node_store.get_mut_inner(left_child_id);
             left.push(slot_key, c, m);
 
-            let left_meta = S::ChildMeta::from_inner(left.keys(), left.child_meta());
+            let left_argument = S::Argument::from_inner(left.keys(), left.arguments());
 
-            node.set_child_meta(slot, left_meta);
-            node.set_child_meta(slot + 1, right_meta);
+            node.set_argument(slot, left_argument);
+            node.set_argument(slot + 1, right_argument);
 
             Some(())
         } else {
@@ -808,8 +810,8 @@ where
         let left = node_store.get_mut_inner(left_child_id);
         left.merge_next(slot_key, &mut right);
 
-        let left_meta = S::ChildMeta::from_inner(left.keys(), left.child_meta());
-        node.set_child_meta(slot, left_meta);
+        let argument = S::Argument::from_inner(left.keys(), left.arguments());
+        node.set_argument(slot, argument);
 
         result
     }
@@ -827,12 +829,12 @@ where
         debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
-        node.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
+        node.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         let new_slot_key = kv.0.clone();
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
-        node.set_child_meta(slot + 1, S::ChildMeta::from_leaf(right.keys()));
+        node.set_argument(slot + 1, S::Argument::from_leaf(right.keys()));
 
         node_store.cache_leaf(right_id);
 
@@ -855,12 +857,12 @@ where
         debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
-        parent.set_child_meta(slot + 1, S::ChildMeta::from_leaf(right.keys()));
+        parent.set_argument(slot + 1, S::Argument::from_leaf(right.keys()));
 
         let new_slot_key = right.data_at(0).0.clone();
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
-        parent.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
+        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         // the prev key is dropped here
         let _ = parent.set_key(slot, new_slot_key);
@@ -881,7 +883,7 @@ where
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.merge_right_delete_first(delete_idx, &mut right);
-        parent.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
+        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -910,7 +912,7 @@ where
         let kv = left.delete_at(delete_idx);
         left.merge_right(&mut right);
 
-        parent.set_child_meta(slot, S::ChildMeta::from_leaf(left.keys()));
+        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -1066,7 +1068,7 @@ where
     /// get by argument
     pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<&S::V>
     where
-        S::ChildMeta: SearchArgumentation<S::K, Query = Q>,
+        S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
         let mut node_id = self.root;
 
@@ -1077,17 +1079,17 @@ where
 
                     let inner = self.node_store.get_inner(inner_id);
                     let (offset, new_query) =
-                        <S::ChildMeta as SearchArgumentation<_>>::locate_in_inner(
+                        <S::Argument as SearchArgumentation<_>>::locate_in_inner(
                             query,
                             inner.keys(),
-                            inner.child_meta(),
+                            inner.arguments(),
                         )?;
                     node_id = inner.child_id(offset);
                     query = new_query;
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
-                    let slot = <S::ChildMeta as SearchArgumentation<_>>::locate_in_leaf(
+                    let slot = <S::Argument as SearchArgumentation<_>>::locate_in_leaf(
                         query,
                         leaf.keys(),
                     )?;
@@ -1100,10 +1102,10 @@ where
     /// Get rank for argument
     pub fn rank_by_argument<R>(&self, k: &S::K) -> Result<R, R>
     where
-        S::ChildMeta: RankArgumentation<S::K, Rank = R>,
+        S::Argument: RankArgumentation<S::K, Rank = R>,
     {
         let mut node_id = self.root;
-        let mut rank = <S::ChildMeta as RankArgumentation<S::K>>::initial_value();
+        let mut rank = <S::Argument as RankArgumentation<S::K>>::initial_value();
 
         loop {
             match node_id {
@@ -1111,12 +1113,12 @@ where
                     let inner = self.node_store.get_inner(inner_id);
                     let (child_idx, child_id) = inner.locate_child(k);
                     node_id = child_id;
-                    let metas = &inner.child_meta()[0..child_idx];
-                    rank = <S::ChildMeta as RankArgumentation<S::K>>::fold_inner(rank, metas);
+                    let arguments = &inner.arguments()[0..child_idx];
+                    rank = <S::Argument as RankArgumentation<S::K>>::fold_inner(rank, arguments);
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
-                    return <S::ChildMeta as RankArgumentation<_>>::fold_leaf(k, leaf, rank);
+                    return <S::Argument as RankArgumentation<_>>::fold_leaf(k, leaf, rank);
                 }
             }
         }
@@ -1205,15 +1207,15 @@ pub trait NodeStore: Default {
     type V;
 
     /// InnerNode type
-    type InnerNode: INode<Self::K, Self::ChildMeta>;
+    type InnerNode: INode<Self::K, Self::Argument>;
     /// LeafNode type
     type LeafNode: LNode<Self::K, Self::V>;
 
     /// The visit stack type
     type VisitStack: VisitStackT;
 
-    /// The child meta type
-    type ChildMeta: Argumentation<Self::K>;
+    /// The Argument type
+    type Argument: Argumentation<Self::K>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;
@@ -1287,7 +1289,7 @@ pub trait NodeStore: Default {
     where
         Self::K: std::fmt::Debug,
         Self::V: std::fmt::Debug + Clone,
-        Self::ChildMeta: std::fmt::Debug;
+        Self::Argument: std::fmt::Debug;
 }
 
 /// Key trait
@@ -1297,12 +1299,12 @@ pub trait Key: Clone + Ord {}
 impl<T> Key for T where T: Clone + Ord {}
 
 /// Inner node trait
-pub trait INode<K: Key, M: Argumentation<K>> {
+pub trait INode<K: Key, A: Argumentation<K>> {
     /// Create a new inner node with `slot_keys` and `child_id`.
     fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
-        child_meta: [M; C1],
+        arguments: [A; C1],
     ) -> Box<Self>;
 
     /// Create a new inner node from Iterators.
@@ -1311,7 +1313,7 @@ pub trait INode<K: Key, M: Argumentation<K>> {
     fn new_from_iter(
         keys: impl Iterator<Item = K>,
         childs: impl Iterator<Item = NodeId>,
-        meta: impl Iterator<Item = M>,
+        arguments: impl Iterator<Item = A>,
     ) -> Box<Self>;
 
     /// Get the number of keys
@@ -1325,11 +1327,11 @@ pub trait INode<K: Key, M: Argumentation<K>> {
     /// Get keys slice
     fn keys(&self) -> &[K];
 
-    /// Get child meta slice
-    fn child_meta(&self) -> &[M];
+    /// Get arguments slice
+    fn arguments(&self) -> &[A];
 
-    /// Set child meta for idx
-    fn set_child_meta(&mut self, idx: usize, m: M);
+    /// Set argument for idx
+    fn set_argument(&mut self, idx: usize, m: A);
 
     /// Get the key at `slot`
     fn key(&self, slot: usize) -> &K;
@@ -1353,7 +1355,7 @@ pub trait INode<K: Key, M: Argumentation<K>> {
     fn able_to_lend(&self) -> bool;
 
     /// Insert a key and the right child id at `slot`
-    fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId, right_child_meta: M);
+    fn insert_at(&mut self, slot: usize, key: K, right_child: NodeId, right_child_argument: A);
 
     /// Split the node at `child_idx` and return the key to be inserted to parent
     fn split(
@@ -1361,20 +1363,20 @@ pub trait INode<K: Key, M: Argumentation<K>> {
         child_idx: usize,
         k: K,
         new_child_id: NodeId,
-        new_child_meta: M,
+        new_child_argument: A,
     ) -> (K, Box<Self>);
 
     /// Remove the last key and its right child id
-    fn pop(&mut self) -> (K, NodeId, M);
+    fn pop(&mut self) -> (K, NodeId, A);
 
     /// Remove the first key and its left child id
-    fn pop_front(&mut self) -> (K, NodeId, M);
+    fn pop_front(&mut self) -> (K, NodeId, A);
 
     /// Insert a key and its right child id at the end
-    fn push(&mut self, k: K, child: NodeId, meta: M);
+    fn push(&mut self, k: K, child: NodeId, argument: A);
 
     /// Insert a key and its left child id at the front
-    fn push_front(&mut self, k: K, child: NodeId, m: M);
+    fn push_front(&mut self, k: K, child: NodeId, a: A);
 
     /// Merge the key and its right child id at `slot` with its right sibling
     fn merge_next(&mut self, slot_key: K, right: &mut Self);
@@ -1500,7 +1502,7 @@ mod tests {
 
         for i in keys {
             tree.insert(i, i % 13);
-            assert_eq!(tree.root_meta.count(), tree.len());
+            assert_eq!(tree.root_argument.count(), tree.len());
         }
 
         let mut keys = (0..size).collect::<Vec<_>>();
@@ -1518,7 +1520,7 @@ mod tests {
 
             let delete_result = tree.remove(&k);
             assert!(delete_result.is_some());
-            assert_eq!(tree.root_meta.count(), tree.len());
+            assert_eq!(tree.root_argument.count(), tree.len());
         }
 
         assert!(tree.is_empty());
