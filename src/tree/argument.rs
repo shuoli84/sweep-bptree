@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::Key;
 
-use super::LNode;
+use super::LeafNode;
 
 /// Augument trait, it is used to store augumentation, like 'size'
 pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
@@ -50,9 +50,9 @@ pub trait RankArgumentation<K: Key>: Argumentation<K> {
 
     /// Get rank of the key in leaf node
     /// Returns Ok(Rank) for existing key, Err(Rank) for non-existing key
-    fn fold_leaf<V, N: LNode<K, V>>(
+    fn fold_leaf<V>(
         k: &K,
-        leaf: &N,
+        leaf: &LeafNode<K, V>,
         rank: Self::Rank,
     ) -> Result<Self::Rank, Self::Rank>;
 }
@@ -125,9 +125,9 @@ impl<K: Key> RankArgumentation<K> for ElementCount {
         0
     }
 
-    fn fold_leaf<V, N: LNode<K, V>>(
+    fn fold_leaf<V>(
         k: &K,
-        leaf: &N,
+        leaf: &LeafNode<K, V>,
         rank: Self::Rank,
     ) -> Result<Self::Rank, Self::Rank> {
         match leaf.locate_slot(k) {

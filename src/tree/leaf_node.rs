@@ -67,6 +67,10 @@ impl<K: Key, V> LeafNode<K, V> {
         this
     }
 
+    pub fn len(&self) -> usize {
+        self.size as usize
+    }
+
     const fn split_origin_size() -> u16 {
         (N / 2) as u16
     }
@@ -135,8 +139,16 @@ impl<K: Key, V> LeafNode<K, V> {
         self.prev = id;
     }
 
+    pub fn prev(&self) -> Option<LeafNodeId> {
+        self.prev
+    }
+
     pub fn set_next(&mut self, id: Option<LeafNodeId>) {
         self.next = id;
+    }
+
+    pub fn next(&self) -> Option<LeafNodeId> {
+        self.next
     }
 
     pub fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
@@ -154,7 +166,7 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
-    fn data_at(&self, slot: usize) -> (&K, &V) {
+    pub fn data_at(&self, slot: usize) -> (&K, &V) {
         unsafe {
             (
                 self.key_area(slot).assume_init_ref(),
@@ -193,7 +205,7 @@ impl<K: Key, V> LeafNode<K, V> {
 
     /// insert / update (k, v), if node is full, then returns `LeafUpsertResult::IsFull`
     pub(crate) fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
-        match self.locate_child_idx(&k) {
+        match self.locate_slot(&k) {
             Ok(idx) => {
                 // update existing item
                 let prev_v =
@@ -215,7 +227,7 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
-    fn split_new_leaf(
+    pub(crate) fn split_new_leaf(
         &mut self,
         insert_idx: usize,
         item: (K, V),
@@ -276,11 +288,11 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     /// Delete an item from LeafNode
-    pub(crate) fn delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
+    pub(crate) fn try_delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
     where
         K: Borrow<Q>,
     {
-        match self.locate_child_idx(k) {
+        match self.locate_slot(k) {
             Ok(idx) => {
                 if self.able_to_lend() {
                     let result = unsafe {
@@ -299,7 +311,7 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     #[inline]
-    pub(crate) fn locate_child_idx<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    pub fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
     where
         Q: Ord,
         K: std::borrow::Borrow<Q>,
@@ -308,12 +320,12 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     #[inline(always)]
-    pub(crate) fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    pub fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
     where
         Q: Ord,
         K: Borrow<Q>,
     {
-        match self.locate_child_idx(k) {
+        match self.locate_slot(k) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -331,12 +343,12 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
-    pub(crate) fn locate_child_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    pub(crate) fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
     where
         Q: Ord,
         K: Borrow<Q>,
     {
-        match self.locate_child_idx(k) {
+        match self.locate_slot(k) {
             Ok(idx) => {
                 // exact match, go to right child.
                 // if the child split, then the new key should inserted idx + 1
@@ -406,7 +418,7 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     /// Delete the item at idx, then merge with right
-    pub(crate) fn merge_with_right_with_delete(
+    pub(crate) fn merge_right_delete_first(
         &mut self,
         delete_idx: usize,
         right: &mut Self,
@@ -479,7 +491,7 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     /// This should never called with same slot
-    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+    pub unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
         debug_assert!(slot < self.len());
 
         // safety: slot is checked against self.len()
@@ -512,7 +524,7 @@ impl<K: Key, V> LeafNode<K, V> {
         result
     }
 
-    fn keys(&self) -> &[K] {
+    pub fn keys(&self) -> &[K] {
         unsafe {
             {
                 let slice: &[MaybeUninit<K>] =
@@ -580,147 +592,6 @@ pub enum LeafDeleteResult<K, V> {
     Done((K, V)),
     /// Item exists, but not able to delete because a merge is required
     UnderSize(usize),
-}
-
-impl<K: Key, V> super::LNode<K, V> for LeafNode<K, V> {
-    fn new() -> Box<Self> {
-        Self::new()
-    }
-
-    fn len(&self) -> usize {
-        self.size as usize
-    }
-
-    fn prev(&self) -> Option<LeafNodeId> {
-        self.prev
-    }
-
-    fn set_prev(&mut self, id: Option<LeafNodeId>) {
-        Self::set_prev(self, id)
-    }
-
-    fn next(&self) -> Option<LeafNodeId> {
-        self.next
-    }
-
-    fn set_next(&mut self, id: Option<LeafNodeId>) {
-        Self::set_next(self, id)
-    }
-
-    fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
-        Self::set_data(self, data)
-    }
-
-    fn data_at(&self, slot: usize) -> (&K, &V) {
-        Self::data_at(self, slot)
-    }
-
-    unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
-        Self::take_data(self, slot)
-    }
-
-    fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
-        Self::try_data_at(self, idx)
-    }
-
-    fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
-    where
-        Q: Ord,
-        K: std::borrow::Borrow<Q>,
-    {
-        Self::in_range(self, k)
-    }
-
-    fn keys(&self) -> &[K] {
-        Self::keys(self)
-    }
-
-    #[inline(always)]
-    fn key_range(&self) -> (Option<K>, Option<K>) {
-        Self::key_range(self)
-    }
-
-    fn is_full(&self) -> bool {
-        LeafNode::is_full(self)
-    }
-
-    fn able_to_lend(&self) -> bool {
-        LeafNode::able_to_lend(self)
-    }
-
-    fn try_upsert(&mut self, k: K, v: V) -> LeafUpsertResult<K, V> {
-        LeafNode::try_upsert(self, k, v)
-    }
-
-    fn split_new_leaf(
-        &mut self,
-        insert_idx: usize,
-        item: (K, V),
-        new_leaf_id: LeafNodeId,
-        self_leaf_id: LeafNodeId,
-    ) -> Box<Self> {
-        LeafNode::split_new_leaf(self, insert_idx, item, new_leaf_id, self_leaf_id)
-    }
-
-    fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
-    where
-        Q: Ord,
-        K: Borrow<Q>,
-    {
-        Self::locate_child_idx(&self, k)
-    }
-
-    fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
-    where
-        Q: Ord,
-        K: Borrow<Q>,
-    {
-        Self::locate_child(self, k)
-    }
-
-    fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
-    where
-        K: Borrow<Q>,
-        Q: Ord,
-    {
-        Self::locate_child_mut(self, k)
-    }
-
-    fn try_delete<Q: ?Sized>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
-    where
-        K: Borrow<Q>,
-        Q: Ord,
-    {
-        Self::delete(self, k)
-    }
-
-    fn delete_at(&mut self, idx: usize) -> (K, V) {
-        Self::delete_at(self, idx)
-    }
-
-    fn delete_with_push_front(&mut self, idx: usize, item: (K, V)) -> (K, V) {
-        Self::delete_with_push_front(self, idx, item)
-    }
-
-    fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V) {
-        Self::delete_with_push(self, idx, item)
-    }
-
-    fn merge_right_delete_first(&mut self, delete_idx_in_next: usize, right: &mut Self) -> (K, V) {
-        Self::merge_with_right_with_delete(self, delete_idx_in_next, right)
-    }
-
-    fn merge_right(&mut self, right: &mut Self) {
-        Self::merge_right(self, right)
-    }
-
-    fn pop(&mut self) -> (K, V) {
-        Self::pop(self)
-    }
-
-    fn pop_front(&mut self) -> (K, V) {
-        Self::pop_front(self)
-    }
 }
 
 #[cfg(test)]

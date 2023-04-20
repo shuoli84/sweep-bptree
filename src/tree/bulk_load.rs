@@ -1,4 +1,4 @@
-use super::{Argumentation, INode, LNode, LeafNodeId, NodeId, NodeStore};
+use super::{Argumentation, INode, LeafNode, LeafNodeId, NodeId, NodeStore};
 
 impl<S: NodeStore> crate::BPlusTree<S> {
     /// bulk load data into a new `BPlusTree`, the loaded tree's leaf with fill rate 1.0
@@ -29,7 +29,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
                     None
                 };
 
-                let mut leaf = S::LeafNode::new();
+                let mut leaf = LeafNode::<S::K, S::V>::new();
 
                 leaf.set_data(&mut data_iter);
                 leaf.set_prev(prev_id);

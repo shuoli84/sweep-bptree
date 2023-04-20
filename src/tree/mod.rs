@@ -1208,8 +1208,6 @@ pub trait NodeStore: Default {
 
     /// InnerNode type
     type InnerNode: INode<Self::K, Self::Argument>;
-    /// LeafNode type
-    type LeafNode: LNode<Self::K, Self::V>;
 
     /// The visit stack type
     type VisitStack: VisitStackT;
@@ -1252,28 +1250,28 @@ pub trait NodeStore: Default {
     fn put_back_inner(&mut self, id: InnerNodeId, node: Box<Self::InnerNode>);
 
     /// Create a new empty leaf node and returns its id
-    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode);
+    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut LeafNode<Self::K, Self::V>);
 
     /// Reserve a leaf node, it must be assigned later
     fn reserve_leaf(&mut self) -> LeafNodeId;
 
     /// Get a refernce to leaf node
     /// Panics if id is invalid or the node is taken
-    fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode;
+    fn get_leaf(&self, id: LeafNodeId) -> &LeafNode<Self::K, Self::V>;
 
     /// Get a reference to leaf node
     /// Returns None if id is invalid or the node is taken
-    fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode>;
+    fn try_get_leaf(&self, id: LeafNodeId) -> Option<&LeafNode<Self::K, Self::V>>;
 
     /// Get a mut reference to leaf node
     /// Panics if id is invalid or the node is taken
-    fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode;
+    fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut LeafNode<Self::K, Self::V>;
 
     /// Take the leaf out of store
-    fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode>;
+    fn take_leaf(&mut self, id: LeafNodeId) -> Box<LeafNode<Self::K, Self::V>>;
 
     /// Assign the leaf to the id, the id must exists
-    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>);
+    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<LeafNode<Self::K, Self::V>>);
 
     /// cache leaf
     fn cache_leaf(&self, leaf_id: LeafNodeId);

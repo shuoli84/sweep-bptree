@@ -62,7 +62,7 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize>
         V: std::fmt::Debug + Clone,
         A: std::fmt::Debug,
     {
-        use crate::tree::{INode, LNode};
+        use crate::tree::INode;
 
         for (idx, inner) in self.inner_nodes.iter().flatten().enumerate() {
             println!(
@@ -98,7 +98,6 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> NodeStore
     type K = K;
     type V = V;
     type InnerNode = InnerNode<K, A, IN, IC>;
-    type LeafNode = LeafNode<K, V>;
     type VisitStack = VisitStack<64>; // use 64 as default, which is the maximum possible value
     type Argument = A;
 
@@ -128,9 +127,9 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> NodeStore
         id
     }
 
-    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut Self::LeafNode) {
+    fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut LeafNode<K, V>) {
         let id = LeafNodeId::from_usize(self.leaf_nodes.len());
-        let node = Self::LeafNode::new();
+        let node = LeafNode::<Self::K, Self::V>::new();
         self.leaf_nodes.push(Some(node));
         (id, self.get_mut_leaf(id))
     }
@@ -187,7 +186,7 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> NodeStore
     }
 
     #[inline(always)]
-    fn get_leaf(&self, id: LeafNodeId) -> &Self::LeafNode {
+    fn get_leaf(&self, id: LeafNodeId) -> &LeafNode<Self::K, Self::V> {
         // need to ensure the output assmebly are two ldr only, the two unsafe is the only way to do it.
 
         // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
@@ -199,13 +198,13 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> NodeStore
         }
     }
 
-    fn try_get_leaf(&self, id: LeafNodeId) -> Option<&Self::LeafNode> {
+    fn try_get_leaf(&self, id: LeafNodeId) -> Option<&LeafNode<K, V>> {
         let leaf_node = self.leaf_nodes.get(id.as_usize())?.as_ref()?;
         Some(leaf_node)
     }
 
     #[inline(always)]
-    fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut Self::LeafNode {
+    fn get_mut_leaf(&mut self, id: LeafNodeId) -> &mut LeafNode<K, V> {
         // SAFETY: id is only used in btree impl, we need to ensure that the id is valid.
         unsafe {
             self.leaf_nodes
@@ -215,11 +214,11 @@ impl<K: Key, V, A: Argumentation<K>, const IN: usize, const IC: usize> NodeStore
         }
     }
 
-    fn take_leaf(&mut self, id: LeafNodeId) -> Box<Self::LeafNode> {
+    fn take_leaf(&mut self, id: LeafNodeId) -> Box<LeafNode<K, V>> {
         std::mem::take(&mut self.leaf_nodes[id.as_usize()]).unwrap()
     }
 
-    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<Self::LeafNode>) {
+    fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<LeafNode<K, V>>) {
         self.leaf_nodes[id.as_usize()] = Some(leaf);
     }
 

@@ -1,5 +1,4 @@
-use crate::tree::LNode;
-use crate::tree::LeafNodeId;
+use crate::tree::{LeafNode, LeafNodeId};
 use crate::BPlusTree;
 use crate::Key;
 use crate::NodeStore;
@@ -209,7 +208,7 @@ impl<'k, K: Key + 'k> Cursor<K> {
     fn locate_leaf<'a, 'b, S: NodeStore<K = K>>(
         &'a self,
         tree: &'b BPlusTree<S>,
-    ) -> Option<(LeafNodeId, &'b S::LeafNode)> {
+    ) -> Option<(LeafNodeId, &'b LeafNode<S::K, S::V>)> {
         let leaf_id = self.leaf_id_hint;
         if let Some(leaf) = tree.node_store.try_get_leaf(leaf_id) {
             if leaf.in_range(&self.k) {

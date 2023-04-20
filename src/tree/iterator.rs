@@ -9,10 +9,10 @@ use super::*;
 pub struct Iter<'a, S: NodeStore> {
     tree: &'a BPlusTree<S>,
     len: usize,
-    leaf: Option<&'a S::LeafNode>,
+    leaf: Option<&'a LeafNode<S::K, S::V>>,
     leaf_offset: usize,
 
-    end: Option<(&'a S::LeafNode, usize)>,
+    end: Option<(&'a LeafNode<S::K, S::V>, usize)>,
 }
 
 impl<'a, S: NodeStore> Iter<'a, S> {
