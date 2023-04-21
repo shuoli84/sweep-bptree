@@ -491,85 +491,31 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        let root_id = self.root;
-        let r = match root_id {
-            NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
-                DeleteDescendResult::Done(kv) => Some(kv),
-                DeleteDescendResult::None => None,
-                DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                    let root = self.node_store.get_mut_inner(inner_id);
-
-                    if root.len() == 0 {
-                        self.root = root.child_id(0);
-                    }
-
-                    Some(deleted_item)
-                }
-                DeleteDescendResult::LeafUnderSize(_) => {
-                    unreachable!()
-                }
-            },
-            NodeId::Leaf(leaf_id) => {
-                let leaf = self.node_store.get_mut_leaf(leaf_id);
-                match leaf.locate_slot(k) {
-                    Ok(idx) => match leaf.try_delete_at(idx) {
-                        LeafDeleteResult::Done(kv) => Some(kv),
-                        LeafDeleteResult::UnderSize(idx) => {
-                            let item = leaf.delete_at(idx);
-                            Some(item)
-                        }
-                    },
-                    Err(_) => None,
-                }
-            }
-        };
-
-        if r.is_some() {
-            self.root_argument = Self::new_argument_for_id(&self.node_store, self.root);
-            self.len -= 1;
-        }
-
-        r
-    }
-
-    fn remove_inner<Q: ?Sized>(
-        &mut self,
-        node_id: InnerNodeId,
-        k: &Q,
-    ) -> DeleteDescendResult<S::K, S::V>
-    where
-        Q: Ord,
-        S::K: Borrow<Q>,
-    {
-        let entry_ref = match self.key_to_ref(node_id, k) {
-            Some(entry_ref) => entry_ref,
-            None => return DeleteDescendResult::None,
-        };
+        let entry_ref = self.key_to_ref(k)?;
         self.remove_by_ref(entry_ref)
     }
 
-    fn key_to_ref<Q: ?Sized>(&mut self, node_id: InnerNodeId, k: &Q) -> Option<EntryRef>
+    fn key_to_ref<Q: ?Sized>(&mut self, k: &Q) -> Option<EntryRef>
     where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        let mut stack = VisitStack::new();
-        let mut node_id = node_id;
+        let mut inner_stack = VisitStack::new();
+        let mut node_id = self.root;
         loop {
-            let inner_node = self.node_store.get_inner(node_id);
-
-            let (child_offset, child_id) = inner_node.locate_child(k);
-            stack.push(node_id, child_offset, child_id);
-
-            match child_id {
+            match node_id {
                 NodeId::Inner(inner_id) => {
-                    node_id = inner_id;
+                    let inner_node = self.node_store.get_inner(inner_id);
+                    let (child_offset, child_id) = inner_node.locate_child(k);
+                    inner_stack.push(inner_id, child_offset, child_id);
+
+                    node_id = child_id;
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
 
                     match leaf.locate_slot(k) {
-                        Ok(idx) => return Some(EntryRef::new(stack, leaf_id, idx)),
+                        Ok(idx) => return Some(EntryRef::new(inner_stack, leaf_id, idx)),
                         Err(_) => return None,
                     };
                 }
@@ -577,7 +523,7 @@ where
         }
     }
 
-    fn remove_by_ref(&mut self, entry_ref: EntryRef) -> DeleteDescendResult<S::K, S::V> {
+    fn remove_by_ref(&mut self, entry_ref: EntryRef) -> Option<(S::K, S::V)> {
         let EntryRef {
             inner_stack: mut stack,
             leaf_id,
@@ -620,7 +566,38 @@ where
                         DeleteDescendResult::None => {}
                     }
                 }
-                None => return r,
+                None => {
+                    // now process root
+                    let r = match r {
+                        DeleteDescendResult::Done(kv) => Some(kv),
+                        DeleteDescendResult::None => None,
+                        DeleteDescendResult::InnerUnderSize(deleted_item) => {
+                            let root = self
+                                .node_store
+                                .get_mut_inner(unsafe { self.root.inner_id_unchecked() });
+
+                            if root.len() == 0 {
+                                self.root = root.child_id(0);
+                            }
+
+                            Some(deleted_item)
+                        }
+                        DeleteDescendResult::LeafUnderSize(idx) => {
+                            let leaf = self
+                                .node_store
+                                .get_mut_leaf(unsafe { self.root.leaf_id_unchecked() });
+                            let item = leaf.delete_at(idx);
+                            Some(item)
+                        }
+                    };
+
+                    if r.is_some() {
+                        self.root_argument = Self::new_argument_for_id(&self.node_store, self.root);
+                        self.len -= 1;
+                    }
+
+                    return r;
+                }
             }
         }
     }
@@ -1207,14 +1184,13 @@ where
         }
     }
 
-    /// get by argument
+    /// remove by argument
     pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(S::K, S::V)>
     where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        unimplemented!()
-        // self.remove_by_ref(entry_ref)
+        self.remove_by_ref(entry_ref)
     }
 
     #[cfg(test)]
