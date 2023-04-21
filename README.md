@@ -1,9 +1,11 @@
 # Sweep-bptree(under development)
 
-In memory general purpose b+ tree.
+In memory general purpose b+ tree, with argumented tree support.
 
 ## Features(Why use this)
 
+* Argumented, you can use `Count` Argument to turn the tree into order statistic tree. Or create
+your own argument to support more advanced usage.
 * Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered/local access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
 * Bulk load, currently the most performant way to build a tree. (Check out benchmark)
@@ -31,6 +33,35 @@ assert_eq!(map.get(&1).unwrap(), &2);
 assert!(map.get(&2).is_none());
 ```
 
+### Argumented tree
+
+```rust
+use sweep_bptree::BPlusTreeMap;
+use sweep_bptree::argument::count::Count;
+
+// use Count as Argument to create a order statistic tree
+let mut map = BPlusTreeMap::<i32, i32, Count>::new();
+map.insert(1, 2);
+map.insert(2, 3);
+map.insert(3, 4);
+
+// get by order, time complexity is log(n)
+assert_eq!(map.get_by_argument(0), Some((&1, &2)));
+assert_eq!(map.get_by_argument(1), Some((&2, &3)));
+
+// get the offset for key
+
+// 0 does not exists
+assert_eq!(map.rank_by_argument(&0), Err(0));
+
+assert_eq!(map.rank_by_argument(&1), Ok(0));
+assert_eq!(map.rank_by_argument(&2), Ok(1));
+assert_eq!(map.rank_by_argument(&3), Ok(2));
+
+// 4 does not exists
+assert_eq!(map.rank_by_argument(&4), Err(3));
+```
+
 ### Set
 
 ```rust
@@ -52,8 +83,8 @@ For adanced usage, use `BPlusTree` directly.
 ```rust
 use sweep_bptree::{BPlusTree, NodeStoreVec};
 
-// create a node_store with `u64` as key, `(f64, f64)` as value, inner node size 64, child size 65, leaf node size 64
-let mut node_store = NodeStoreVec::<u64, (f64, f64), 64, 65, 64>::new();
+// create a node_store with `u64` as key, `(f64, f64)` as value
+let mut node_store = NodeStoreVec::<u64, (f64, f64)>::new();
 let mut tree = BPlusTree::new(node_store);
 
 // insert new value
@@ -72,7 +103,7 @@ assert!(tree.is_empty());
 
 ``` rust
 use sweep_bptree::{BPlusTree, NodeStoreVec};
-let mut node_store = NodeStoreVec::<u64, (f64, f64), 64, 65, 64>::new();
+let mut node_store = NodeStoreVec::<u64, (f64, f64)>::new();
 let mut tree = BPlusTree::new(node_store);
 
 for i in 0..100 {

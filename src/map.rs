@@ -155,6 +155,11 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
         }
     }
 
+    /// Get root argument for the map
+    pub fn root_argument(&self) -> &A {
+        self.inner.root_argument()
+    }
+
     /// Get value by argument's query
     ///
     /// # Example
