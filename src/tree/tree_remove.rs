@@ -1,5 +1,5 @@
 use super::{
-    visit_stack::EntryRef, BPlusTree, InnerMergeResult, InnerNode, LeafDeleteResult, NodeStore,
+    entry_ref::EntryRef, BPlusTree, InnerMergeResult, InnerNode, LeafDeleteResult, NodeStore,
 };
 use crate::argument::Argumentation;
 use std::borrow::Borrow;

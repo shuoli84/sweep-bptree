@@ -19,8 +19,8 @@ pub use node_stores::*;
 mod bulk_load;
 pub use crate::argument::*;
 
-use self::visit_stack::{EntryRef, VisitStack};
-mod visit_stack;
+use self::entry_ref::{EntryRef, VisitStack};
+mod entry_ref;
 
 mod tree_remove;
 
