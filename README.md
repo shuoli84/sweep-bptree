@@ -16,7 +16,7 @@ your own argument to support more advanced usage.
 
 ```toml
 [dependencies]
-sweep-bptree = "0.3"
+sweep-bptree = "0.4"
 ```
 
 ## Example
@@ -167,56 +167,56 @@ Point is a struct with 2 f64 fields, with very cheap clone and cmp cost.
 
 | name | size | btree | bptree | speed factor |
 | - | - | - | - | - |
-| clone | 1000 | 12.4±0.08µs | 7.1±0.05µs | 1.75 |
-| clone | 10000 | 135.4±1.22µs | 74.8±0.71µs | 1.81 |
-| clone | 100000 | 2.5±0.02ms | 1216.6±79.89µs | 2.05 |
-| cursor | 1000 | - | 5.0±0.03µs | - |
-| cursor | 10000 | - | 51.1±0.13µs | - |
-| cursor | 100000 | - | 518.1±2.61µs | - |
-| drop | 1000 | 8.0±0.07µs | 1829.4±24.83ns | 4.37 |
-| drop | 10000 | 84.9±0.47µs | 20.6±0.25µs | 4.12 |
-| drop | 100000 | 1845.4±78.50µs | 350.0±34.88µs | 5.27 |
-| into_iter | 1000 | 8.1±0.08µs | 1837.8±37.12ns | 4.41 |
-| into_iter | 10000 | 85.6±0.66µs | 20.7±0.19µs | 4.14 |
-| into_iter | 100000 | 1871.8±19.34µs | 321.8±21.43µs | 5.82 |
-| iter | 1000 | 843.0±11.23ns | 370.8±9.62ns | 2.27 |
-| iter | 10000 | 11.9±0.54µs | 6.7±0.08µs | 1.78 |
-| iter | 100000 | 218.6±2.57µs | 85.9±0.53µs | 2.54 |
-| ordered_get | 1000 | 23.8±1.62µs | 9.5±0.08µs | 2.51 |
-| ordered_get | 10000 | 423.4±2.13µs | 109.9±0.86µs | 3.85 |
-| ordered_get | 100000 | 4.7±0.02ms | 1175.1±17.09µs | 4.00 |
-| ordered_remove | 1000 | 31.8±0.35µs | 40.6±0.79µs | 0.78 |
-| ordered_remove | 10000 | 348.0±3.52µs | 443.5±3.00µs | 0.78 |
-| ordered_remove | 100000 | 4.5±0.10ms | 5.3±0.04ms | 0.85 |
-| random_get | 1000 | 22.7±3.05µs | 32.7±2.12µs | 0.69 |
-| random_get | 10000 | 656.3±3.32µs | 986.8±8.60µs | 0.67 |
-| random_get | 100000 | 9.4±0.19ms | 14.2±0.10ms | 0.66 |
-| random_remove | 1000 | 58.8±2.28µs | 65.9±3.87µs | 0.89 |
-| random_remove | 10000 | 940.2±2.31µs | 1202.3±2.60µs | 0.78 |
-| random_remove | 100000 | 12.8±0.19ms | 17.4±0.48ms | 0.74 |
+| clone | 1000 | 12.3±0.08µs | 5.6±0.21µs | 2.20 |
+| clone | 10000 | 133.2±1.60µs | 60.3±0.53µs | 2.21 |
+| clone | 100000 | 2.5±0.03ms | 1073.9±93.60µs | 2.33 |
+| cursor | 1000 | - | 4.6±0.03µs | - |
+| cursor | 10000 | - | 46.8±0.18µs | - |
+| cursor | 100000 | - | 470.0±2.39µs | - |
+| drop | 1000 | 7.9±0.10µs | 1093.1±17.60ns | 7.23 |
+| drop | 10000 | 84.7±1.08µs | 12.1±0.32µs | 7.00 |
+| drop | 100000 | 1799.9±23.56µs | 295.2±11.19µs | 6.10 |
+| into_iter | 1000 | 8.1±0.58µs | 1134.7±13.43ns | 7.14 |
+| into_iter | 10000 | 84.9±0.71µs | 12.1±0.10µs | 7.02 |
+| into_iter | 100000 | 1825.7±79.25µs | 254.9±7.95µs | 7.16 |
+| iter | 1000 | 844.2±8.44ns | 416.8±5.02ns | 2.03 |
+| iter | 10000 | 11.9±0.29µs | 4.7±0.03µs | 2.53 |
+| iter | 100000 | 216.5±0.80µs | 54.8±0.13µs | 3.95 |
+| ordered_get | 1000 | 26.8±1.08µs | 10.0±0.10µs | 2.68 |
+| ordered_get | 10000 | 418.7±2.83µs | 107.5±0.53µs | 3.89 |
+| ordered_get | 100000 | 4.7±0.01ms | 1126.8±4.21µs | 4.17 |
+| ordered_remove | 1000 | 32.5±0.84µs | 84.1±0.80µs | 0.39 |
+| ordered_remove | 10000 | 344.9±3.55µs | 873.5±0.72µs | 0.39 |
+| ordered_remove | 100000 | 4.5±0.47ms | 9.6±0.20ms | 0.47 |
+| random_get | 1000 | 25.1±1.45µs | 18.6±1.77µs | 1.35 |
+| random_get | 10000 | 664.3±50.24µs | 956.8±6.58µs | 0.69 |
+| random_get | 100000 | 9.3±0.01ms | 13.4±0.02ms | 0.69 |
+| random_remove | 1000 | 61.6±4.01µs | 89.6±1.39µs | 0.69 |
+| random_remove | 10000 | 912.4±0.84µs | 1411.6±2.83µs | 0.65 |
+| random_remove | 100000 | 12.8±0.90ms | 18.7±0.04ms | 0.68 |
 
 #### Point benchmark data with bulk_load
 
 | name | size | type | time |
 | - | - | - | - |
-| ordered_insert | 1000 | bptree | 16.0±0.04µs
-|  |  | bptree_bulk | 6.7±0.05µs
-|  |  | btree | 52.3±0.80µs
-| ordered_insert | 10000 | bptree | 173.1±1.53µs
-|  |  | bptree_bulk | 72.7±0.93µs
-|  |  | btree | 779.5±9.75µs
-| ordered_insert | 100000 | bptree | 2.3±0.02ms
-|  |  | bptree_bulk | 1025.5±34.59µs
-|  |  | btree | 8.8±0.07ms
-| random_insert | 1000 | bptree | 57.8±4.67µs
-|  |  | bptree_sort_load | 43.6±0.31µs
-|  |  | btree | 50.3±1.08µs
-| random_insert | 10000 | bptree | 1288.2±13.88µs
-|  |  | bptree_sort_load | 686.1±19.43µs
-|  |  | btree | 939.9±7.26µs
-| random_insert | 100000 | bptree | 18.4±4.51ms
-|  |  | bptree_sort_load | 9.8±0.20ms
-|  |  | btree | 13.7±0.17ms
+| ordered_insert | 1000 | bptree | 26.9±0.23µs
+|  |  | bptree_bulk | 6.1±0.08µs
+|  |  | btree | 50.8±1.80µs
+| ordered_insert | 10000 | bptree | 358.3±10.02µs
+|  |  | bptree_bulk | 66.0±0.61µs
+|  |  | btree | 778.5±13.34µs
+| ordered_insert | 100000 | bptree | 4.7±0.02ms
+|  |  | bptree_bulk | 916.1±20.79µs
+|  |  | btree | 8.8±0.04ms
+| random_insert | 1000 | bptree | 81.3±1.15µs
+|  |  | bptree_sort_load | 43.2±0.29µs
+|  |  | btree | 55.5±1.36µs
+| random_insert | 10000 | bptree | 1381.6±16.30µs
+|  |  | bptree_sort_load | 698.6±7.84µs
+|  |  | btree | 962.6±9.49µs
+| random_insert | 100000 | bptree | 18.3±0.06ms
+|  |  | bptree_sort_load | 9.5±0.01ms
+|  |  | btree | 14.0±0.08ms
 
 ### String benchmark data
 
@@ -227,63 +227,57 @@ For random_get and random_remove, bptree still slower, but the margin is smaller
 
 | name | size | btree | bptree | speed factor |
 | - | - | - | - | - |
-| clone | 1000 | 34.9±0.34µs | 31.0±0.31µs | 1.13 |
-| clone | 10000 | 435.9±7.29µs | 328.4±3.87µs | 1.33 |
-| clone | 100000 | 7.2±0.11ms | 5.5±0.07ms | 1.31 |
-| cursor | 1000 | - | 31.5±0.25µs | - |
-| cursor | 10000 | - | 317.9±1.33µs | - |
-| cursor | 100000 | - | 3.9±0.17ms | - |
-| drop | 1000 | 22.1±0.88µs | 16.5±0.41µs | 1.34 |
-| drop | 10000 | 237.0±3.58µs | 162.2±1.58µs | 1.46 |
-| drop | 100000 | 4.5±0.08ms | 2.6±0.13ms | 1.73 |
-| into_iter | 1000 | 21.2±0.41µs | 15.2±1.15µs | 1.39 |
-| into_iter | 10000 | 255.7±41.04µs | 167.6±3.18µs | 1.53 |
-| into_iter | 100000 | 4.6±0.27ms | 2.6±0.05ms | 1.77 |
-| iter | 1000 | 844.3±11.93ns | 362.6±7.31ns | 2.33 |
-| iter | 10000 | 17.0±0.57µs | 6.8±0.05µs | 2.50 |
-| iter | 100000 | 236.9±7.38µs | 86.1±1.08µs | 2.75 |
-| ordered_get | 1000 | 223.2±2.30µs | 208.7±2.06µs | 1.07 |
-| ordered_get | 10000 | 2.4±0.01ms | 2.1±0.03ms | 1.14 |
-| ordered_get | 100000 | 25.7±0.02ms | 22.4±0.94ms | 1.15 |
-| ordered_remove | 1000 | 233.9±1.57µs | 282.3±3.43µs | 0.83 |
-| ordered_remove | 10000 | 2.4±0.01ms | 2.9±0.00ms | 0.83 |
-| ordered_remove | 100000 | 27.8±2.40ms | 30.9±0.06ms | 0.90 |
-| random_get | 1000 | 64.5±0.94µs | 68.0±0.51µs | 0.95 |
-| random_get | 10000 | 1204.6±28.03µs | 1505.9±29.45µs | 0.80 |
-| random_get | 100000 | 23.3±0.20ms | 29.1±3.15ms | 0.80 |
-| random_remove | 1000 | 128.3±2.33µs | 133.0±0.93µs | 0.96 |
-| random_remove | 10000 | 1800.9±5.62µs | 2.1±0.05ms | 0.86 |
-| random_remove | 100000 | 31.9±2.66ms | 36.7±1.32ms | 0.87 |
+| clone | 1000 | 34.4±0.41µs | 27.6±0.55µs | 1.25 |
+| clone | 10000 | 431.6±10.88µs | 307.0±8.21µs | 1.41 |
+| clone | 100000 | 7.2±0.07ms | 5.2±0.02ms | 1.38 |
+| cursor | 1000 | - | 30.2±0.16µs | - |
+| cursor | 10000 | - | 306.2±0.89µs | - |
+| cursor | 100000 | - | 3.5±0.64ms | - |
+| drop | 1000 | 21.5±1.03µs | 14.7±0.06µs | 1.46 |
+| drop | 10000 | 234.5±2.83µs | 146.6±2.22µs | 1.60 |
+| drop | 100000 | 4.5±0.06ms | 2.3±0.02ms | 1.96 |
+| into_iter | 1000 | 20.5±0.19µs | 13.2±0.82µs | 1.55 |
+| into_iter | 10000 | 235.2±7.75µs | 147.2±1.07µs | 1.60 |
+| into_iter | 100000 | 4.4±0.07ms | 2.3±0.02ms | 1.91 |
+| iter | 1000 | 848.8±6.17ns | 405.1±5.59ns | 2.10 |
+| iter | 10000 | 18.3±0.42µs | 5.1±0.03µs | 3.59 |
+| iter | 100000 | 235.7±6.59µs | 55.1±0.40µs | 4.28 |
+| ordered_get | 1000 | 221.5±2.02µs | 213.1±1.81µs | 1.04 |
+| ordered_get | 10000 | 2.4±0.00ms | 2.1±0.02ms | 1.14 |
+| ordered_get | 100000 | 25.8±0.07ms | 22.2±0.02ms | 1.16 |
+| ordered_remove | 1000 | 231.5±2.46µs | 311.2±4.56µs | 0.74 |
+| ordered_remove | 10000 | 2.4±0.00ms | 3.2±0.02ms | 0.75 |
+| ordered_remove | 100000 | 26.2±0.67ms | 34.5±0.92ms | 0.76 |
+| random_get | 1000 | 63.8±0.84µs | 71.2±1.82µs | 0.90 |
+| random_get | 10000 | 1156.2±5.75µs | 1464.0±11.94µs | 0.79 |
+| random_get | 100000 | 23.0±0.68ms | 26.0±0.32ms | 0.88 |
+| random_remove | 1000 | 126.1±0.93µs | 152.2±2.01µs | 0.83 |
+| random_remove | 10000 | 1764.6±30.54µs | 2.2±0.00ms | 0.80 |
+| random_remove | 100000 | 30.7±0.11ms | 37.2±0.19ms | 0.83 |
 
 #### String benchmark data with bulk_load
 
 | name | size | type | time |
 | - | - | - | - |
-| ordered_insert | 1000 | bptree | 211.3±1.57µs
-|  |  | bptree_bulk | 177.6±1.22µs
-|  |  | btree | 273.0±1.92µs
-| ordered_insert | 10000 | bptree | 2.2±0.01ms
-|  |  | bptree_bulk | 1782.6±17.59µs
-|  |  | btree | 3.0±0.01ms
-| ordered_insert | 100000 | bptree | 22.5±0.11ms
-|  |  | bptree_bulk | 18.6±0.06ms
-|  |  | btree | 33.1±0.21ms
-| random_insert | 1000 | bptree | 140.9±1.41µs
-|  |  | bptree_sort_load | 80.8±0.96µs
-|  |  | btree | 122.8±1.46µs
-| random_insert | 10000 | bptree | 2.3±0.03ms
-|  |  | bptree_sort_load | 1455.0±19.45µs
-|  |  | btree | 1824.0±22.60µs
-| random_insert | 100000 | bptree | 37.2±0.21ms
-|  |  | bptree_sort_load | 20.8±0.06ms
-|  |  | btree | 30.5±0.24ms
+| ordered_insert | 1000 | bptree | 220.3±2.30µs
+|  |  | bptree_bulk | 173.1±2.14µs
+|  |  | btree | 268.3±11.22µs
+| ordered_insert | 10000 | bptree | 2.4±0.07ms
+|  |  | bptree_bulk | 1736.9±16.15µs
+|  |  | btree | 3.0±0.00ms
+| ordered_insert | 100000 | bptree | 25.5±0.11ms
+|  |  | bptree_bulk | 17.8±0.13ms
+|  |  | btree | 33.0±0.11ms
+| random_insert | 1000 | bptree | 135.6±1.39µs
+|  |  | bptree_sort_load | 75.4±1.55µs
+|  |  | btree | 122.8±1.82µs
+| random_insert | 10000 | bptree | 2.2±0.00ms
+|  |  | bptree_sort_load | 1449.7±14.30µs
+|  |  | btree | 1807.4±18.02µs
+| random_insert | 100000 | bptree | 36.5±0.53ms
+|  |  | bptree_sort_load | 20.8±0.46ms
+|  |  | btree | 30.9±0.82ms
 
 ## Contribution
 
 Contributions are welcome! Please open an issue or a PR. Currently, documentation, feature parity with `std::collections::BTreeMap`, and performance improvements are the main areas of interest.
-
-Things on my head:
-
-* Inside inner/leaf node, the `binary` search part is hot(if not hottest) path, and it is not optimized yet.  related: <https://quickwit.io/blog/search-a-sorted-block>
-
-* Mem move, e.g, when deleting, rotation and merging will do one memmove. I think it is possible to avoid this. E.g: use remove-empty instead of merge-at-half(now the impl is a quater).

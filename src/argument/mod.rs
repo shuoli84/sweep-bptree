@@ -5,6 +5,10 @@ pub mod group;
 
 /// Augument trait, it is used to store augumentation, like 'size'
 pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
+    fn is_zst() -> bool {
+        false
+    }
+
     /// create a new Argumentation from leaf node's key
     fn from_leaf(keys: &[K]) -> Self;
 
@@ -58,6 +62,10 @@ pub trait RankArgumentation<K: Key>: Argumentation<K> {
 
 /// () is a dummy argumentation, it is used as the default
 impl<K: Key> Argumentation<K> for () {
+    fn is_zst() -> bool {
+        true
+    }
+
     #[inline(always)]
     fn from_leaf(_: &[K]) -> Self {
         ()
