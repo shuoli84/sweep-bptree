@@ -287,30 +287,17 @@ impl<K: Key, V> LeafNode<K, V> {
         new_node
     }
 
-    /// Delete an item from LeafNode
-    pub(crate) fn try_delete<Q: ?Sized + Ord>(&mut self, k: &Q) -> LeafDeleteResult<K, V>
-    where
-        K: Borrow<Q>,
-    {
-        match self.locate_slot(k) {
-            Ok(idx) => {
-                if self.able_to_lend() {
-                    let result = unsafe {
-                        let k =
-                            slice_utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
-                        let v = slice_utils::slice_remove(
-                            self.value_area_mut(..self.size as usize),
-                            idx,
-                        );
-                        (k, v)
-                    };
-                    self.size -= 1;
-                    LeafDeleteResult::Done(result)
-                } else {
-                    LeafDeleteResult::UnderSize(idx)
-                }
-            }
-            _ => LeafDeleteResult::NotFound,
+    pub(crate) fn try_delete_at(&mut self, idx: usize) -> LeafDeleteResult<K, V> {
+        if self.able_to_lend() {
+            let result = unsafe {
+                let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
+                let v = slice_utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
+                (k, v)
+            };
+            self.size -= 1;
+            LeafDeleteResult::Done(result)
+        } else {
+            LeafDeleteResult::UnderSize(idx)
         }
     }
 
@@ -593,8 +580,6 @@ pub enum LeafUpsertResult<K, V> {
 }
 
 pub enum LeafDeleteResult<K, V> {
-    /// Item not exists
-    NotFound,
     /// Succeeded deleted
     Done((K, V)),
     /// Item exists, but not able to delete because a merge is required

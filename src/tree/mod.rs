@@ -19,7 +19,7 @@ pub use node_stores::*;
 mod bulk_load;
 pub use crate::argument::*;
 
-use self::visit_stack::VisitStack;
+use self::visit_stack::{EntryRef, VisitStack};
 mod visit_stack;
 
 /// B plus tree implementation, with following considerations:
@@ -483,6 +483,14 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
+        self.remove_impl(k).map(|kv| kv.1)
+    }
+
+    pub fn remove_impl<Q: ?Sized>(&mut self, k: &Q) -> Option<(S::K, S::V)>
+    where
+        Q: Ord,
+        S::K: Borrow<Q>,
+    {
         let root_id = self.root;
         let r = match root_id {
             NodeId::Inner(inner_id) => match self.remove_inner(inner_id, k) {
@@ -500,13 +508,15 @@ where
             },
             NodeId::Leaf(leaf_id) => {
                 let leaf = self.node_store.get_mut_leaf(leaf_id);
-                match leaf.try_delete(k) {
-                    LeafDeleteResult::Done(kv) => Some(kv),
-                    LeafDeleteResult::NotFound => None,
-                    LeafDeleteResult::UnderSize(idx) => {
-                        let item = leaf.delete_at(idx);
-                        Some(item)
-                    }
+                match leaf.locate_slot(k) {
+                    Ok(idx) => match leaf.try_delete_at(idx) {
+                        LeafDeleteResult::Done(kv) => Some(kv),
+                        LeafDeleteResult::UnderSize(idx) => {
+                            let item = leaf.delete_at(idx);
+                            Some(item)
+                        }
+                    },
+                    Err(_) => None,
                 }
             }
         };
@@ -516,7 +526,7 @@ where
             self.len -= 1;
         }
 
-        r.map(|kv| kv.1)
+        r
     }
 
     fn remove_inner<Q: ?Sized>(
@@ -545,16 +555,21 @@ where
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_mut_leaf(leaf_id);
-                    break match leaf.try_delete(k) {
-                        LeafDeleteResult::Done(kv) => {
-                            inner_node
-                                .set_argument(child_offset, S::Argument::from_leaf(leaf.keys()));
-                            DeleteDescendResult::Done(kv)
-                        }
-                        LeafDeleteResult::NotFound => DeleteDescendResult::None,
-                        LeafDeleteResult::UnderSize(idx) => {
-                            self.handle_leaf_under_size(inner_node, child_offset, idx)
-                        }
+
+                    break match leaf.locate_slot(k) {
+                        Ok(idx) => match leaf.try_delete_at(idx) {
+                            LeafDeleteResult::Done(kv) => {
+                                inner_node.set_argument(
+                                    child_offset,
+                                    S::Argument::from_leaf(leaf.keys()),
+                                );
+                                DeleteDescendResult::Done(kv)
+                            }
+                            LeafDeleteResult::UnderSize(idx) => {
+                                self.handle_leaf_under_size(inner_node, child_offset, idx)
+                            }
+                        },
+                        Err(_) => DeleteDescendResult::None,
                     };
                 }
             }
@@ -1071,6 +1086,42 @@ where
     }
 
     /// get by argument
+    fn get_ref_by_argument<Q>(&self, mut query: Q) -> Option<EntryRef>
+    where
+        S::Argument: SearchArgumentation<S::K, Query = Q>,
+    {
+        let mut node_id = self.root;
+        let mut stack = VisitStack::new();
+
+        loop {
+            match node_id {
+                NodeId::Inner(inner_id) => {
+                    let inner = self.node_store.get_inner(inner_id);
+                    let (offset, new_query) =
+                        <S::Argument as SearchArgumentation<_>>::locate_in_inner(
+                            query,
+                            inner.keys(),
+                            inner.arguments(),
+                        )?;
+                    node_id = inner.child_id(offset);
+
+                    stack.push(inner_id, offset, node_id);
+                    query = new_query;
+                }
+                NodeId::Leaf(leaf_id) => {
+                    let leaf = self.node_store.get_leaf(leaf_id);
+                    let slot = <S::Argument as SearchArgumentation<_>>::locate_in_leaf(
+                        query,
+                        leaf.keys(),
+                    )?;
+
+                    return Some(EntryRef::new(stack, leaf_id, slot));
+                }
+            }
+        }
+    }
+
+    /// get by argument
     pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<(&S::K, &S::V)>
     where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
@@ -1130,6 +1181,17 @@ where
                 }
             }
         }
+    }
+
+    /// get by argument
+    pub fn remove_by_argument<Q>(&mut self, mut query: Q) -> Option<(S::K, S::V)>
+    where
+        S::Argument: SearchArgumentation<S::K, Query = Q>,
+    {
+        let (k, _v) = self.get_by_argument(query)?;
+        // here we blocked by borrow checker, k is a borrow, it prevents us to
+        // borrow self as mut. We need to do same Ref impl as std BTree
+        todo!()
     }
 
     #[cfg(test)]

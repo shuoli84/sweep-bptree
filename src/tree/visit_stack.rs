@@ -1,6 +1,26 @@
-use super::{InnerNodeId, NodeId};
+use super::{InnerNodeId, LeafNodeId, NodeId};
 
 const N: usize = super::consts::MAX_DEPTH;
+
+#[derive(Debug, Clone, Copy)]
+struct StackEntry {
+    /// inner node id
+    id: InnerNodeId,
+    /// child offset
+    offset: usize,
+    /// corresponding child id
+    child_id: NodeId,
+}
+
+impl StackEntry {
+    const fn invalid() -> Self {
+        Self {
+            id: InnerNodeId::INVALID,
+            offset: 0,
+            child_id: NodeId::Inner(InnerNodeId::INVALID),
+        }
+    }
+}
 
 /// Keeps breadcrumbs of the tree traversal
 #[derive(Debug)]
@@ -9,13 +29,7 @@ pub struct VisitStack {
     len: u16,
 
     /// Inner nodes
-    inner_nodes: [InnerNodeId; N],
-
-    /// Offsets
-    offsets: [u16; N],
-
-    /// child id
-    child_id: [NodeId; N],
+    stack: [StackEntry; N],
 }
 
 impl VisitStack {
@@ -32,21 +46,23 @@ impl VisitStack {
 
 impl VisitStack {
     /// Create a new empty stack
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             len: 0,
-            inner_nodes: [InnerNodeId::INVALID; N],
-            offsets: [0; N],
-            child_id: [NodeId::Inner(InnerNodeId::INVALID); N],
+            stack: [StackEntry::invalid(); N],
         }
     }
 
     pub fn push(&mut self, id: InnerNodeId, offset: usize, child_id: NodeId) {
         assert!(self.len < N as u16);
 
-        self.inner_nodes[self.len as usize] = id;
-        self.offsets[self.len as usize] = offset as u16;
-        self.child_id[self.len as usize] = child_id;
+        let entry = StackEntry {
+            id,
+            offset,
+            child_id,
+        };
+
+        self.stack[self.len as usize] = entry;
         self.len += 1;
     }
 
@@ -58,10 +74,29 @@ impl VisitStack {
         assert!(self.len <= N as u16);
 
         self.len -= 1;
-        let id = self.inner_nodes[self.len as usize];
-        let offset = self.offsets[self.len as usize];
-        let child_id = self.child_id[self.len as usize];
+        let StackEntry {
+            id,
+            offset,
+            child_id,
+        } = self.stack[self.len as usize];
         Some((id, offset as usize, child_id))
+    }
+}
+
+pub struct EntryRef {
+    inner_visit: VisitStack,
+    leaf_id: LeafNodeId,
+    offset: usize,
+}
+
+impl EntryRef {
+    /// Create a new entry reference
+    pub fn new(inner_visit: VisitStack, leaf_id: LeafNodeId, offset: usize) -> Self {
+        Self {
+            inner_visit,
+            leaf_id,
+            offset,
+        }
     }
 }
 
