@@ -161,10 +161,10 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// ```rust
     ///
     /// use sweep_bptree::BPlusTreeMap;
-    /// use sweep_bptree::argument::ElementCount;
+    /// use sweep_bptree::argument::count::Count;
     ///
     ///
-    /// let mut map = BPlusTreeMap::<i32, i32, ElementCount>::new();
+    /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
     /// map.insert(1, 2);
     /// map.insert(2, 3);
     /// map.insert(3, 4);
@@ -188,9 +188,9 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// ``` rust
     ///
     /// use sweep_bptree::BPlusTreeMap;
-    /// use sweep_bptree::argument::ElementCount;
+    /// use sweep_bptree::argument::count::Count;
     ///
-    /// let mut map = BPlusTreeMap::<i32, i32, ElementCount>::new();
+    /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
     /// map.insert(1, 2);
     /// map.insert(2, 3);
     /// map.insert(3, 4);

@@ -1313,6 +1313,8 @@ mod tests {
 
     use rand::seq::SliceRandom;
 
+    use crate::argument::count::Count;
+
     use super::*;
 
     #[test]
@@ -1321,7 +1323,7 @@ mod tests {
     }
 
     fn round_trip_one() {
-        let node_store = NodeStoreVec::<i64, i64, ElementCount>::new();
+        let node_store = NodeStoreVec::<i64, i64, Count>::new();
         let mut tree = BPlusTree::new(node_store);
 
         let size: i64 = 100000;
