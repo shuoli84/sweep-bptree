@@ -175,6 +175,11 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
+    /// Get mut ref for value at slot
+    pub fn value_at_mut(&mut self, slot: usize) -> &mut V {
+        unsafe { self.value_area_mut(slot).assume_init_mut() }
+    }
+
     pub fn try_data_at(&self, idx: usize) -> Option<(&K, &V)> {
         if idx >= self.size as usize {
             return None;

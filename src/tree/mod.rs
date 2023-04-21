@@ -691,35 +691,33 @@ where
     }
 
     /// get by argument
-    pub fn get_by_argument<Q>(&self, mut query: Q) -> Option<(&S::K, &S::V)>
+    pub fn get_by_argument<Q>(&self, query: Q) -> Option<(&S::K, &S::V)>
     where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
-        let mut node_id = self.root;
+        let entry_ref = self.get_ref_by_argument(query)?;
+        self.get_by_ref(entry_ref)
+    }
 
-        loop {
-            match node_id {
-                NodeId::Inner(inner_id) => {
-                    let inner = self.node_store.get_inner(inner_id);
-                    let (offset, new_query) =
-                        <S::Argument as SearchArgumentation<_>>::locate_in_inner(
-                            query,
-                            inner.keys(),
-                            inner.arguments(),
-                        )?;
-                    node_id = inner.child_id(offset);
-                    query = new_query;
-                }
-                NodeId::Leaf(leaf_id) => {
-                    let leaf = self.node_store.get_leaf(leaf_id);
-                    let slot = <S::Argument as SearchArgumentation<_>>::locate_in_leaf(
-                        query,
-                        leaf.keys(),
-                    )?;
-                    return Some(leaf.data_at(slot));
-                }
-            }
-        }
+    /// get mut reference to value by argument's Query
+    pub fn get_mut_by_argument<Q>(&mut self, query: Q) -> Option<&mut S::V>
+    where
+        S::Argument: SearchArgumentation<S::K, Query = Q>,
+    {
+        let entry_ref = self.get_ref_by_argument(query)?;
+        Some(self.get_mut_by_ref(entry_ref))
+    }
+
+    fn get_by_ref(&self, entry_ref: EntryRef) -> Option<(&S::K, &S::V)> {
+        let leaf = self.node_store.get_leaf(entry_ref.leaf_id);
+        let slot = entry_ref.offset;
+        Some(leaf.data_at(slot))
+    }
+
+    fn get_mut_by_ref(&mut self, entry_ref: EntryRef) -> &mut S::V {
+        let leaf = self.node_store.get_mut_leaf(entry_ref.leaf_id);
+        let slot = entry_ref.offset;
+        leaf.value_at_mut(slot)
     }
 
     /// Get rank for argument
@@ -1001,7 +999,7 @@ mod tests {
     }
 
     #[test]
-    fn test_modify_value() {
+    fn test_get_mut() {
         let (mut tree, _) = create_test_tree::<30>();
         let v = tree.get_mut(&1).unwrap();
         *v = 100;
