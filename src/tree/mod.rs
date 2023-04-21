@@ -521,7 +521,7 @@ where
 
     fn remove_inner<Q: ?Sized>(
         &mut self,
-        mut node_id: InnerNodeId,
+        node_id: InnerNodeId,
         k: &Q,
     ) -> DeleteDescendResult<S::K, S::V>
     where
@@ -530,39 +530,37 @@ where
     {
         let mut stack = VisitStack::new();
 
+        let mut node_id = node_id;
         let mut r = loop {
             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
-            //         so we can safely get a mutable ptr to it.
+            //         so can safely get a mutable ptr to it.
             let inner_node = unsafe { &mut *self.node_store.get_mut_inner_ptr(node_id) };
 
-            let (child_idx, child_id) = inner_node.locate_child(k);
+            let (child_offset, child_id) = inner_node.locate_child(k);
 
             match child_id {
                 NodeId::Inner(inner_id) => {
-                    stack.push(node_id, child_idx, child_id);
-
-                    // we only track inner node, because leaf node is always processed in this loop
+                    stack.push(node_id, child_offset, child_id);
                     node_id = inner_id;
-                    continue;
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_mut_leaf(leaf_id);
                     break match leaf.try_delete(k) {
                         LeafDeleteResult::Done(kv) => {
-                            // we need to
-                            inner_node.set_argument(child_idx, S::Argument::from_leaf(leaf.keys()));
+                            inner_node
+                                .set_argument(child_offset, S::Argument::from_leaf(leaf.keys()));
                             DeleteDescendResult::Done(kv)
                         }
                         LeafDeleteResult::NotFound => DeleteDescendResult::None,
                         LeafDeleteResult::UnderSize(idx) => {
-                            self.handle_leaf_under_size(inner_node, child_idx, idx)
+                            self.handle_leaf_under_size(inner_node, child_offset, idx)
                         }
                     };
                 }
             }
         };
 
-        // when reach here, means we need to propogate
+        // pop visit stack and fix things up
         loop {
             match stack.pop() {
                 Some((parent_id, child_idx, child_id)) => {

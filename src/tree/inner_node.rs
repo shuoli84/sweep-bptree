@@ -92,11 +92,7 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
 
     /// Minimum size of a node, if the size is less than this, then the node need to be merged
     const fn minimum_size() -> usize {
-        if N / 4 == 0 {
-            1
-        } else {
-            N / 4
-        }
+        super::consts::MIN_N
     }
 
     /// whether this node is able to lend a key to its sibling
@@ -111,9 +107,6 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
 
     /// Create an empty inner node
     pub(crate) fn empty() -> Box<Self> {
-        // not sure how to do a constrain in compile time, just put a debug assert here.
-        debug_assert!(C == N + 1);
-
         let layout = Layout::new::<mem::MaybeUninit<Self>>();
         let ptr: *mut Self = unsafe { alloc(layout).cast() };
         let mut this = unsafe { Box::from_raw(ptr) };
@@ -127,8 +120,6 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         child_id: [I; C1],
         arguments: [A; C1],
     ) -> Box<Self> {
-        // not sure how to do a constrain in compile time, just put a debug assert here.
-        debug_assert!(C == N + 1);
         Self::new_from_iter(slot_keys, child_id.map(|c| c.into()), arguments)
     }
 
