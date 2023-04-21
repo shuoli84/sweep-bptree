@@ -1,25 +1,15 @@
 use super::{InnerNodeId, NodeId};
 
-const N: usize = 12;
+const N: usize = super::consts::MAX_DEPTH;
 
-/// When searching in the tree, it is temping to think of the stack(0) as a
-/// dynamic growing array. However, this is not the case. The stack(0)'s maximum
-/// cap is fixed. Take branch factor 64 as an example, the maximum cap is 11.
-/// 64 ** 11 is already larger than u64::MAX.
-/// The formular is `ceil(log(u64::MAX, K))`, the K is the branching factor of the tree.
-///
-/// So we use a fixed size array to implement the stack(0). The size of the `VisitStack` for
-/// branch factor 64 is 128 bytes, so we are happy to put it on the stack(1).
-///
-/// stack(0) is the general term stack.
-/// stack(1) is the function call stack.
+/// Keeps breadcrumbs of the tree traversal
 #[derive(Debug)]
 pub struct VisitStack {
     /// current stack size
     len: u16,
 
-    /// Nodes
-    stack: [InnerNodeId; N],
+    /// Inner nodes
+    inner_nodes: [InnerNodeId; N],
 
     /// Offsets
     offsets: [u16; N],
@@ -45,16 +35,16 @@ impl VisitStack {
     pub fn new() -> Self {
         Self {
             len: 0,
-            stack: [InnerNodeId::INVALID; N],
+            inner_nodes: [InnerNodeId::INVALID; N],
             offsets: [0; N],
             child_id: [NodeId::Inner(InnerNodeId::INVALID); N],
         }
     }
 
     pub fn push(&mut self, id: InnerNodeId, offset: usize, child_id: NodeId) {
-        debug_assert!(self.len < N as u16);
+        assert!(self.len < N as u16);
 
-        self.stack[self.len as usize] = id;
+        self.inner_nodes[self.len as usize] = id;
         self.offsets[self.len as usize] = offset as u16;
         self.child_id[self.len as usize] = child_id;
         self.len += 1;
@@ -65,8 +55,10 @@ impl VisitStack {
             return None;
         }
 
+        assert!(self.len <= N as u16);
+
         self.len -= 1;
-        let id = self.stack[self.len as usize];
+        let id = self.inner_nodes[self.len as usize];
         let offset = self.offsets[self.len as usize];
         let child_id = self.child_id[self.len as usize];
         Some((id, offset as usize, child_id))

@@ -1,6 +1,8 @@
 mod inner_node;
-mod utils;
+mod slice_utils;
 use std::{borrow::Borrow, mem::ManuallyDrop};
+
+mod consts;
 
 pub use inner_node::*;
 mod leaf_node;

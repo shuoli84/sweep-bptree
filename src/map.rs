@@ -6,6 +6,7 @@ use crate::{
     BPlusTree, Key, NodeStoreVec,
 };
 
+/// A B+ tree map implemented with `BPlusTree`
 pub struct BPlusTreeMap<K: Key, V, A: Argumentation<K> = ()> {
     inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }

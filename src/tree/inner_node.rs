@@ -6,8 +6,8 @@ use std::{
     mem::{self, MaybeUninit},
 };
 
-const N: usize = 64;
-const C: usize = N + 1;
+const N: usize = super::consts::INNER_N;
+const C: usize = super::consts::INNER_C;
 
 /// Tree's inner node, it contains a list of keys and a list of child node id
 /// `N` is the maximum number of keys in a node
@@ -239,9 +239,9 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
         // SAFETY: we have checked the slot is valid
         //         this method is called only when the node is not full
         unsafe {
-            utils::slice_insert(self.key_area_mut(..new_size), slot, key);
-            utils::slice_insert(self.child_area_mut(..new_child_size), slot + 1, right_child);
-            utils::slice_insert(
+            slice_utils::slice_insert(self.key_area_mut(..new_size), slot, key);
+            slice_utils::slice_insert(self.child_area_mut(..new_child_size), slot + 1, right_child);
+            slice_utils::slice_insert(
                 self.arguments_area_mut(..new_child_size),
                 slot + 1,
                 right_child_argument,
@@ -286,26 +286,30 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
             new_key = unsafe { self.key_area(split_origin_size - 1).assume_init_read() };
 
             unsafe {
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.key_area_mut(split_origin_size..N),
                     new_node.key_area_mut(..split_new_size),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.child_area_mut(split_origin_size..N + 1),
                     new_node.child_area_mut(..split_new_size + 1),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.arguments_area_mut(split_origin_size..N + 1),
                     new_node.arguments_area_mut(..split_new_size + 1),
                 );
 
-                utils::slice_insert(self.key_area_mut(..self.size as usize + 1), child_idx, k);
-                utils::slice_insert(
+                slice_utils::slice_insert(
+                    self.key_area_mut(..self.size as usize + 1),
+                    child_idx,
+                    k,
+                );
+                slice_utils::slice_insert(
                     self.child_area_mut(..self.size as usize + 2),
                     child_idx + 1,
                     new_child_id,
                 );
-                utils::slice_insert(
+                slice_utils::slice_insert(
                     self.arguments_area_mut(..self.size as usize + 2),
                     child_idx + 1,
                     new_child_argument,
@@ -326,17 +330,17 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
             let new_child_idx = child_idx - split_origin_size;
 
             unsafe {
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.key_area_mut(prompt_key_index + 1..prompt_key_index + new_slot_idx + 1),
                     new_node.key_area_mut(..new_slot_idx),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.child_area_mut(
                         split_origin_size + 1..split_origin_size + 1 + new_child_idx,
                     ),
                     new_node.child_area_mut(0..new_child_idx),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.arguments_area_mut(
                         split_origin_size + 1..split_origin_size + 1 + new_child_idx,
                     ),
@@ -347,15 +351,15 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
                 *new_node.child_area_mut(new_child_idx) = MaybeUninit::new(new_child_id);
                 *new_node.arguments_area_mut(new_child_idx) = MaybeUninit::new(new_child_argument);
 
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.key_area_mut(prompt_key_index + new_slot_idx + 1..N),
                     new_node.key_area_mut(new_slot_idx + 1..split_new_size),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.child_area_mut(split_origin_size + 1 + new_child_idx..N + 1),
                     new_node.child_area_mut(new_child_idx + 1..split_new_size + 1),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.arguments_area_mut(split_origin_size + 1 + new_child_idx..N + 1),
                     new_node.arguments_area_mut(new_child_idx + 1..split_new_size + 1),
                 );
@@ -370,15 +374,15 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
             new_key = k;
 
             unsafe {
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.key_area_mut(split_origin_size..N),
                     new_node.key_area_mut(..split_new_size),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.child_area_mut(split_origin_size + 1..N + 1),
                     new_node.child_area_mut(1..split_new_size + 1),
                 );
-                utils::move_to_slice(
+                slice_utils::move_to_slice(
                     self.arguments_area_mut(split_origin_size + 1..N + 1),
                     new_node.arguments_area_mut(1..split_new_size + 1),
                 );
@@ -395,9 +399,9 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
     /// is merged.
     pub(crate) fn remove_slot_with_right(&mut self, slot: usize) -> (InnerMergeResult, K) {
         let k = unsafe {
-            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
-            utils::slice_remove(self.child_area_mut(..self.size as usize + 1), slot + 1);
-            utils::slice_remove(self.arguments_area_mut(..self.size as usize + 1), slot + 1);
+            let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
+            slice_utils::slice_remove(self.child_area_mut(..self.size as usize + 1), slot + 1);
+            slice_utils::slice_remove(self.arguments_area_mut(..self.size as usize + 1), slot + 1);
             k
         };
         self.size -= 1;
@@ -420,15 +424,15 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
 
             debug_assert!(self.len() + right_size <= N);
 
-            utils::move_to_slice(
+            slice_utils::move_to_slice(
                 right.key_area_mut(..right_size),
                 self.key_area_mut(self_size..self_size + right_size),
             );
-            utils::move_to_slice(
+            slice_utils::move_to_slice(
                 right.child_area_mut(..right_size + 1),
                 self.child_area_mut(self_size..self_size + right_size + 1),
             );
-            utils::move_to_slice(
+            slice_utils::move_to_slice(
                 right.arguments_area_mut(..right_size + 1),
                 self.arguments_area_mut(self_size..self_size + right_size + 1),
             );
@@ -463,9 +467,11 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
 
     pub(crate) fn pop_front(&mut self) -> (K, NodeId, A) {
         let (k, left_c, left_m) = unsafe {
-            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
-            let left_c = utils::slice_remove(self.child_area_mut(..self.size as usize + 1), 0);
-            let left_m = utils::slice_remove(self.arguments_area_mut(..self.size as usize + 1), 0);
+            let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
+            let left_c =
+                slice_utils::slice_remove(self.child_area_mut(..self.size as usize + 1), 0);
+            let left_m =
+                slice_utils::slice_remove(self.arguments_area_mut(..self.size as usize + 1), 0);
             (k, left_c, left_m)
         };
         self.size -= 1;
@@ -484,9 +490,9 @@ impl<K: Key, A: Argumentation<K>> InnerNode<K, A> {
 
     pub(crate) fn push_front(&mut self, k: K, child: NodeId, argument: A) {
         unsafe {
-            utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
-            utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
-            utils::slice_insert(
+            slice_utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
+            slice_utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
+            slice_utils::slice_insert(
                 self.arguments_area_mut(0..self.size as usize + 2),
                 0,
                 argument,

@@ -6,7 +6,7 @@ use std::{
     slice::SliceIndex,
 };
 
-const N: usize = 64;
+const N: usize = super::consts::LEAF_N;
 
 #[derive(Debug)]
 pub struct LeafNode<K, V> {
@@ -216,8 +216,8 @@ impl<K: Key, V> LeafNode<K, V> {
             Err(idx) => {
                 if !self.is_full() {
                     let new_len = self.len() + 1;
-                    unsafe { utils::slice_insert(self.key_area_mut(..new_len), idx, k) };
-                    unsafe { utils::slice_insert(self.value_area_mut(..new_len), idx, v) };
+                    unsafe { slice_utils::slice_insert(self.key_area_mut(..new_len), idx, k) };
+                    unsafe { slice_utils::slice_insert(self.value_area_mut(..new_len), idx, v) };
                     self.size = new_len as u16;
                     LeafUpsertResult::Inserted
                 } else {
@@ -242,11 +242,11 @@ impl<K: Key, V> LeafNode<K, V> {
         new_node.next = self.next;
 
         unsafe {
-            utils::move_to_slice(
+            slice_utils::move_to_slice(
                 self.key_area_mut(split_origin_size..N),
                 new_node.key_area_mut(..split_new_size as usize),
             );
-            utils::move_to_slice(
+            slice_utils::move_to_slice(
                 self.value_area_mut(split_origin_size..N),
                 new_node.value_area_mut(..split_new_size as usize),
             );
@@ -255,8 +255,8 @@ impl<K: Key, V> LeafNode<K, V> {
         if insert_idx < split_origin_size {
             let new_size = split_origin_size as usize + 1;
             unsafe {
-                utils::slice_insert(self.key_area_mut(..new_size), insert_idx, item.0);
-                utils::slice_insert(self.value_area_mut(..new_size), insert_idx, item.1);
+                slice_utils::slice_insert(self.key_area_mut(..new_size), insert_idx, item.0);
+                slice_utils::slice_insert(self.value_area_mut(..new_size), insert_idx, item.1);
             };
             self.size = new_size as u16;
 
@@ -266,12 +266,12 @@ impl<K: Key, V> LeafNode<K, V> {
             let insert_idx = insert_idx - split_origin_size;
 
             unsafe {
-                utils::slice_insert(
+                slice_utils::slice_insert(
                     new_node.key_area_mut(..split_new_size + 1),
                     insert_idx,
                     item.0,
                 );
-                utils::slice_insert(
+                slice_utils::slice_insert(
                     new_node.value_area_mut(..split_new_size + 1),
                     insert_idx,
                     item.1,
@@ -296,8 +296,12 @@ impl<K: Key, V> LeafNode<K, V> {
             Ok(idx) => {
                 if self.able_to_lend() {
                     let result = unsafe {
-                        let k = utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
-                        let v = utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
+                        let k =
+                            slice_utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
+                        let v = slice_utils::slice_remove(
+                            self.value_area_mut(..self.size as usize),
+                            idx,
+                        );
                         (k, v)
                     };
                     self.size -= 1;
@@ -371,8 +375,8 @@ impl<K: Key, V> LeafNode<K, V> {
         debug_assert!(self.able_to_lend());
         let last_idx = self.size as usize - 1;
         let result = unsafe {
-            let k = utils::slice_remove(self.key_area_mut(..self.len()), last_idx);
-            let v = utils::slice_remove(self.value_area_mut(..self.len()), last_idx);
+            let k = slice_utils::slice_remove(self.key_area_mut(..self.len()), last_idx);
+            let v = slice_utils::slice_remove(self.value_area_mut(..self.len()), last_idx);
             (k, v)
         };
         self.size -= 1;
@@ -382,8 +386,8 @@ impl<K: Key, V> LeafNode<K, V> {
     pub(crate) fn pop_front(&mut self) -> (K, V) {
         debug_assert!(self.able_to_lend());
         let result = unsafe {
-            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
-            let v = utils::slice_remove(self.value_area_mut(..self.size as usize), 0);
+            let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), 0);
+            let v = slice_utils::slice_remove(self.value_area_mut(..self.size as usize), 0);
             (k, v)
         };
         self.size -= 1;
@@ -393,8 +397,8 @@ impl<K: Key, V> LeafNode<K, V> {
     // delete the item at idx and append the item to last
     pub(crate) fn delete_with_push(&mut self, idx: usize, item: (K, V)) -> (K, V) {
         let result = unsafe {
-            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
-            let v = utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
+            let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
+            let v = slice_utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
             (k, v)
         };
         unsafe {
@@ -410,8 +414,8 @@ impl<K: Key, V> LeafNode<K, V> {
         let v = std::mem::replace(&mut self.slot_value[idx], MaybeUninit::uninit());
 
         unsafe {
-            utils::slice_insert(self.key_area_mut(..idx + 1), 0, item.0);
-            utils::slice_insert(self.value_area_mut(..idx + 1), 0, item.1);
+            slice_utils::slice_insert(self.key_area_mut(..idx + 1), 0, item.0);
+            slice_utils::slice_insert(self.value_area_mut(..idx + 1), 0, item.1);
         }
 
         unsafe { (k.assume_init_read(), v.assume_init_read()) }
@@ -505,8 +509,11 @@ impl<K: Key, V> LeafNode<K, V> {
 
     fn extend(&mut self, (keys, values): (&mut [MaybeUninit<K>], &mut [MaybeUninit<V>])) {
         unsafe {
-            utils::move_to_slice(keys, self.key_area_mut(self.len()..self.len() + keys.len()));
-            utils::move_to_slice(
+            slice_utils::move_to_slice(
+                keys,
+                self.key_area_mut(self.len()..self.len() + keys.len()),
+            );
+            slice_utils::move_to_slice(
                 values,
                 self.value_area_mut(self.len()..self.len() + values.len()),
             );
@@ -516,8 +523,8 @@ impl<K: Key, V> LeafNode<K, V> {
 
     pub(crate) fn delete_at(&mut self, idx: usize) -> (K, V) {
         let result = unsafe {
-            let k = utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
-            let v = utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
+            let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), idx);
+            let v = slice_utils::slice_remove(self.value_area_mut(..self.size as usize), idx);
             (k, v)
         };
         self.size -= 1;
