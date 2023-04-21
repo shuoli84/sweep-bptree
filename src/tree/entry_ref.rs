@@ -83,19 +83,47 @@ impl VisitStack {
     }
 }
 
-pub struct EntryRef {
+pub struct EntryRefOwned {
+    inner_stack: VisitStack,
+    leaf_id: LeafNodeId,
+    offset: usize,
+}
+
+impl EntryRefOwned {
+    /// This is a hack to get around the borrow checker
+    pub fn to_ref<TR>(self, tree: TR) -> EntryRef<TR> {
+        EntryRef::<TR> {
+            inner_stack: self.inner_stack,
+            leaf_id: self.leaf_id,
+            offset: self.offset,
+            tree,
+        }
+    }
+}
+
+pub struct EntryRef<TR> {
     pub(crate) inner_stack: VisitStack,
     pub(crate) leaf_id: LeafNodeId,
     pub(crate) offset: usize,
+    pub(crate) tree: TR,
 }
 
-impl EntryRef {
+impl<TR> EntryRef<TR> {
     /// Create a new entry reference
-    pub fn new(inner_visit: VisitStack, leaf_id: LeafNodeId, offset: usize) -> Self {
+    pub fn new(tree: TR, inner_visit: VisitStack, leaf_id: LeafNodeId, offset: usize) -> Self {
         Self {
             inner_stack: inner_visit,
             leaf_id,
             offset,
+            tree,
+        }
+    }
+
+    pub fn to_owned(self) -> EntryRefOwned {
+        EntryRefOwned {
+            inner_stack: self.inner_stack,
+            leaf_id: self.leaf_id,
+            offset: self.offset,
         }
     }
 }

@@ -11,18 +11,20 @@ impl<S: NodeStore> BPlusTree<S> {
         S::K: Borrow<Q>,
     {
         let entry_ref = self.key_to_ref(k)?;
-        self.remove_by_ref(entry_ref)
+        let entry_ref_mut: EntryRef<&mut Self> = entry_ref.to_owned().to_ref(self);
+        Self::remove_by_ref(entry_ref_mut)
     }
 
-    pub(crate) fn remove_by_ref(&mut self, entry_ref: EntryRef) -> Option<(S::K, S::V)> {
+    pub(crate) fn remove_by_ref(entry_ref: EntryRef<&mut Self>) -> Option<(S::K, S::V)> {
         let EntryRef {
+            tree,
             inner_stack: mut stack,
             leaf_id,
             offset,
         } = entry_ref;
 
         let mut r = {
-            let leaf = self.node_store.get_mut_leaf(leaf_id);
+            let leaf = tree.node_store.get_mut_leaf(leaf_id);
 
             match leaf.try_delete_at(offset) {
                 LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
@@ -37,22 +39,22 @@ impl<S: NodeStore> BPlusTree<S> {
                     match r {
                         DeleteDescendResult::Done(_) => {
                             let child_argument =
-                                Self::new_argument_for_id(&mut self.node_store, child_id);
-                            let inner_node = self.node_store.get_mut_inner(parent_id);
+                                Self::new_argument_for_id(&mut tree.node_store, child_id);
+                            let inner_node = tree.node_store.get_mut_inner(parent_id);
                             inner_node.set_argument(child_idx, child_argument);
                         }
                         DeleteDescendResult::InnerUnderSize(kv) => {
                             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
                             //         so we can safely get a mut ptr to it.
                             let parent =
-                                unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
-                            r = self.handle_inner_under_size(parent, child_idx, kv);
+                                unsafe { &mut *tree.node_store.get_mut_inner_ptr(parent_id) };
+                            r = tree.handle_inner_under_size(parent, child_idx, kv);
                         }
                         DeleteDescendResult::LeafUnderSize(idx) => {
                             // todo: remove this unsafe
                             let inner_node =
-                                unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
-                            r = self.handle_leaf_under_size(inner_node, child_idx, idx);
+                                unsafe { &mut *tree.node_store.get_mut_inner_ptr(parent_id) };
+                            r = tree.handle_leaf_under_size(inner_node, child_idx, idx);
                         }
                     }
                 }
@@ -61,28 +63,28 @@ impl<S: NodeStore> BPlusTree<S> {
                     let r = match r {
                         DeleteDescendResult::Done(kv) => Some(kv),
                         DeleteDescendResult::InnerUnderSize(deleted_item) => {
-                            let root = self
+                            let root = tree
                                 .node_store
-                                .get_mut_inner(unsafe { self.root.inner_id_unchecked() });
+                                .get_mut_inner(unsafe { tree.root.inner_id_unchecked() });
 
                             if root.len() == 0 {
-                                self.root = root.child_id(0);
+                                tree.root = root.child_id(0);
                             }
 
                             Some(deleted_item)
                         }
                         DeleteDescendResult::LeafUnderSize(idx) => {
-                            let leaf = self
+                            let leaf = tree
                                 .node_store
-                                .get_mut_leaf(unsafe { self.root.leaf_id_unchecked() });
+                                .get_mut_leaf(unsafe { tree.root.leaf_id_unchecked() });
                             let item = leaf.delete_at(idx);
                             Some(item)
                         }
                     };
 
                     if r.is_some() {
-                        self.root_argument = Self::new_argument_for_id(&self.node_store, self.root);
-                        self.len -= 1;
+                        tree.root_argument = Self::new_argument_for_id(&tree.node_store, tree.root);
+                        tree.len -= 1;
                     }
 
                     return r;

@@ -488,7 +488,7 @@ where
         self.remove_impl(k).map(|kv| kv.1)
     }
 
-    fn key_to_ref<Q: ?Sized>(&mut self, k: &Q) -> Option<EntryRef>
+    fn key_to_ref<'a, Q: ?Sized>(&'a self, k: &Q) -> Option<EntryRef<&Self>>
     where
         Q: Ord,
         S::K: Borrow<Q>,
@@ -508,7 +508,7 @@ where
                     let leaf = self.node_store.get_leaf(leaf_id);
 
                     match leaf.locate_slot(k) {
-                        Ok(idx) => return Some(EntryRef::new(inner_stack, leaf_id, idx)),
+                        Ok(idx) => return Some(EntryRef::new(self, inner_stack, leaf_id, idx)),
                         Err(_) => return None,
                     };
                 }
@@ -655,7 +655,7 @@ where
     }
 
     /// get by argument
-    fn get_ref_by_argument<Q>(&self, mut query: Q) -> Option<EntryRef>
+    fn get_ref_by_argument<Q>(&self, mut query: Q) -> Option<EntryRef<&Self>>
     where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
@@ -684,7 +684,7 @@ where
                         leaf.keys(),
                     )?;
 
-                    return Some(EntryRef::new(stack, leaf_id, slot));
+                    return Some(EntryRef::new(self, stack, leaf_id, slot));
                 }
             }
         }
@@ -696,7 +696,7 @@ where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        self.get_by_ref(entry_ref)
+        Self::get_by_ref(entry_ref)
     }
 
     /// get mut reference to value by argument's Query
@@ -705,19 +705,7 @@ where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Some(self.get_mut_by_ref(entry_ref))
-    }
-
-    fn get_by_ref(&self, entry_ref: EntryRef) -> Option<(&S::K, &S::V)> {
-        let leaf = self.node_store.get_leaf(entry_ref.leaf_id);
-        let slot = entry_ref.offset;
-        Some(leaf.data_at(slot))
-    }
-
-    fn get_mut_by_ref(&mut self, entry_ref: EntryRef) -> &mut S::V {
-        let leaf = self.node_store.get_mut_leaf(entry_ref.leaf_id);
-        let slot = entry_ref.offset;
-        leaf.value_at_mut(slot)
+        Some(Self::get_mut_by_ref(entry_ref.to_owned().to_ref(self)))
     }
 
     /// Get rank for argument
@@ -756,7 +744,28 @@ where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        self.remove_by_ref(entry_ref)
+        Self::remove_by_ref(entry_ref.to_owned().to_ref(self))
+    }
+
+    /// Get the (&K, &V) pair for referece
+    fn get_by_ref(entry_ref: EntryRef<&Self>) -> Option<(&S::K, &S::V)> {
+        let leaf = entry_ref.tree.node_store.get_leaf(entry_ref.leaf_id);
+        let slot = entry_ref.offset;
+        Some(leaf.data_at(slot))
+    }
+
+    /// Get the &mut V for referece
+    fn get_mut_by_ref(entry_ref: EntryRef<&mut Self>) -> &mut S::V {
+        let EntryRef {
+            tree,
+            leaf_id,
+            offset,
+            ..
+        } = entry_ref;
+
+        let leaf = tree.node_store.get_mut_leaf(leaf_id);
+        let slot = offset;
+        leaf.value_at_mut(slot)
     }
 
     #[cfg(test)]
