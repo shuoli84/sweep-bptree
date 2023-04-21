@@ -505,6 +505,9 @@ where
 
                     Some(deleted_item)
                 }
+                DeleteDescendResult::LeafUnderSize(_) => {
+                    unreachable!()
+                }
             },
             NodeId::Leaf(leaf_id) => {
                 let leaf = self.node_store.get_mut_leaf(leaf_id);
@@ -538,40 +541,55 @@ where
         Q: Ord,
         S::K: Borrow<Q>,
     {
-        let mut stack = VisitStack::new();
+        let entry_ref = match self.key_to_ref(node_id, k) {
+            Some(entry_ref) => entry_ref,
+            None => return DeleteDescendResult::None,
+        };
+        self.remove_by_ref(entry_ref)
+    }
 
+    fn key_to_ref<Q: ?Sized>(&mut self, node_id: InnerNodeId, k: &Q) -> Option<EntryRef>
+    where
+        Q: Ord,
+        S::K: Borrow<Q>,
+    {
+        let mut stack = VisitStack::new();
         let mut node_id = node_id;
-        let mut r = loop {
-            // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
-            //         so can safely get a mutable ptr to it.
-            let inner_node = unsafe { &mut *self.node_store.get_mut_inner_ptr(node_id) };
+        loop {
+            let inner_node = self.node_store.get_inner(node_id);
 
             let (child_offset, child_id) = inner_node.locate_child(k);
+            stack.push(node_id, child_offset, child_id);
 
             match child_id {
                 NodeId::Inner(inner_id) => {
-                    stack.push(node_id, child_offset, child_id);
                     node_id = inner_id;
                 }
                 NodeId::Leaf(leaf_id) => {
-                    let leaf = self.node_store.get_mut_leaf(leaf_id);
+                    let leaf = self.node_store.get_leaf(leaf_id);
 
-                    break match leaf.locate_slot(k) {
-                        Ok(idx) => match leaf.try_delete_at(idx) {
-                            LeafDeleteResult::Done(kv) => {
-                                inner_node.set_argument(
-                                    child_offset,
-                                    S::Argument::from_leaf(leaf.keys()),
-                                );
-                                DeleteDescendResult::Done(kv)
-                            }
-                            LeafDeleteResult::UnderSize(idx) => {
-                                self.handle_leaf_under_size(inner_node, child_offset, idx)
-                            }
-                        },
-                        Err(_) => DeleteDescendResult::None,
+                    match leaf.locate_slot(k) {
+                        Ok(idx) => return Some(EntryRef::new(stack, leaf_id, idx)),
+                        Err(_) => return None,
                     };
                 }
+            }
+        }
+    }
+
+    fn remove_by_ref(&mut self, entry_ref: EntryRef) -> DeleteDescendResult<S::K, S::V> {
+        let EntryRef {
+            inner_stack: mut stack,
+            leaf_id,
+            offset,
+        } = entry_ref;
+
+        let mut r = {
+            let leaf = self.node_store.get_mut_leaf(leaf_id);
+
+            match leaf.try_delete_at(offset) {
+                LeafDeleteResult::Done(kv) => DeleteDescendResult::Done(kv),
+                LeafDeleteResult::UnderSize(idx) => DeleteDescendResult::LeafUnderSize(idx),
             }
         };
 
@@ -592,6 +610,12 @@ where
                             let parent =
                                 unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
                             r = self.handle_inner_under_size(parent, child_idx, kv);
+                        }
+                        DeleteDescendResult::LeafUnderSize(idx) => {
+                            // todo: remove this unsafe
+                            let inner_node =
+                                unsafe { &mut *self.node_store.get_mut_inner_ptr(parent_id) };
+                            r = self.handle_leaf_under_size(inner_node, child_idx, idx);
                         }
                         DeleteDescendResult::None => {}
                     }
@@ -1184,14 +1208,13 @@ where
     }
 
     /// get by argument
-    pub fn remove_by_argument<Q>(&mut self, mut query: Q) -> Option<(S::K, S::V)>
+    pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(S::K, S::V)>
     where
         S::Argument: SearchArgumentation<S::K, Query = Q>,
     {
-        let (k, _v) = self.get_by_argument(query)?;
-        // here we blocked by borrow checker, k is a borrow, it prevents us to
-        // borrow self as mut. We need to do same Ref impl as std BTree
-        todo!()
+        let entry_ref = self.get_ref_by_argument(query)?;
+        unimplemented!()
+        // self.remove_by_ref(entry_ref)
     }
 
     #[cfg(test)]
@@ -1266,6 +1289,8 @@ enum DeleteDescendResult<K, V> {
     Done((K, V)),
     /// Inner node under size, the index and node_id to remove
     InnerUnderSize((K, V)),
+    /// Leaf node under size
+    LeafUnderSize(usize),
 }
 
 /// NodeStore is the node storage for tree, responsible for

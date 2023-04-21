@@ -84,16 +84,16 @@ impl VisitStack {
 }
 
 pub struct EntryRef {
-    inner_visit: VisitStack,
-    leaf_id: LeafNodeId,
-    offset: usize,
+    pub(crate) inner_stack: VisitStack,
+    pub(crate) leaf_id: LeafNodeId,
+    pub(crate) offset: usize,
 }
 
 impl EntryRef {
     /// Create a new entry reference
     pub fn new(inner_visit: VisitStack, leaf_id: LeafNodeId, offset: usize) -> Self {
         Self {
-            inner_visit,
+            inner_stack: inner_visit,
             leaf_id,
             offset,
         }
