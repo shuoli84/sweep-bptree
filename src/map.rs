@@ -181,6 +181,57 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
         self.inner.get_by_argument(query)
     }
 
+    /// Get mut referece to value by argument's query
+    ///
+    /// # Example
+    /// ```rust
+    ///
+    /// use sweep_bptree::BPlusTreeMap;
+    /// use sweep_bptree::argument::count::Count;
+    ///
+    ///
+    /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
+    /// map.insert(1, 2);
+    /// map.insert(2, 3);
+    /// map.insert(3, 4);
+    ///
+    /// *map.get_mut_by_argument(0).unwrap() = 20;
+    /// assert_eq!(map.get_by_argument(0), Some((&1, &20)));
+    ///
+    /// ```
+    pub fn get_mut_by_argument<Q>(&mut self, query: Q) -> Option<&mut V>
+    where
+        A: SearchArgumentation<K, Query = Q>,
+    {
+        self.inner.get_mut_by_argument(query)
+    }
+
+    /// Remove by argument's query, returns deleted Key Value if exist
+    ///
+    /// # Example
+    /// ```rust
+    ///
+    /// use sweep_bptree::BPlusTreeMap;
+    /// use sweep_bptree::argument::count::Count;
+    ///
+    ///
+    /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
+    /// map.insert(1, 2);
+    /// map.insert(2, 3);
+    /// map.insert(3, 4);
+    ///
+    /// assert_eq!(map.remove_by_argument(0), Some((1, 2)));
+    /// assert_eq!(map.remove_by_argument(0), Some((2, 3)));
+    /// assert_eq!(map.remove_by_argument(0), Some((3, 4)));
+    ///
+    /// ```
+    pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(K, V)>
+    where
+        A: SearchArgumentation<K, Query = Q>,
+    {
+        self.inner.remove_by_argument(query)
+    }
+
     /// Get the rank for key
     ///
     /// # Example
