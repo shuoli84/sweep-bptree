@@ -271,6 +271,28 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     }
 }
 
+impl<K: Key, V, A: Argumentation<K>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
+    /// Create a BPlusTreeMap from an iterator
+    ///
+    /// # Example
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeMap;
+    ///
+    /// let mut items = (0..1000).map(|i| (i, i));
+    ///
+    /// let map = BPlusTreeMap::<i32, i32>::from_iter(items);
+    /// assert_eq!(map.len(), 1000);
+    /// assert_eq!(map.get(&1), Some(&1));
+    /// ```
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        // here we use bulk load to build the tree
+        let mut items = iter.into_iter().collect::<Vec<_>>();
+        items.sort_by(|l, r| l.0.cmp(&r.0));
+        let inner = BPlusTree::bulk_load(items);
+        Self { inner }
+    }
+}
+
 mod iter {
     use std::iter::FusedIterator;
 

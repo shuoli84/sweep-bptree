@@ -254,6 +254,26 @@ impl<K: Key> BPlusTreeSet<K> {
     }
 }
 
+impl<K: Key> FromIterator<K> for BPlusTreeSet<K> {
+    /// Create a BPlusTreeSet from an iterator
+    ///
+    /// # Example
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let set = BPlusTreeSet::<_>::from_iter(0..1000);
+    /// assert_eq!(set.len(), 1000);
+    /// assert!(set.contains(&1));
+    /// ```
+    fn from_iter<T: IntoIterator<Item = K>>(iter: T) -> Self {
+        // here we use bulk load to build the tree
+        let mut items = iter.into_iter().map(|k| (k, ())).collect::<Vec<_>>();
+        items.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        let tree = BPlusTree::bulk_load(items);
+        Self { tree }
+    }
+}
+
 mod iter {
     use std::{cmp::max, iter::FusedIterator};
 
