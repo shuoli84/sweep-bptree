@@ -151,8 +151,7 @@ impl<K: Key, V> LeafNode<K, V> {
         self.next
     }
 
-    pub fn set_data(&mut self, data: impl IntoIterator<Item = (K, V)>) {
-        let mut data = data.into_iter();
+    pub fn set_data(&mut self, mut data: impl Iterator<Item = (K, V)>) {
         for i in 0..N {
             if let Some((k, v)) = data.next() {
                 unsafe {
@@ -598,7 +597,12 @@ mod tests {
     /// create a leaf with data [2, 4, 6..]
     fn test_leaf() -> Box<LeafNode<i64, i64>> {
         let mut leaf = LeafNode::<i64, i64>::new();
-        leaf.set_data((0..N as i64).map(|i| ((i + 1) * 2, 0)).collect::<Vec<_>>());
+        leaf.set_data(
+            (0..N as i64)
+                .map(|i| ((i + 1) * 2, 0))
+                .collect::<Vec<_>>()
+                .into_iter(),
+        );
         leaf
     }
 
