@@ -531,10 +531,10 @@ mod tests {
             .set_data([10, 30, 50], [child_0, child_1, child_2, child_3]);
         node_store
             .get_mut_leaf(child_1)
-            .set_data([(10, 1), (11, 1)]);
+            .set_data([(10, 1), (11, 1)].into_iter());
         node_store
             .get_mut_leaf(child_2)
-            .set_data([(39, 1), (40, 1)]);
+            .set_data([(39, 1), (40, 1)].into_iter());
 
         let mut parent = node_store.take_inner(parent_id);
         let _result = BPlusTree::merge_leaf_node_with_right(&mut node_store, &mut parent, 1, 0);
@@ -567,10 +567,10 @@ mod tests {
             .set_data([10, 30, 50], [child_0, child_1, child_2, child_3]);
         node_store
             .get_mut_leaf(child_1)
-            .set_data([(10, 1), (11, 1)]);
+            .set_data([(10, 1), (11, 1)].into_iter());
         node_store
             .get_mut_leaf(child_2)
-            .set_data([(39, 1), (40, 1)]);
+            .set_data([(39, 1), (40, 1)].into_iter());
 
         let mut parent = node_store.take_inner(parent_id);
         let _result = BPlusTree::merge_leaf_node_left(&mut node_store, &mut parent, 1, 0);
