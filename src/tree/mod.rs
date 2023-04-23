@@ -657,7 +657,7 @@ where
     /// get by argument
     fn get_ref_by_argument<Q>(&self, mut query: Q) -> Option<EntryRef<&Self>>
     where
-        S::Argument: SearchArgumentation<S::K, Query = Q>,
+        S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let mut node_id = self.root;
         let mut stack = VisitStack::new();
@@ -666,12 +666,11 @@ where
             match node_id {
                 NodeId::Inner(inner_id) => {
                     let inner = self.node_store.get_inner(inner_id);
-                    let (offset, new_query) =
-                        <S::Argument as SearchArgumentation<_>>::locate_in_inner(
-                            query,
-                            inner.keys(),
-                            inner.arguments(),
-                        )?;
+                    let (offset, new_query) = <S::Argument as SearchArgument<_>>::locate_in_inner(
+                        query,
+                        inner.keys(),
+                        inner.arguments(),
+                    )?;
                     node_id = inner.child_id(offset);
 
                     stack.push(inner_id, offset, node_id);
@@ -679,10 +678,8 @@ where
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
-                    let slot = <S::Argument as SearchArgumentation<_>>::locate_in_leaf(
-                        query,
-                        leaf.keys(),
-                    )?;
+                    let slot =
+                        <S::Argument as SearchArgument<_>>::locate_in_leaf(query, leaf.keys())?;
 
                     return Some(EntryRef::new(self, stack, leaf_id, slot));
                 }
@@ -693,7 +690,7 @@ where
     /// get by argument
     pub fn get_by_argument<Q>(&self, query: Q) -> Option<(&S::K, &S::V)>
     where
-        S::Argument: SearchArgumentation<S::K, Query = Q>,
+        S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
         Self::get_by_ref(entry_ref)
@@ -702,7 +699,7 @@ where
     /// get mut reference to value by argument's Query
     pub fn get_mut_by_argument<Q>(&mut self, query: Q) -> Option<&mut S::V>
     where
-        S::Argument: SearchArgumentation<S::K, Query = Q>,
+        S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
         Some(Self::get_mut_by_ref(entry_ref.to_owned().to_ref(self)))
@@ -711,10 +708,10 @@ where
     /// Get rank for argument
     pub fn rank_by_argument<R>(&self, k: &S::K) -> Result<R, R>
     where
-        S::Argument: RankArgumentation<S::K, Rank = R>,
+        S::Argument: RankArgument<S::K, Rank = R>,
     {
         let mut node_id = self.root;
-        let mut rank = <S::Argument as RankArgumentation<S::K>>::initial_value();
+        let mut rank = <S::Argument as RankArgument<S::K>>::initial_value();
 
         loop {
             match node_id {
@@ -723,16 +720,12 @@ where
                     let (child_idx, child_id) = inner.locate_child(k);
                     node_id = child_id;
                     let arguments = &inner.arguments()[0..child_idx];
-                    rank = <S::Argument as RankArgumentation<S::K>>::fold_inner(rank, arguments);
+                    rank = <S::Argument as RankArgument<S::K>>::fold_inner(rank, arguments);
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
                     let slot = leaf.locate_slot(k);
-                    return <S::Argument as RankArgumentation<_>>::fold_leaf(
-                        rank,
-                        slot,
-                        leaf.keys(),
-                    );
+                    return <S::Argument as RankArgument<_>>::fold_leaf(rank, slot, leaf.keys());
                 }
             }
         }
@@ -741,7 +734,7 @@ where
     /// remove by argument
     pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(S::K, S::V)>
     where
-        S::Argument: SearchArgumentation<S::K, Query = Q>,
+        S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
         Self::remove_by_ref(entry_ref.to_owned().to_ref(self))
@@ -834,7 +827,7 @@ pub trait NodeStore: Default {
     type V;
 
     /// The Argument type
-    type Argument: Argumentation<Self::K>;
+    type Argument: Argument<Self::K>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;

@@ -1,13 +1,13 @@
 use std::borrow::Borrow;
 
 use crate::{
-    argument::RankArgumentation,
-    tree::{Argumentation, SearchArgumentation},
+    argument::RankArgument,
+    tree::{Argument, SearchArgument},
     BPlusTree, Key, NodeStoreVec,
 };
 
 /// A B+ tree map implemented with `BPlusTree`
-pub struct BPlusTreeMap<K: Key, V, A: Argumentation<K> = ()> {
+pub struct BPlusTreeMap<K: Key, V, A: Argument<K> = ()> {
     inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }
 
@@ -17,7 +17,7 @@ impl<K: Key, V> Default for BPlusTreeMap<K, V> {
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// Create a new BPlusTreeMap
     ///
     /// # Examples
@@ -181,7 +181,7 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn get_by_argument<Q>(&self, query: Q) -> Option<(&K, &V)>
     where
-        A: SearchArgumentation<K, Query = Q>,
+        A: SearchArgument<K, Query = Q>,
     {
         self.inner.get_by_argument(query)
     }
@@ -206,7 +206,7 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn get_mut_by_argument<Q>(&mut self, query: Q) -> Option<&mut V>
     where
-        A: SearchArgumentation<K, Query = Q>,
+        A: SearchArgument<K, Query = Q>,
     {
         self.inner.get_mut_by_argument(query)
     }
@@ -232,7 +232,7 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(K, V)>
     where
-        A: SearchArgumentation<K, Query = Q>,
+        A: SearchArgument<K, Query = Q>,
     {
         self.inner.remove_by_argument(query)
     }
@@ -265,13 +265,13 @@ impl<K: Key, V, A: Argumentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn rank_by_argument<R>(&self, k: &K) -> Result<R, R>
     where
-        A: RankArgumentation<K, Rank = R>,
+        A: RankArgument<K, Rank = R>,
     {
         self.inner.rank_by_argument(k)
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Argument<K>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
     /// Create a BPlusTreeMap from an iterator
     ///
     /// # Example

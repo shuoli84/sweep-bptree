@@ -4,7 +4,7 @@ pub mod count;
 pub mod group;
 
 /// Augument trait, it is used to store augumentation, like 'size'
-pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
+pub trait Argument<K: Key>: Clone + Default + std::fmt::Debug {
     fn is_zst() -> bool {
         false
     }
@@ -23,7 +23,7 @@ pub trait Argumentation<K: Key>: Clone + Default + std::fmt::Debug {
 }
 
 /// Whether the argumentation able to locate element
-pub trait SearchArgumentation<K: Key>: Argumentation<K> {
+pub trait SearchArgument<K: Key>: Argument<K> {
     type Query;
 
     /// locate the offset of the element in leaf node
@@ -38,7 +38,7 @@ pub trait SearchArgumentation<K: Key>: Argumentation<K> {
 }
 
 /// Whether the argumentation able to rank element(like the index of key)
-pub trait RankArgumentation<K: Key>: Argumentation<K> {
+pub trait RankArgument<K: Key>: Argument<K> {
     type Rank: Default;
 
     /// Initial rank value, e.g: 0 for size
@@ -61,7 +61,7 @@ pub trait RankArgumentation<K: Key>: Argumentation<K> {
 }
 
 /// () is a dummy argumentation, it is used as the default
-impl<K: Key> Argumentation<K> for () {
+impl<K: Key> Argument<K> for () {
     fn is_zst() -> bool {
         true
     }
