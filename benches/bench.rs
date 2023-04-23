@@ -5,7 +5,7 @@ use models::*;
 use std::collections::BTreeMap;
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use sweep_bptree::{BPlusTree, NodeStoreVec};
+use sweep_bptree::{BPlusTree, BPlusTreeMap, NodeStoreVec};
 
 const COUNTS: [usize; 3] = [1000, 10000, 10_0000];
 const RAND_SEED: u64 = 123;
@@ -56,6 +56,23 @@ fn bench_ordered_insert<K: TestKey>(c: &mut Criterion) {
                 tree
             });
         });
+
+        group.bench_with_input(
+            BenchmarkId::new("btree_from_iter", count),
+            &count,
+            |b, count| {
+                b.iter(|| {
+                    let mut kvs = Vec::with_capacity(*count);
+
+                    for i in 0..*count {
+                        let k = K::from_i(i);
+                        kvs.push((k, Value::default()));
+                    }
+
+                    BTreeMap::<K, Value>::from_iter(kvs.into_iter())
+                });
+            },
+        );
     }
 }
 
@@ -109,6 +126,28 @@ fn bench_random_insert<K: TestKey>(c: &mut Criterion) {
                 }
                 tree
             });
+        });
+
+        group.bench_function(BenchmarkId::new("bptree_from_iter", count), |b| {
+            b.iter_batched(
+                || keys.clone(),
+                |keys| {
+                    BPlusTreeMap::<K, Value>::from_iter(
+                        keys.into_iter().map(|k| (k, Value::default())),
+                    )
+                },
+                BatchSize::NumIterations(1),
+            )
+        });
+
+        group.bench_function(BenchmarkId::new("btree_from_iter", count), |b| {
+            b.iter_batched(
+                || keys.clone(),
+                |keys| {
+                    BTreeMap::<K, Value>::from_iter(keys.into_iter().map(|k| (k, Value::default())))
+                },
+                BatchSize::NumIterations(1),
+            );
         });
     }
 }
