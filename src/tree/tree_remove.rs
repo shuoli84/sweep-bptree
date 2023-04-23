@@ -11,7 +11,7 @@ impl<S: NodeStore> BPlusTree<S> {
         S::K: Borrow<Q>,
     {
         let entry_ref = self.key_to_ref(k)?;
-        let entry_ref_mut: EntryRef<&mut Self> = entry_ref.to_owned().to_ref(self);
+        let entry_ref_mut: EntryRef<&mut Self> = entry_ref.to_detached().to_ref(self);
         Self::remove_by_ref(entry_ref_mut)
     }
 

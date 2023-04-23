@@ -702,7 +702,7 @@ where
         S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Some(Self::get_mut_by_ref(entry_ref.to_owned().to_ref(self)))
+        Some(Self::get_mut_by_ref(entry_ref.to_detached().to_ref(self)))
     }
 
     /// Get rank for argument
@@ -737,7 +737,7 @@ where
         S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Self::remove_by_ref(entry_ref.to_owned().to_ref(self))
+        Self::remove_by_ref(entry_ref.to_detached().to_ref(self))
     }
 
     /// Get the (&K, &V) pair for referece

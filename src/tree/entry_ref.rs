@@ -83,13 +83,15 @@ impl VisitStack {
     }
 }
 
-pub struct EntryRefOwned {
+/// Detached ref, which can be used to create a new `EntryRef` by attaching
+/// to a tree.
+pub struct EntryRefDetached {
     inner_stack: VisitStack,
     leaf_id: LeafNodeId,
     offset: usize,
 }
 
-impl EntryRefOwned {
+impl EntryRefDetached {
     /// This is a hack to get around the borrow checker
     pub fn to_ref<TR>(self, tree: TR) -> EntryRef<TR> {
         EntryRef::<TR> {
@@ -119,8 +121,8 @@ impl<TR> EntryRef<TR> {
         }
     }
 
-    pub fn to_owned(self) -> EntryRefOwned {
-        EntryRefOwned {
+    pub fn to_detached(self) -> EntryRefDetached {
+        EntryRefDetached {
             inner_stack: self.inner_stack,
             leaf_id: self.leaf_id,
             offset: self.offset,
