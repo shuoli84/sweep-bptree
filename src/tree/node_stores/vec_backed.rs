@@ -1,7 +1,7 @@
-use crate::tree::{Argumentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
+use crate::tree::{Argument, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
 
 #[derive(Debug)]
-pub struct NodeStoreVec<K: Key, V, A: Argumentation<K> = ()> {
+pub struct NodeStoreVec<K: Key, V, A: Argument<K> = ()> {
     inner_nodes: Vec<Option<Box<InnerNode<K, A>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V>>>>,
 
@@ -20,7 +20,7 @@ impl<K: Key, V: Clone> Clone for NodeStoreVec<K, V> {
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>> Default for NodeStoreVec<K, V, A> {
+impl<K: Key, V, A: Argument<K>> Default for NodeStoreVec<K, V, A> {
     fn default() -> Self {
         Self {
             inner_nodes: Default::default(),
@@ -30,7 +30,7 @@ impl<K: Key, V, A: Argumentation<K>> Default for NodeStoreVec<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>> NodeStoreVec<K, V, A> {
+impl<K: Key, V, A: Argument<K>> NodeStoreVec<K, V, A> {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self::default()
@@ -81,7 +81,7 @@ impl<K: Key, V, A: Argumentation<K>> NodeStoreVec<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Argumentation<K>> NodeStore for NodeStoreVec<K, V, A> {
+impl<K: Key, V, A: Argument<K>> NodeStore for NodeStoreVec<K, V, A> {
     type K = K;
     type V = V;
     type Argument = A;

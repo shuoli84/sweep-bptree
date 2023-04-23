@@ -1,6 +1,6 @@
 use crate::Key;
 
-use super::{Argumentation, RankArgumentation, SearchArgumentation};
+use super::{Argument, RankArgument, SearchArgument};
 
 /// This argumentation keeps track of the number of elements in the child.
 /// Basicly, it turns the tree to [Order Statistic Tree](https://en.wikipedia.org/wiki/Order_statistic_tree)
@@ -14,7 +14,7 @@ impl Count {
     }
 }
 
-impl<K: Key> Argumentation<K> for Count {
+impl<K: Key> Argument<K> for Count {
     fn from_leaf(keys: &[K]) -> Self {
         Self(keys.len())
     }
@@ -24,7 +24,7 @@ impl<K: Key> Argumentation<K> for Count {
     }
 }
 
-impl<K: Key> SearchArgumentation<K> for Count {
+impl<K: Key> SearchArgument<K> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
@@ -50,7 +50,7 @@ impl<K: Key> SearchArgumentation<K> for Count {
     }
 }
 
-impl<K: Key> RankArgumentation<K> for Count {
+impl<K: Key> RankArgument<K> for Count {
     /// The rank for ElementCount is index
     type Rank = usize;
 

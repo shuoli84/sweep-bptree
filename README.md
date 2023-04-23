@@ -1,11 +1,10 @@
 # Sweep-bptree(under development)
 
-In memory general purpose b+ tree, with argumented tree support.
+In memory augmentable b+ tree.
 
 ## Features(Why use this)
 
-* Argumented, you can use `Count` Argument to turn the tree into order statistic tree. Or create
-your own argument to support more advanced usage.
+* Augmented search tree, e.g, you can use `Count` Argment to turn the tree into order statistic tree. Or create your own argument to support more advanced usage.
 * Inspired by splaytree, maintains last accessed leaf node. Quite performant for ordered/local access. (Check out benchmark)
 * Owned version of cursor, so you can keep a cursor around and modify the tree underlying.
 * Bulk load, currently the most performant way to build a tree. (Check out benchmark)
@@ -33,7 +32,7 @@ assert_eq!(map.get(&1).unwrap(), &2);
 assert!(map.get(&2).is_none());
 ```
 
-### Argumented tree
+### Augmented tree
 
 ```rust
 use sweep_bptree::BPlusTreeMap;

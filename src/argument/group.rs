@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::Key;
 
-use super::Argumentation;
+use super::Argument;
 
 /// Argument to count the number of groups in a set of keys
 /// Note, the group must be ordered
@@ -18,7 +18,7 @@ pub trait FromRef<T> {
     fn from_ref(input: &T) -> Self;
 }
 
-impl<K, G> Argumentation<K> for Option<GroupCount<G>>
+impl<K, G> Argument<K> for Option<GroupCount<G>>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,

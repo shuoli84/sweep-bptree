@@ -1,6 +1,6 @@
 use crate::tree::InnerNode;
 
-use super::{Argumentation, LeafNode, LeafNodeId, NodeId, NodeStore};
+use super::{Argument, LeafNode, LeafNodeId, NodeId, NodeStore};
 
 impl<S: NodeStore> crate::BPlusTree<S> {
     /// bulk load data into a new `BPlusTree`, the loaded tree's leaf with fill rate 1.0

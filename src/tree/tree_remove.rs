@@ -1,7 +1,7 @@
 use super::{
     entry_ref::EntryRef, BPlusTree, InnerMergeResult, InnerNode, LeafDeleteResult, NodeStore,
 };
-use crate::argument::Argumentation;
+use crate::argument::Argument;
 use std::borrow::Borrow;
 
 impl<S: NodeStore> BPlusTree<S> {
