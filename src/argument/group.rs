@@ -288,17 +288,25 @@ where
         // 1. locate the max group and count for arguments
         // 2. then if rank's g is same as max_group's g, merge count
         //    otherwise, just use the max_group
-        let last_argument = arguments.last()?;
-        let max_group_and_count = last_argument.max_group()?;
-        match rank {
-            Some((group, count)) => {
-                if group.cmp(&max_group_and_count.0) == Ordering::Equal {
-                    Some((group, count + max_group_and_count.1))
-                } else {
-                    Some((max_group_and_count.0.clone(), max_group_and_count.1))
+        let mut arguments_rev_iter = arguments.iter().rev();
+        let last_argument = arguments_rev_iter.next()?;
+
+        let (max_group, mut max_group_size) = last_argument.max_group()?;
+
+        for a in arguments_rev_iter {
+            match a.max_group() {
+                Some((group, count)) if group.cmp(max_group) == Ordering::Equal => {
+                    max_group_size += count;
                 }
+                _ => break,
             }
-            None => Some((max_group_and_count.0.clone(), max_group_and_count.1)),
+        }
+
+        match rank {
+            Some((group, count)) if group.cmp(max_group) == Ordering::Equal => {
+                Some((group, count + max_group_size))
+            }
+            _ => Some((max_group.clone(), max_group_size)),
         }
     }
 
@@ -405,15 +413,6 @@ mod tests {
 
     #[test]
     fn test_group_count_in_tree() {
-        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-        struct First(u64);
-
-        impl FromRef<(u64, u64)> for First {
-            fn from_ref(input: &(u64, u64)) -> Self {
-                First(input.0)
-            }
-        }
-
         let node_store = NodeStoreVec::<(u64, u64), i64, GroupCount<First>>::new();
         let mut tree = BPlusTree::new(node_store);
 
@@ -450,5 +449,30 @@ mod tests {
         assert_eq!(tree.rank_by_argument(&(1, 4)), Err(Some((First(1), 3))));
         assert_eq!(tree.rank_by_argument(&(2, 3)), Err(Some((First(2), 0))));
         assert_eq!(tree.rank_by_argument(&(5, 0)), Err(Some((First(5), 0))));
+    }
+
+    #[test]
+    fn test_group_large_group() {
+        let node_store = NodeStoreVec::<(u64, u64), i64, GroupCount<First>>::new();
+        let mut tree = BPlusTree::new(node_store);
+
+        for i in 0..1000 {
+            tree.insert((i / 500, i % 500), i as i64);
+            let rank = tree.rank_by_argument(&(i / 500, i % 500));
+            assert_eq!(rank, Ok(Some((First(i / 500), (i % 500) as usize))));
+            assert_eq!(
+                tree.rank_by_argument(&(i / 500, i % 500 + 1)),
+                Err(Some((First(i / 500), (i % 500) as usize + 1)))
+            );
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct First(u64);
+
+    impl FromRef<(u64, u64)> for First {
+        fn from_ref(input: &(u64, u64)) -> Self {
+            First(input.0)
+        }
     }
 }
