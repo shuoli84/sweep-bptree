@@ -2,7 +2,7 @@ use std::{borrow::Cow, cmp::Ordering};
 
 use crate::Key;
 
-use super::{Argument, SearchArgument};
+use super::{Argument, RankArgument, SearchArgument};
 
 /// Argument to count the number of groups in a set of keys
 /// Note, the group must be ordered
@@ -37,6 +37,19 @@ impl<G: Clone + Ord + std::fmt::Debug> GroupCount<G> {
             GroupCount::Zero => 0,
             GroupCount::One(_, _) => 1,
             GroupCount::Multiple { group_count, .. } => *group_count,
+        }
+    }
+
+    /// Returns max_group and it's item count
+    pub fn max_group(&self) -> Option<(&G, usize)> {
+        match self {
+            GroupCount::Zero => None,
+            GroupCount::One(g, c) => Some((g, *c)),
+            GroupCount::Multiple {
+                max_group,
+                group_count: _,
+                min_group: _,
+            } => Some((&max_group.0, max_group.1)),
         }
     }
 
@@ -258,6 +271,83 @@ where
     }
 }
 
+impl<K, G> RankArgument<K> for GroupCount<G>
+where
+    K: Key,
+    G: FromRef<K> + Clone + Ord + std::fmt::Debug,
+{
+    /// The group and it's offset, if there is no items, it should be None
+    type Rank = Option<(G, usize)>;
+
+    fn initial_value() -> Self::Rank {
+        None
+    }
+
+    fn fold_inner(_k: &K, rank: Option<(G, usize)>, arguments: &[Self]) -> Option<(G, usize)> {
+        // How:
+        // 1. locate the max group and count for arguments
+        // 2. then if rank's g is same as max_group's g, merge count
+        //    otherwise, just use the max_group
+        let last_argument = arguments.last()?;
+        let max_group_and_count = last_argument.max_group()?;
+        match rank {
+            Some((group, count)) => {
+                if group.cmp(&max_group_and_count.0) == Ordering::Equal {
+                    Some((group, count + max_group_and_count.1))
+                } else {
+                    Some((max_group_and_count.0.clone(), max_group_and_count.1))
+                }
+            }
+            None => Some((max_group_and_count.0.clone(), max_group_and_count.1)),
+        }
+    }
+
+    fn fold_leaf(
+        key: &K,
+        rank: Self::Rank,
+        slot: Result<usize, usize>,
+        keys: &[K],
+    ) -> Result<Self::Rank, Self::Rank> {
+        if keys.is_empty() {
+            return Err(Some((G::from_ref(key), 0)));
+        }
+
+        let (group, offset) = rank.unwrap_or((G::from_ref(&keys[0]), 0));
+
+        let group_for_key = G::from_ref(key);
+
+        // if group is same, return early by sum accumulated offset and slot
+        if group.cmp(&group_for_key) == Ordering::Equal {
+            return match slot {
+                Ok(idx) => Ok(Some((group_for_key, idx + offset))),
+                Err(idx) => Err(Some((group_for_key, idx + offset))),
+            };
+        }
+
+        // otherwise, find the G and it's offset
+        // todo: this can be improved by binary search
+        let mut count = 0;
+        let slot_idx = match slot {
+            Ok(idx) => idx,
+            Err(idx) => idx,
+        };
+
+        for k in &keys[0..slot_idx] {
+            let group_candidate = G::from_ref(k);
+            if group_candidate.cmp(&group_for_key) != Ordering::Equal {
+                continue;
+            } else {
+                count += 1;
+            }
+        }
+
+        return match slot {
+            Ok(_) => Ok(Some((group_for_key, count))),
+            Err(_) => Err(Some((group_for_key, count))),
+        };
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{BPlusTree, NodeStoreVec};
@@ -351,6 +441,14 @@ mod tests {
         // offset 1
         assert_eq!(tree.get_by_argument((First(1), 1)).unwrap().1, &101);
         // offset 3 (2 is also exists)
-        assert!(dbg!(tree.get_by_argument((First(1), 3))).is_none());
+        assert!(tree.get_by_argument((First(1), 3)).is_none());
+
+        assert_eq!(tree.rank_by_argument(&(1, 0)), Err(Some((First(1), 0))));
+        assert_eq!(tree.rank_by_argument(&(1, 1)), Ok(Some((First(1), 0))));
+        assert_eq!(tree.rank_by_argument(&(1, 2)), Ok(Some((First(1), 1))));
+        assert_eq!(tree.rank_by_argument(&(1, 3)), Ok(Some((First(1), 2))));
+        assert_eq!(tree.rank_by_argument(&(1, 4)), Err(Some((First(1), 3))));
+        assert_eq!(tree.rank_by_argument(&(2, 3)), Err(Some((First(2), 0))));
+        assert_eq!(tree.rank_by_argument(&(5, 0)), Err(Some((First(5), 0))));
     }
 }
