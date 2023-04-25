@@ -2,10 +2,13 @@ use std::{borrow::Cow, cmp::Ordering};
 
 use crate::Key;
 
-use super::Argument;
+use super::{Argument, SearchArgument};
 
 /// Argument to count the number of groups in a set of keys
 /// Note, the group must be ordered
+/// This Argument basicly provides two capabilities:
+/// 1. Get the group count
+/// 2. Query inside group by offset
 #[derive(Clone, Copy, Debug)]
 pub enum GroupCount<G> {
     Zero,
@@ -186,6 +189,75 @@ where
     }
 }
 
+impl<K, G> SearchArgument<K> for GroupCount<G>
+where
+    K: Key,
+    G: FromRef<K> + Clone + Ord + std::fmt::Debug,
+{
+    /// It can be searched by Group and offset
+    type Query = (G, usize);
+
+    fn locate_in_leaf((group, offset): (G, usize), keys: &[K]) -> Option<usize> {
+        let mut in_group_offset = 0;
+        for (idx, k) in keys.iter().enumerate() {
+            let group_for_key = G::from_ref(k);
+
+            match group_for_key.cmp(&group) {
+                Ordering::Less => continue,
+                Ordering::Equal => {
+                    if in_group_offset == offset {
+                        return Some(idx);
+                    } else {
+                        in_group_offset += 1;
+                    }
+                }
+                Ordering::Greater => return None,
+            }
+        }
+
+        None
+    }
+
+    fn locate_in_inner(
+        (group, mut offset): Self::Query,
+        _keys: &[K],
+        arguments: &[Self],
+    ) -> Option<(usize, Self::Query)> {
+        for (idx, a) in arguments.iter().enumerate() {
+            match a {
+                GroupCount::Zero => {}
+                GroupCount::One(g, c) => match g.cmp(&group) {
+                    Ordering::Less => continue,
+                    Ordering::Equal => {
+                        if *c > offset {
+                            return Some((idx, (group, offset)));
+                        } else {
+                            offset -= c;
+                            continue;
+                        }
+                    }
+                    Ordering::Greater => return None,
+                },
+                GroupCount::Multiple { max_group, .. } => match max_group.0.cmp(&group) {
+                    Ordering::Less => continue,
+                    Ordering::Equal => {
+                        if max_group.1 > offset {
+                            return Some((idx, (group, offset)));
+                        } else {
+                            offset -= max_group.1;
+                            continue;
+                        }
+                    }
+                    Ordering::Greater => {
+                        return Some((idx, (group, offset)));
+                    }
+                },
+            }
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{BPlusTree, NodeStoreVec};
@@ -261,7 +333,7 @@ mod tests {
         assert!(tree.root_argument().is_zero());
 
         tree.insert((1, 1), 100);
-        tree.insert((1, 2), 100);
+        tree.insert((1, 2), 101);
         assert_eq!(tree.root_argument().group_count(), 1);
 
         tree.insert((1, 3), 100);
@@ -272,5 +344,13 @@ mod tests {
         assert_eq!(tree.root_argument().group_count(), 4);
         tree.remove(&(4, 6));
         assert_eq!(tree.root_argument().group_count(), 3);
+
+        // find in group First(1)
+        // offset 0
+        assert_eq!(tree.get_by_argument((First(1), 0)).unwrap().1, &100);
+        // offset 1
+        assert_eq!(tree.get_by_argument((First(1), 1)).unwrap().1, &101);
+        // offset 3 (2 is also exists)
+        assert!(dbg!(tree.get_by_argument((First(1), 3))).is_none());
     }
 }
