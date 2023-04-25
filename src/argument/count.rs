@@ -59,7 +59,7 @@ impl<K: Key> RankArgument<K> for Count {
     }
 
     /// combine the rank of child and the rank of all prev siblings
-    fn fold_inner(mut rank: Self::Rank, arguments: &[Self]) -> Self::Rank {
+    fn fold_inner(_k: &K, mut rank: Self::Rank, arguments: &[Self]) -> Self::Rank {
         for a in arguments {
             rank += a.0
         }
@@ -67,6 +67,7 @@ impl<K: Key> RankArgument<K> for Count {
     }
 
     fn fold_leaf(
+        _k: &K,
         rank: Self::Rank,
         slot: Result<usize, usize>,
         _keys: &[K],

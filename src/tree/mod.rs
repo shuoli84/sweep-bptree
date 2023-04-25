@@ -720,12 +720,12 @@ where
                     let (child_idx, child_id) = inner.locate_child(k);
                     node_id = child_id;
                     let arguments = &inner.arguments()[0..child_idx];
-                    rank = <S::Argument as RankArgument<S::K>>::fold_inner(rank, arguments);
+                    rank = <S::Argument as RankArgument<S::K>>::fold_inner(k, rank, arguments);
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
                     let slot = leaf.locate_slot(k);
-                    return <S::Argument as RankArgument<_>>::fold_leaf(rank, slot, leaf.keys());
+                    return <S::Argument as RankArgument<_>>::fold_leaf(k, rank, slot, leaf.keys());
                 }
             }
         }

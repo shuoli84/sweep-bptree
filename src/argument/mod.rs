@@ -39,7 +39,7 @@ pub trait SearchArgument<K: Key>: Argument<K> {
 
 /// Whether the argumentation able to rank element(like the index of key)
 pub trait RankArgument<K: Key>: Argument<K> {
-    type Rank: Default;
+    type Rank;
 
     /// Initial rank value, e.g: 0 for size
     /// it will be passed to the first call of `combine_rank`
@@ -49,11 +49,12 @@ pub trait RankArgument<K: Key>: Argument<K> {
     /// The passed in argument slice doesn't contain the argument 'k' belongs
     /// The result will be passed to `fold_inner` for inner layer
     /// and finally to `fold_leaf`
-    fn fold_inner(rank: Self::Rank, arguments: &[Self]) -> Self::Rank;
+    fn fold_inner(k: &K, rank: Self::Rank, arguments: &[Self]) -> Self::Rank;
 
     /// Get rank of the key in leaf node
     /// Returns Ok(Rank) for existing key, Err(Rank) for non-existing key
     fn fold_leaf(
+        k: &K,
         rank: Self::Rank,
         slot: Result<usize, usize>,
         keys: &[K],
