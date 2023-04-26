@@ -4,13 +4,10 @@ pub mod count;
 pub mod group;
 
 /// Augument trait, it is used to store augumentation, like 'size'
-pub trait Argument<K: Key>: Clone + Default + std::fmt::Debug {
+pub trait Argument<K: Key>: Clone + Default {
     fn is_zst() -> bool {
         false
     }
-
-    /// create a new Argumentation from leaf node's key
-    fn from_leaf(keys: &[K]) -> Self;
 
     /// create a new Argumentation from inner node and its argument
     /// e.g: take size as example.
@@ -20,6 +17,9 @@ pub trait Argument<K: Key>: Clone + Default + std::fmt::Debug {
     ///                [k2][5, 4]                  [k4][3, 2]
     ///         leaf[0] 5       leaf[1] 4      leaf[2] 3   leaf[2] 2
     fn from_inner(keys: &[K], arguments: &[Self]) -> Self;
+
+    /// create a new Argumentation from leaf node's key
+    fn from_leaf(keys: &[K]) -> Self;
 }
 
 /// Whether the argumentation able to locate element
@@ -42,7 +42,7 @@ pub trait RankArgument<K: Key>: Argument<K> {
     type Rank;
 
     /// Initial rank value, e.g: 0 for size
-    /// it will be passed to the first call of `combine_rank`
+    /// it will be passed to the first call of `folder_inner` or `folder_leaf`
     fn initial_value() -> Self::Rank;
 
     /// combine rank with all ranks for prev sibling arguments.
@@ -61,7 +61,7 @@ pub trait RankArgument<K: Key>: Argument<K> {
     ) -> Result<Self::Rank, Self::Rank>;
 }
 
-/// () is a dummy argumentation, it is used as the default
+/// () is a dummy argument that turns Augmented tree to a normal tree
 impl<K: Key> Argument<K> for () {
     fn is_zst() -> bool {
         true

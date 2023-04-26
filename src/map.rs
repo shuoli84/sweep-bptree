@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use crate::{
     argument::RankArgument,
-    tree::{Argument, SearchArgument},
+    tree::{visit::DescendVisit, Argument, SearchArgument},
     BPlusTree, Key, NodeStoreVec,
 };
 
@@ -268,6 +268,16 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
         A: RankArgument<K, Rank = R>,
     {
         self.inner.rank_by_argument(k)
+    }
+
+    /// Visit the tree's node with a visitor
+    /// Returns None if visitor cancelled
+    /// Otherwise, returns visitor's result
+    pub fn descend_visit<VI, R>(&self, v: VI) -> Option<R>
+    where
+        VI: DescendVisit<K, V, A, Result = R>,
+    {
+        self.inner.descend_visit(v)
     }
 }
 
