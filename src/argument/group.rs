@@ -356,20 +356,20 @@ where
     }
 }
 
-pub use visit::GroupElementCount;
+pub use visit::ExtractGroupSize;
 
 mod visit {
     use super::*;
     use crate::tree::visit::{DescendVisit, DescendVisitResult};
 
     /// This visit returns element count for one group.
-    pub struct GroupElementCount<G, K> {
+    pub struct ExtractGroupSize<G, K> {
         group: G,
         element_count: usize,
         _marker: std::marker::PhantomData<K>,
     }
 
-    impl<G, K> GroupElementCount<G, K> {
+    impl<G, K> ExtractGroupSize<G, K> {
         pub fn new(g: G) -> Self {
             Self {
                 group: g,
@@ -380,7 +380,7 @@ mod visit {
     }
 
     impl<K: Key, V, G: FromRef<K> + Ord + Clone> DescendVisit<K, V, GroupCount<G>>
-        for GroupElementCount<G, K>
+        for ExtractGroupSize<G, K>
     {
         /// The group's total count
         type Result = usize;
@@ -437,55 +437,6 @@ mod tests {
 
     #[test]
     fn test_group_count() {
-        #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-        struct Half(u8);
-
-        impl FromRef<u8> for Half {
-            fn from_ref(input: &u8) -> Self {
-                Self(*input / 2 as u8)
-            }
-        }
-
-        let argument = GroupCount::<Half>::from_leaf(&[1, 2, 3]);
-        assert_eq!(argument.group_count(), 2);
-
-        let argument = <GroupCount<Half>>::from_inner(
-            &[1, 2, 3],
-            &[
-                GroupCount::Multiple {
-                    min_group: (Half(0), 2),
-                    max_group: (Half(1), 1),
-                    group_count: 2,
-                },
-                GroupCount::Multiple {
-                    min_group: (Half(1), 2),
-                    max_group: (Half(4), 3),
-                    group_count: 2,
-                },
-                GroupCount::Multiple {
-                    min_group: (Half(4), 4),
-                    max_group: (Half(10), 5),
-                    group_count: 3,
-                },
-            ],
-        );
-
-        // 1 and 4 are dup groups in child, so we need to fix the double counting
-        assert_eq!(argument.group_count(), 2 + 1 + 2);
-
-        let argument = GroupCount::<Half>::from_inner(
-            &[1, 2, 3],
-            &[
-                GroupCount::One(Half(0), 3),
-                GroupCount::One(Half(0), 4),
-                GroupCount::One(Half(0), 5),
-            ],
-        );
-        assert_eq!(argument.group_count(), 1);
-    }
-
-    #[test]
-    fn test_group_count_in_tree() {
         let node_store = NodeStoreVec::<(u64, u64), i64, GroupCount<First>>::new();
         let mut tree = BPlusTree::new(node_store);
 
@@ -538,6 +489,8 @@ mod tests {
                 Err(Some((First(i / 500), (i % 500) as usize + 1)))
             );
         }
+
+        assert_eq!(tree.root_argument().group_count(), 2);
     }
 
     #[test]
@@ -549,16 +502,18 @@ mod tests {
             tree.insert((i / 500, i % 500), i as i64);
         }
 
+        assert_eq!(tree.root_argument().group_count(), 3);
+
         assert_eq!(
-            tree.descend_visit(GroupElementCount::new(First(0))),
+            tree.descend_visit(ExtractGroupSize::new(First(0))),
             Some(500)
         );
         assert_eq!(
-            tree.descend_visit(GroupElementCount::new(First(1))),
+            tree.descend_visit(ExtractGroupSize::new(First(1))),
             Some(500)
         );
         assert_eq!(
-            tree.descend_visit(GroupElementCount::new(First(2))),
+            tree.descend_visit(ExtractGroupSize::new(First(2))),
             Some(50)
         );
     }

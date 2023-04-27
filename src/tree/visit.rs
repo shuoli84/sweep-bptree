@@ -13,6 +13,7 @@ pub trait DescendVisit<K, V, A> {
 pub enum DescendVisitResult<R> {
     /// Go down to index
     GoDown(usize),
+    /// Cancel the visit, return None
     Cancel,
     /// The visit is completed, R will be returned
     /// This is used in cases that the result can be determined by inner layer.
@@ -20,6 +21,7 @@ pub enum DescendVisitResult<R> {
 }
 
 impl<S: NodeStore> super::BPlusTree<S> {
+    /// visit the tree descendly through visitor `v`
     pub fn descend_visit<V>(&self, mut v: V) -> Option<V::Result>
     where
         V: DescendVisit<S::K, S::V, S::Argument>,
@@ -32,7 +34,7 @@ impl<S: NodeStore> super::BPlusTree<S> {
 
                     match v.visit_inner(inner.keys(), inner.arguments()) {
                         DescendVisitResult::GoDown(child_idx) => {
-                            if child_idx >= inner.len() + 1 {
+                            if child_idx > inner.len() {
                                 panic!("invalid index");
                             }
                             let child_id = inner.child_id(child_idx);
