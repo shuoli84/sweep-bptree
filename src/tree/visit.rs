@@ -1,15 +1,6 @@
 use crate::NodeStore;
 
-pub enum DescendVisitResult<R> {
-    /// Go down to index
-    GoDown(usize),
-    Cancel,
-    /// The visit is completed, R will be returned
-    /// This is used in cases that the result can be determined by inner layer.
-    Complete(R),
-}
-
-/// This kind visit is used to visit the tree from root to leaf, each layer visit one node.
+/// This kind visit is used to visit the tree from root to leaf, each layer visit only one node.
 /// Mainly used as search like visit. Each inner node will returns at most one child to visit.
 /// Time complexity for this visit is log(n)
 pub trait DescendVisit<K, V, A> {
@@ -17,6 +8,15 @@ pub trait DescendVisit<K, V, A> {
 
     fn visit_inner(&mut self, keys: &[K], arguments: &[A]) -> DescendVisitResult<Self::Result>;
     fn visit_leaf(&mut self, keys: &[K], values: &[V]) -> Option<Self::Result>;
+}
+
+pub enum DescendVisitResult<R> {
+    /// Go down to index
+    GoDown(usize),
+    Cancel,
+    /// The visit is completed, R will be returned
+    /// This is used in cases that the result can be determined by inner layer.
+    Complete(R),
 }
 
 impl<S: NodeStore> super::BPlusTree<S> {
