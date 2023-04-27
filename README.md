@@ -1,6 +1,10 @@
-# Sweep-bptree(under development)
+# Sweep-bptree
 
 In memory augmentable b+ tree.
+
+## Status
+
+Though the crate is not complete, the unique feature is already in good shape. I'll drain my energy from this crate to something else.
 
 ## Features
 
