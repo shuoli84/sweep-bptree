@@ -21,13 +21,13 @@ pub enum GroupCount<G> {
     },
 }
 
-impl<G: Clone + Ord + std::fmt::Debug> Default for GroupCount<G> {
+impl<G: Clone + Ord> Default for GroupCount<G> {
     fn default() -> Self {
         Self::Zero
     }
 }
 
-impl<G: Clone + Ord + std::fmt::Debug> GroupCount<G> {
+impl<G: Clone + Ord> GroupCount<G> {
     pub fn is_zero(&self) -> bool {
         matches!(self, GroupCount::Zero)
     }
@@ -356,6 +356,79 @@ where
     }
 }
 
+pub use visit::GroupElementCount;
+
+mod visit {
+    use super::*;
+    use crate::tree::visit::{DescendVisit, DescendVisitResult};
+
+    /// This visit returns element count for one group.
+    pub struct GroupElementCount<G, K> {
+        group: G,
+        element_count: usize,
+        _marker: std::marker::PhantomData<K>,
+    }
+
+    impl<G, K> GroupElementCount<G, K> {
+        pub fn new(g: G) -> Self {
+            Self {
+                group: g,
+                element_count: 0,
+                _marker: std::marker::PhantomData,
+            }
+        }
+    }
+
+    impl<K: Key, V, G: FromRef<K> + Ord + Clone> DescendVisit<K, V, GroupCount<G>>
+        for GroupElementCount<G, K>
+    {
+        /// The group's total count
+        type Result = usize;
+
+        fn visit_inner(
+            &mut self,
+            _keys: &[K],
+            arguments: &[GroupCount<G>],
+        ) -> crate::tree::visit::DescendVisitResult<usize> {
+            let mut child_idx = 0;
+            let mut prev_group_count = 0;
+            for (idx, a) in arguments.iter().enumerate() {
+                child_idx = idx;
+                match a.max_group() {
+                    Some((max_group, max_group_count)) => match max_group.cmp(&self.group) {
+                        Ordering::Less => continue,
+                        Ordering::Equal => {
+                            self.element_count += prev_group_count;
+                            prev_group_count = max_group_count;
+                            continue;
+                        }
+                        Ordering::Greater => {
+                            // break out and go down
+                            self.element_count += prev_group_count;
+                            break;
+                        }
+                    },
+                    None => return DescendVisitResult::Cancel,
+                }
+            }
+
+            crate::tree::visit::DescendVisitResult::GoDown(child_idx)
+        }
+
+        fn visit_leaf(&mut self, keys: &[K], _values: &[V]) -> Option<Self::Result> {
+            for k in keys {
+                match G::from_ref(k).cmp(&self.group) {
+                    Ordering::Less => continue,
+                    Ordering::Equal => self.element_count += 1,
+                    Ordering::Greater => break,
+                }
+            }
+
+            return Some(self.element_count);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{BPlusTree, NodeStoreVec};
@@ -465,6 +538,29 @@ mod tests {
                 Err(Some((First(i / 500), (i % 500) as usize + 1)))
             );
         }
+    }
+
+    #[test]
+    fn test_group_visit_group_count() {
+        let node_store = NodeStoreVec::<(u64, u64), i64, GroupCount<First>>::new();
+        let mut tree = BPlusTree::new(node_store);
+
+        for i in 0..1050 {
+            tree.insert((i / 500, i % 500), i as i64);
+        }
+
+        assert_eq!(
+            tree.descend_visit(GroupElementCount::new(First(0))),
+            Some(500)
+        );
+        assert_eq!(
+            tree.descend_visit(GroupElementCount::new(First(1))),
+            Some(500)
+        );
+        assert_eq!(
+            tree.descend_visit(GroupElementCount::new(First(2))),
+            Some(50)
+        );
     }
 
     #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

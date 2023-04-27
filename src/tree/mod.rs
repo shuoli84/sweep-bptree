@@ -16,6 +16,8 @@ pub use iterator::*;
 mod node_stores;
 pub use node_stores::*;
 
+pub mod visit;
+
 mod bulk_load;
 pub use crate::argument::*;
 

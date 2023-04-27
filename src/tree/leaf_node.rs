@@ -536,6 +536,20 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
+    pub fn values(&self) -> &[V] {
+        unsafe {
+            {
+                let slice: &[MaybeUninit<V>] =
+                    self.slot_value.get_unchecked(..usize::from(self.size));
+                // SAFETY: casting `slice` to a `*const [T]` is safe since the caller guarantees that
+                // `slice` is initialized, and `MaybeUninit` is guaranteed to have the same layout as `T`.
+                // The pointer obtained is valid since it refers to memory owned by `slice` which is a
+                // reference and thus guaranteed to be valid for reads.
+                &*(slice as *const [MaybeUninit<V>] as *const [V])
+            }
+        }
+    }
+
     unsafe fn key_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
     where
         I: SliceIndex<[MaybeUninit<K>], Output = Output>,
