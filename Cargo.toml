@@ -4,7 +4,7 @@ version = "0.4.1"
 edition = "2021"
 description = "In memory locality aware b+ tree, faster for ordered access"
 license = "MIT OR Apache-2.0"
-keywords = ["btree", "datastructure", "augmented search tree"]
+keywords = ["btree", "datastructure", "tree", "augemented"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
