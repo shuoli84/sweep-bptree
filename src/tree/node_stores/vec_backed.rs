@@ -8,7 +8,7 @@ pub struct NodeStoreVec<K: Key, V, A: Argument<K> = ()> {
     cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
-impl<K: Key, V: Clone> Clone for NodeStoreVec<K, V> {
+impl<K: Key, V: Clone, A: Argument<K>> Clone for NodeStoreVec<K, V, A> {
     fn clone(&self) -> Self {
         Self {
             inner_nodes: self.inner_nodes.clone(),
