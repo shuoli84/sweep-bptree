@@ -11,7 +11,7 @@ pub struct BPlusTreeMap<K: Key, V, A: Argument<K> = ()> {
     inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }
 
-impl<K: Key, V> Default for BPlusTreeMap<K, V> {
+impl<K: Key, V, A: Argument<K>> Default for BPlusTreeMap<K, V, A> {
     fn default() -> Self {
         Self::new()
     }
