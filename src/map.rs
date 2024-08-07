@@ -11,7 +11,7 @@ pub struct BPlusTreeMap<K: Key, V, A: Argument<K> = ()> {
     inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }
 
-impl<K: Key, V> Default for BPlusTreeMap<K, V> {
+impl<K: Key, V, A: Argument<K>> Default for BPlusTreeMap<K, V, A> {
     fn default() -> Self {
         Self::new()
     }
@@ -149,7 +149,10 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// assert_eq!(kvs, vec![(1, 2), (2, 3)]);
     /// ```
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+    pub fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (&K, &V)> + ExactSizeIterator + std::iter::FusedIterator
+    {
         iter::Iter {
             inner: self.inner.iter(),
         }
