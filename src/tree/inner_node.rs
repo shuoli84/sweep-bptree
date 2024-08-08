@@ -195,10 +195,10 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
 
     /// returns the child index for k
     #[inline]
-    pub fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
+    pub fn locate_child<Q>(&self, k: &Q) -> (usize, NodeId)
     where
         K: std::borrow::Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         match self.keys().binary_search_by_key(&k, |f| f.borrow()) {
             Err(idx) => {

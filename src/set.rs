@@ -97,9 +97,9 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(!set.remove(&2));
     /// ```
     #[inline]
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> bool
+    pub fn remove<Q>(&mut self, k: &Q) -> bool
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         self.tree.remove(k).is_some()
@@ -118,9 +118,9 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(!set.contains(&1));
     /// ```
     #[inline]
-    pub fn contains<Q: ?Sized>(&self, k: &Q) -> bool
+    pub fn contains<Q>(&self, k: &Q) -> bool
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         self.tree.get(k).is_some()

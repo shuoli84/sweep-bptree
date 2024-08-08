@@ -265,8 +265,7 @@ where
                         }
                     }
                     DescendInsertResult::Inserted => {
-                        let child_argument =
-                            Self::new_argument_for_id(&mut self.node_store, child_id);
+                        let child_argument = Self::new_argument_for_id(&self.node_store, child_id);
                         let inner_node = self.node_store.get_mut_inner(id);
                         inner_node.set_argument(child_idx, child_argument);
 
@@ -482,17 +481,17 @@ where
     }
 
     /// delete element identified by K
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<S::V>
+    pub fn remove<Q>(&mut self, k: &Q) -> Option<S::V>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         S::K: Borrow<Q>,
     {
         self.remove_impl(k).map(|kv| kv.1)
     }
 
-    fn key_to_ref<Q: ?Sized>(&self, k: &Q) -> Option<EntryRef<&Self>>
+    fn key_to_ref<Q>(&self, k: &Q) -> Option<EntryRef<&Self>>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         S::K: Borrow<Q>,
     {
         let mut inner_stack = VisitStack::new();
@@ -765,7 +764,9 @@ where
 
     #[cfg(test)]
     fn validate(&self) {
-        let Some(mut leaf_id) = self.first_leaf() else { return; };
+        let Some(mut leaf_id) = self.first_leaf() else {
+            return;
+        };
         let mut last_leaf_id: Option<LeafNodeId> = None;
 
         // ensures all prev and next are correct
@@ -896,9 +897,9 @@ pub trait NodeStore: Default {
     fn cache_leaf(&self, leaf_id: LeafNodeId);
 
     /// try cache for k
-    fn try_cache<Q: ?Sized>(&self, k: &Q) -> Option<LeafNodeId>
+    fn try_cache<Q>(&self, k: &Q) -> Option<LeafNodeId>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         Self::K: Borrow<Q>;
 
     #[cfg(test)]

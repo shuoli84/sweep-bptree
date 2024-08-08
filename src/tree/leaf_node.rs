@@ -99,9 +99,9 @@ impl<K: Key, V> LeafNode<K, V> {
         self.size > Self::minimum_size()
     }
 
-    pub fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    pub fn in_range<Q>(&self, k: &Q) -> bool
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: std::borrow::Borrow<Q>,
     {
         let is_lt_start = match self.prev {
@@ -120,8 +120,12 @@ impl<K: Key, V> LeafNode<K, V> {
 
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
         debug_assert!(self.len() > 0);
-        let start = self.prev.map(|_| unsafe { self.key_area(0).assume_init_ref().clone() });
-        let end = self.next.map(|_| unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() });
+        let start = self
+            .prev
+            .map(|_| unsafe { self.key_area(0).assume_init_ref().clone() });
+        let end = self
+            .next
+            .map(|_| unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() });
         (start, end)
     }
 
@@ -300,18 +304,18 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     #[inline]
-    pub fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    pub fn locate_slot<Q>(&self, k: &Q) -> Result<usize, usize>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: std::borrow::Borrow<Q>,
     {
         self.keys().binary_search_by_key(&k, |f| f.borrow())
     }
 
     #[inline(always)]
-    pub fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    pub fn locate_slot_with_value<Q>(&self, k: &Q) -> (usize, Option<&V>)
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         match self.locate_slot(k) {
@@ -332,9 +336,9 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
-    pub(crate) fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    pub(crate) fn locate_slot_mut<Q>(&mut self, k: &Q) -> (usize, Option<&mut V>)
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         match self.locate_slot(k) {

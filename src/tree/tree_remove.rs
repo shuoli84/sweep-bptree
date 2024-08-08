@@ -5,9 +5,9 @@ use crate::argument::Argument;
 use std::borrow::Borrow;
 
 impl<S: NodeStore> BPlusTree<S> {
-    pub(crate) fn remove_impl<Q: ?Sized>(&mut self, k: &Q) -> Option<(S::K, S::V)>
+    pub(crate) fn remove_impl<Q>(&mut self, k: &Q) -> Option<(S::K, S::V)>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         S::K: Borrow<Q>,
     {
         let entry_ref = self.key_to_ref(k)?;
@@ -99,12 +99,16 @@ impl<S: NodeStore> BPlusTree<S> {
         child_idx: usize,
         deleted_item: (S::K, S::V),
     ) -> DeleteDescendResult<S::K, S::V> {
-        if child_idx > 0 && Self::try_rotate_right_for_inner_node(&mut self.node_store, node, child_idx - 1)
-                .is_some() {
+        if child_idx > 0
+            && Self::try_rotate_right_for_inner_node(&mut self.node_store, node, child_idx - 1)
+                .is_some()
+        {
             self.st.rotate_right_inner += 1;
             return DeleteDescendResult::Done(deleted_item);
         }
-        if child_idx < node.len() && Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some() {
+        if child_idx < node.len()
+            && Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some()
+        {
             self.st.rotate_left_inner += 1;
             return DeleteDescendResult::Done(deleted_item);
         }
@@ -205,7 +209,7 @@ impl<S: NodeStore> BPlusTree<S> {
             FixAction::MergeLeft => {
                 self.st.merge_with_left_leaf += 1;
                 // merge with prev node
-                
+
                 Self::merge_leaf_node_left(
                     &mut self.node_store,
                     node,
@@ -216,7 +220,6 @@ impl<S: NodeStore> BPlusTree<S> {
             FixAction::MergeRight => {
                 self.st.merge_with_right_leaf += 1;
                 // merge with next node
-                
 
                 Self::merge_leaf_node_with_right(
                     &mut self.node_store,
