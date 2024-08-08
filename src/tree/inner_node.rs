@@ -271,6 +271,7 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
 
         self.size = split_origin_size as u16;
 
+        #[allow(clippy::comparison_chain)]
         if child_idx < split_origin_size {
             // take node_size 4 as example
             // new key 2, new node n

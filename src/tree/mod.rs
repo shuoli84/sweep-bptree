@@ -613,11 +613,6 @@ where
         iterator::Iter::new(self)
     }
 
-    /// Consume the tree and create an iterator on (K, &V) pairs
-    pub fn into_iter(self) -> iterator::IntoIter<S> {
-        iterator::IntoIter::new(self)
-    }
-
     /// Create an cursor from first elem
     pub fn cursor_first(&self) -> Option<Cursor<S::K>> {
         Cursor::first(self).map(|c| c.0)
@@ -796,6 +791,15 @@ impl<S: NodeStore> Drop for BPlusTree<S> {
     }
 }
 
+impl<S: NodeStore> IntoIterator for BPlusTree<S> {
+    type Item = (S::K, S::V);
+    type IntoIter = IntoIter<S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
+    }
+}
+
 /// Statistic data used to guide the perf tuning
 #[derive(Default, Debug, Clone)]
 pub struct Statistic {
@@ -857,6 +861,8 @@ pub trait NodeStore: Default {
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<Self::K, Self::Argument>;
 
     /// Get a mut pointer to inner node.
+    ///
+    /// # Safety
     /// User must ensure there is non shared reference to the node co-exists
     unsafe fn get_mut_inner_ptr(
         &mut self,

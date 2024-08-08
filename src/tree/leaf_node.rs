@@ -71,6 +71,10 @@ impl<K: Key, V> LeafNode<K, V> {
         self.size as usize
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     const fn split_origin_size() -> u16 {
         (N / 2) as u16
     }
@@ -119,7 +123,7 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
-        debug_assert!(self.len() > 0);
+        debug_assert!(!self.is_empty());
         let start = self
             .prev
             .map(|_| unsafe { self.key_area(0).assume_init_ref().clone() });
@@ -483,8 +487,8 @@ impl<K: Key, V> LeafNode<K, V> {
         right.size = 0;
     }
 
-    /// This should never called with same slot
-    pub unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+    /// This should never have called with same slot
+    pub(crate) unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
         debug_assert!(slot < self.len());
 
         // safety: slot is checked against self.len()

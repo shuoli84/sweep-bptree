@@ -24,7 +24,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
             let mut leaf = LeafNode::<S::K, S::V>::new();
             leaf.set_data(&mut data_iter);
 
-            if leaf.len() == 0 {
+            if leaf.is_empty() {
                 // there is no data left
                 break;
             }

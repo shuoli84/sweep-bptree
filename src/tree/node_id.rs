@@ -47,7 +47,7 @@ impl NodeId {
     }
 
     #[inline(always)]
-    pub unsafe fn leaf_id_unchecked(&self) -> LeafNodeId {
+    pub(crate) unsafe fn leaf_id_unchecked(&self) -> LeafNodeId {
         match self {
             NodeId::Leaf(id) => *id,
             _ => unsafe { std::hint::unreachable_unchecked() },
@@ -63,7 +63,7 @@ impl NodeId {
     }
 
     #[inline(always)]
-    pub unsafe fn inner_id_unchecked(&self) -> InnerNodeId {
+    pub(crate) unsafe fn inner_id_unchecked(&self) -> InnerNodeId {
         match self {
             NodeId::Inner(id) => *id,
             _ => unsafe { std::hint::unreachable_unchecked() },
