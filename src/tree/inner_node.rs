@@ -75,6 +75,11 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         self.size as usize
     }
 
+    /// whether this node is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Max key capacity
     pub const fn max_capacity() -> u16 {
         N as u16

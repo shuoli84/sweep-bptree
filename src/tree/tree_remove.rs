@@ -67,7 +67,7 @@ impl<S: NodeStore> BPlusTree<S> {
                                 .node_store
                                 .get_mut_inner(unsafe { tree.root.inner_id_unchecked() });
 
-                            if root.len() == 0 {
+                            if root.is_empty() {
                                 tree.root = root.child_id(0);
                             }
 
