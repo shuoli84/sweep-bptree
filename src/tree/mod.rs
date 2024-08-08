@@ -697,7 +697,9 @@ where
         S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Some(Self::get_mut_by_ref(entry_ref.to_detached().to_ref(self)))
+        Some(Self::get_mut_by_ref(
+            entry_ref.into_detached().into_ref(self),
+        ))
     }
 
     /// Get rank for argument
@@ -732,7 +734,7 @@ where
         S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Self::remove_by_ref(entry_ref.to_detached().to_ref(self))
+        Self::remove_by_ref(entry_ref.into_detached().into_ref(self))
     }
 
     /// Get the (&K, &V) pair for referece
@@ -967,7 +969,6 @@ mod tests {
 
         for i in keys {
             let k = i;
-            println!("\ndeleting {i}");
 
             let delete_result = tree.remove(&k);
             assert!(delete_result.is_some());

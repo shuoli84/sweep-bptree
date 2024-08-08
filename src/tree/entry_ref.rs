@@ -93,7 +93,7 @@ pub struct EntryRefDetached {
 
 impl EntryRefDetached {
     /// This is a hack to get around the borrow checker
-    pub fn to_ref<TR>(self, tree: TR) -> EntryRef<TR> {
+    pub fn into_ref<TR>(self, tree: TR) -> EntryRef<TR> {
         EntryRef::<TR> {
             inner_stack: self.inner_stack,
             leaf_id: self.leaf_id,
@@ -121,7 +121,7 @@ impl<TR> EntryRef<TR> {
         }
     }
 
-    pub fn to_detached(self) -> EntryRefDetached {
+    pub fn into_detached(self) -> EntryRefDetached {
         EntryRefDetached {
             inner_stack: self.inner_stack,
             leaf_id: self.leaf_id,
