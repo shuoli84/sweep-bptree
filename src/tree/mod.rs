@@ -110,9 +110,9 @@ where
     }
 
     /// Create a new `BPlusTree` from existing parts
-    fn new_from_parts(mut node_store: S, root: NodeId, len: usize) -> Self {
+    fn new_from_parts(node_store: S, root: NodeId, len: usize) -> Self {
         let argument = if len > 0 {
-            Self::new_argument_for_id(&mut node_store, root)
+            Self::new_argument_for_id(&node_store, root)
         } else {
             S::Argument::default()
         };
@@ -244,9 +244,8 @@ where
                 Some((id, child_idx, child_id)) => match r {
                     DescendInsertResult::Split(key, right_child) => {
                         let right_child_argument =
-                            Self::new_argument_for_id(&mut self.node_store, right_child);
-                        let child_argument =
-                            Self::new_argument_for_id(&mut self.node_store, child_id);
+                            Self::new_argument_for_id(&self.node_store, right_child);
+                        let child_argument = Self::new_argument_for_id(&self.node_store, child_id);
 
                         let inner_node = self.node_store.get_mut_inner(id);
                         // it's easier to update argument here, the split logic handles arguments split

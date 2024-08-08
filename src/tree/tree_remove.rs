@@ -39,7 +39,7 @@ impl<S: NodeStore> BPlusTree<S> {
                     match r {
                         DeleteDescendResult::Done(_) => {
                             let child_argument =
-                                Self::new_argument_for_id(&mut tree.node_store, child_id);
+                                Self::new_argument_for_id(&tree.node_store, child_id);
                             let inner_node = tree.node_store.get_mut_inner(parent_id);
                             inner_node.set_argument(child_idx, child_argument);
                         }
