@@ -101,7 +101,7 @@ impl<G: Clone + Ord> GroupCount<G> {
                 GroupCount::One(ref g2, c2),
             ) => {
                 if g2.cmp(&max_group.0) == Ordering::Equal {
-                    max_group.1 = max_group.1 + c2;
+                    max_group.1 += c2;
                 } else {
                     max_group = (g2.clone(), *c2);
                     group_count += 1;
@@ -350,10 +350,10 @@ where
             }
         }
 
-        return match slot {
+        match slot {
             Ok(_) => Ok(Some((group_for_key, count))),
             Err(_) => Err(Some((group_for_key, count))),
-        };
+        }
     }
 }
 
@@ -425,7 +425,7 @@ mod visit {
                 }
             }
 
-            return Some(self.element_count);
+            Some(self.element_count)
         }
     }
 }

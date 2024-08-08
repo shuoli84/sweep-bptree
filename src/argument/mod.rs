@@ -69,11 +69,11 @@ impl<K: Key> Argument<K> for () {
 
     #[inline(always)]
     fn from_leaf(_: &[K]) -> Self {
-        ()
+        
     }
 
     #[inline(always)]
     fn from_inner(_: &[K], _: &[Self]) -> Self {
-        ()
+        
     }
 }

@@ -45,11 +45,11 @@ where
         }
 
         Self {
-            size: self.size.clone(),
+            size: self.size,
             slot_key: new_key,
             slot_value: new_value,
-            prev: self.prev.clone(),
-            next: self.next.clone(),
+            prev: self.prev,
+            next: self.next,
         }
     }
 }
@@ -120,14 +120,8 @@ impl<K: Key, V> LeafNode<K, V> {
 
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
         debug_assert!(self.len() > 0);
-        let start = match self.prev {
-            Some(_) => Some(unsafe { self.key_area(0).assume_init_ref().clone() }),
-            None => None,
-        };
-        let end = match self.next {
-            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() }),
-            None => None,
-        };
+        let start = self.prev.map(|_| unsafe { self.key_area(0).assume_init_ref().clone() });
+        let end = self.next.map(|_| unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() });
         (start, end)
     }
 
@@ -239,7 +233,7 @@ impl<K: Key, V> LeafNode<K, V> {
         self_leaf_id: LeafNodeId,
     ) -> Box<Self> {
         let split_origin_size = Self::split_origin_size() as usize;
-        let split_new_size = N - split_origin_size as usize;
+        let split_new_size = N - split_origin_size;
 
         let mut new_node = Self::new();
         new_node.prev = Some(self_leaf_id);
@@ -248,16 +242,16 @@ impl<K: Key, V> LeafNode<K, V> {
         unsafe {
             slice_utils::move_to_slice(
                 self.key_area_mut(split_origin_size..N),
-                new_node.key_area_mut(..split_new_size as usize),
+                new_node.key_area_mut(..split_new_size),
             );
             slice_utils::move_to_slice(
                 self.value_area_mut(split_origin_size..N),
-                new_node.value_area_mut(..split_new_size as usize),
+                new_node.value_area_mut(..split_new_size),
             );
         };
 
         if insert_idx < split_origin_size {
-            let new_size = split_origin_size as usize + 1;
+            let new_size = split_origin_size + 1;
             unsafe {
                 slice_utils::slice_insert(self.key_area_mut(..new_size), insert_idx, item.0);
                 slice_utils::slice_insert(self.value_area_mut(..new_size), insert_idx, item.1);
@@ -326,7 +320,7 @@ impl<K: Key, V> LeafNode<K, V> {
                 // if the child split, then the new key should inserted idx + 1
                 (idx, {
                     let v = unsafe { self.value_area(idx).assume_init_ref() };
-                    Some(&v)
+                    Some(v)
                 })
             }
 

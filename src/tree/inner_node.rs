@@ -61,9 +61,9 @@ impl<K: Key, A: Argument<K>> Clone for InnerNode<K, A> {
         }
 
         Self {
-            size: self.size.clone(),
+            size: self.size,
             slot_key: new_key,
-            child_id: self.child_id.clone(),
+            child_id: self.child_id,
             arguments: new_arguments,
         }
     }

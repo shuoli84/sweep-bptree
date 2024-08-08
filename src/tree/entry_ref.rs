@@ -79,7 +79,7 @@ impl VisitStack {
             offset,
             child_id,
         } = self.stack[self.len as usize];
-        Some((id, offset as usize, child_id))
+        Some((id, offset, child_id))
     }
 }
 

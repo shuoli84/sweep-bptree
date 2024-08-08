@@ -49,7 +49,7 @@ impl<'k, K: Key + 'k> Cursor<K> {
                 leaf_id_hint: leaf_id,
                 offset_hint: 0,
             },
-            &kv.1,
+            kv.1,
         ))
     }
 
@@ -69,13 +69,13 @@ impl<'k, K: Key + 'k> Cursor<K> {
                 leaf_id_hint: leaf_id,
                 offset_hint: leaf.len() - 1,
             },
-            &kv.1,
+            kv.1,
         ))
     }
 
     /// Get the `Cursor` points to the prev key-value pair. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just under the deleted key.
-    pub fn prev<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<Self> {
+    pub fn prev<S: NodeStore<K = K>>(&self, tree: &BPlusTree<S>) -> Option<Self> {
         self.prev_with_value(tree).map(|x| x.0)
     }
 
@@ -125,13 +125,13 @@ impl<'k, K: Key + 'k> Cursor<K> {
                 leaf_id_hint: leaf_id,
                 offset_hint: offset,
             },
-            &kv.1,
+            kv.1,
         ))
     }
 
     /// Get the `Cursor` points to the next key-value pair. If the key for `self` is deleted, then
     /// this returns the cursor for the key value pair just larger than the deleted key.
-    pub fn next<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> Option<Self> {
+    pub fn next<S: NodeStore<K = K>>(&self, tree: &BPlusTree<S>) -> Option<Self> {
         self.next_with_value(tree).map(|x| x.0)
     }
 
@@ -164,7 +164,7 @@ impl<'k, K: Key + 'k> Cursor<K> {
                     leaf_id_hint: leaf_id,
                     offset_hint: next_offset,
                 },
-                &kv.1,
+                kv.1,
             ))
         } else {
             let leaf_id = leaf.next()?;
@@ -177,13 +177,13 @@ impl<'k, K: Key + 'k> Cursor<K> {
                     leaf_id_hint: leaf_id,
                     offset_hint: 0,
                 },
-                &kv.1,
+                kv.1,
             ))
         }
     }
 
     /// whether current cursor is still valid
-    pub fn exists<'a, 'b, S: NodeStore<K = K>>(&'a self, tree: &'b BPlusTree<S>) -> bool {
+    pub fn exists<S: NodeStore<K = K>>(&self, tree: &BPlusTree<S>) -> bool {
         self.value(tree).is_some()
     }
 
@@ -195,7 +195,7 @@ impl<'k, K: Key + 'k> Cursor<K> {
         let (_, leaf) = self.locate_leaf(tree)?;
 
         match leaf.try_data_at(self.offset_hint) {
-            Some(kv) if kv.0.eq(&self.k) => Some(&kv.1),
+            Some(kv) if kv.0.eq(&self.k) => Some(kv.1),
             _ => {
                 // todo: consider update self?
                 let (_, value) = leaf.locate_slot_with_value(&self.k);
@@ -205,8 +205,8 @@ impl<'k, K: Key + 'k> Cursor<K> {
     }
 
     #[inline]
-    fn locate_leaf<'a, 'b, S: NodeStore<K = K>>(
-        &'a self,
+    fn locate_leaf<'b, S: NodeStore<K = K>>(
+        &self,
         tree: &'b BPlusTree<S>,
     ) -> Option<(LeafNodeId, &'b LeafNode<S::K, S::V>)> {
         let leaf_id = self.leaf_id_hint;

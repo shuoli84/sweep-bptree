@@ -165,7 +165,7 @@ impl<S: NodeStore> Iterator for IntoIter<S> {
             // safety: right after we called this, the pos moves to next.
             let kv = unsafe { leaf.take_data(offset) };
             self.pos = (leaf_id, offset + 1);
-            return Some(kv);
+            Some(kv)
         } else {
             // move to next leaf
             match leaf.next() {
@@ -200,7 +200,7 @@ impl<S: NodeStore> DoubleEndedIterator for IntoIter<S> {
             // safety: right after we called this, the pos moves to next.
             let kv = unsafe { leaf.take_data(offset - 1) };
             self.end = (leaf_id, offset - 1);
-            return Some(kv);
+            Some(kv)
         } else {
             // move to prev leaf
             match leaf.prev() {

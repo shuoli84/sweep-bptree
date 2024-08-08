@@ -490,7 +490,7 @@ where
         self.remove_impl(k).map(|kv| kv.1)
     }
 
-    fn key_to_ref<'a, Q: ?Sized>(&'a self, k: &Q) -> Option<EntryRef<&Self>>
+    fn key_to_ref<Q: ?Sized>(&self, k: &Q) -> Option<EntryRef<&Self>>
     where
         Q: Ord,
         S::K: Borrow<Q>,
