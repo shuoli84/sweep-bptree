@@ -12,7 +12,7 @@ keywords = ["btree", "datastructure", "tree", "augemented"]
 bench = false
 
 [dev-dependencies]
-criterion = { version = "0.4", features = ["html_reports"] }
+criterion = { version = "0.5.1", features = ["html_reports"] }
 rand = "0.8"
 
 [[bench]]
