@@ -80,6 +80,7 @@ fn main() {
     }
     assert_eq!(dbg!(tree.root_argument()).0, 49900);
 
+    // able to get nth even value easily
     for i in 0..tree.root_argument().0 {
         let Some((k, _)) = tree.get_by_argument::<usize>(i) else {
             panic!("should got a value");
@@ -87,7 +88,7 @@ fn main() {
         assert_eq!(k % 2, 0);
     }
 
-    // offset = length - 1
+    // offset = length - 1, get(length) should be None
     assert!(tree
         .get_by_argument::<usize>(tree.root_argument().0)
         .is_none());
