@@ -110,9 +110,9 @@ where
     }
 
     /// Create a new `BPlusTree` from existing parts
-    fn new_from_parts(mut node_store: S, root: NodeId, len: usize) -> Self {
+    fn new_from_parts(node_store: S, root: NodeId, len: usize) -> Self {
         let argument = if len > 0 {
-            Self::new_argument_for_id(&mut node_store, root)
+            Self::new_argument_for_id(&node_store, root)
         } else {
             S::Argument::default()
         };
@@ -244,9 +244,8 @@ where
                 Some((id, child_idx, child_id)) => match r {
                     DescendInsertResult::Split(key, right_child) => {
                         let right_child_argument =
-                            Self::new_argument_for_id(&mut self.node_store, right_child);
-                        let child_argument =
-                            Self::new_argument_for_id(&mut self.node_store, child_id);
+                            Self::new_argument_for_id(&self.node_store, right_child);
+                        let child_argument = Self::new_argument_for_id(&self.node_store, child_id);
 
                         let inner_node = self.node_store.get_mut_inner(id);
                         // it's easier to update argument here, the split logic handles arguments split
@@ -265,8 +264,7 @@ where
                         }
                     }
                     DescendInsertResult::Inserted => {
-                        let child_argument =
-                            Self::new_argument_for_id(&mut self.node_store, child_id);
+                        let child_argument = Self::new_argument_for_id(&self.node_store, child_id);
                         let inner_node = self.node_store.get_mut_inner(id);
                         inner_node.set_argument(child_idx, child_argument);
 
@@ -482,17 +480,17 @@ where
     }
 
     /// delete element identified by K
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> Option<S::V>
+    pub fn remove<Q>(&mut self, k: &Q) -> Option<S::V>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         S::K: Borrow<Q>,
     {
         self.remove_impl(k).map(|kv| kv.1)
     }
 
-    fn key_to_ref<'a, Q: ?Sized>(&'a self, k: &Q) -> Option<EntryRef<&Self>>
+    fn key_to_ref<Q>(&self, k: &Q) -> Option<EntryRef<&Self>>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         S::K: Borrow<Q>,
     {
         let mut inner_stack = VisitStack::new();
@@ -614,11 +612,6 @@ where
         iterator::Iter::new(self)
     }
 
-    /// Consume the tree and create an iterator on (K, &V) pairs
-    pub fn into_iter(self) -> iterator::IntoIter<S> {
-        iterator::IntoIter::new(self)
-    }
-
     /// Create an cursor from first elem
     pub fn cursor_first(&self) -> Option<Cursor<S::K>> {
         Cursor::first(self).map(|c| c.0)
@@ -704,7 +697,9 @@ where
         S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Some(Self::get_mut_by_ref(entry_ref.to_detached().to_ref(self)))
+        Some(Self::get_mut_by_ref(
+            entry_ref.into_detached().into_ref(self),
+        ))
     }
 
     /// Get rank for argument
@@ -739,7 +734,7 @@ where
         S::Argument: SearchArgument<S::K, Query = Q>,
     {
         let entry_ref = self.get_ref_by_argument(query)?;
-        Self::remove_by_ref(entry_ref.to_detached().to_ref(self))
+        Self::remove_by_ref(entry_ref.into_detached().into_ref(self))
     }
 
     /// Get the (&K, &V) pair for referece
@@ -765,7 +760,9 @@ where
 
     #[cfg(test)]
     fn validate(&self) {
-        let Some(mut leaf_id) = self.first_leaf() else { return; };
+        let Some(mut leaf_id) = self.first_leaf() else {
+            return;
+        };
         let mut last_leaf_id: Option<LeafNodeId> = None;
 
         // ensures all prev and next are correct
@@ -792,6 +789,15 @@ where
 impl<S: NodeStore> Drop for BPlusTree<S> {
     fn drop(&mut self) {
         unsafe { drop(std::ptr::read(self).into_iter()) }
+    }
+}
+
+impl<S: NodeStore> IntoIterator for BPlusTree<S> {
+    type Item = (S::K, S::V);
+    type IntoIter = IntoIter<S>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
     }
 }
 
@@ -856,6 +862,8 @@ pub trait NodeStore: Default {
     fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<Self::K, Self::Argument>;
 
     /// Get a mut pointer to inner node.
+    ///
+    /// # Safety
     /// User must ensure there is non shared reference to the node co-exists
     unsafe fn get_mut_inner_ptr(
         &mut self,
@@ -896,9 +904,9 @@ pub trait NodeStore: Default {
     fn cache_leaf(&self, leaf_id: LeafNodeId);
 
     /// try cache for k
-    fn try_cache<Q: ?Sized>(&self, k: &Q) -> Option<LeafNodeId>
+    fn try_cache<Q>(&self, k: &Q) -> Option<LeafNodeId>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         Self::K: Borrow<Q>;
 
     #[cfg(test)]
@@ -961,7 +969,6 @@ mod tests {
 
         for i in keys {
             let k = i;
-            println!("\ndeleting {i}");
 
             let delete_result = tree.remove(&k);
             assert!(delete_result.is_some());

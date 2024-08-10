@@ -45,11 +45,11 @@ where
         }
 
         Self {
-            size: self.size.clone(),
+            size: self.size,
             slot_key: new_key,
             slot_value: new_value,
-            prev: self.prev.clone(),
-            next: self.next.clone(),
+            prev: self.prev,
+            next: self.next,
         }
     }
 }
@@ -69,6 +69,10 @@ impl<K: Key, V> LeafNode<K, V> {
 
     pub fn len(&self) -> usize {
         self.size as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     const fn split_origin_size() -> u16 {
@@ -99,9 +103,9 @@ impl<K: Key, V> LeafNode<K, V> {
         self.size > Self::minimum_size()
     }
 
-    pub fn in_range<Q: ?Sized>(&self, k: &Q) -> bool
+    pub fn in_range<Q>(&self, k: &Q) -> bool
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: std::borrow::Borrow<Q>,
     {
         let is_lt_start = match self.prev {
@@ -119,15 +123,13 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     pub fn key_range(&self) -> (Option<K>, Option<K>) {
-        debug_assert!(self.len() > 0);
-        let start = match self.prev {
-            Some(_) => Some(unsafe { self.key_area(0).assume_init_ref().clone() }),
-            None => None,
-        };
-        let end = match self.next {
-            Some(_) => Some(unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() }),
-            None => None,
-        };
+        debug_assert!(!self.is_empty());
+        let start = self
+            .prev
+            .map(|_| unsafe { self.key_area(0).assume_init_ref().clone() });
+        let end = self
+            .next
+            .map(|_| unsafe { self.key_area(self.len() - 1).assume_init_ref().clone() });
         (start, end)
     }
 
@@ -239,7 +241,7 @@ impl<K: Key, V> LeafNode<K, V> {
         self_leaf_id: LeafNodeId,
     ) -> Box<Self> {
         let split_origin_size = Self::split_origin_size() as usize;
-        let split_new_size = N - split_origin_size as usize;
+        let split_new_size = N - split_origin_size;
 
         let mut new_node = Self::new();
         new_node.prev = Some(self_leaf_id);
@@ -248,16 +250,16 @@ impl<K: Key, V> LeafNode<K, V> {
         unsafe {
             slice_utils::move_to_slice(
                 self.key_area_mut(split_origin_size..N),
-                new_node.key_area_mut(..split_new_size as usize),
+                new_node.key_area_mut(..split_new_size),
             );
             slice_utils::move_to_slice(
                 self.value_area_mut(split_origin_size..N),
-                new_node.value_area_mut(..split_new_size as usize),
+                new_node.value_area_mut(..split_new_size),
             );
         };
 
         if insert_idx < split_origin_size {
-            let new_size = split_origin_size as usize + 1;
+            let new_size = split_origin_size + 1;
             unsafe {
                 slice_utils::slice_insert(self.key_area_mut(..new_size), insert_idx, item.0);
                 slice_utils::slice_insert(self.value_area_mut(..new_size), insert_idx, item.1);
@@ -306,18 +308,18 @@ impl<K: Key, V> LeafNode<K, V> {
     }
 
     #[inline]
-    pub fn locate_slot<Q: ?Sized>(&self, k: &Q) -> Result<usize, usize>
+    pub fn locate_slot<Q>(&self, k: &Q) -> Result<usize, usize>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: std::borrow::Borrow<Q>,
     {
         self.keys().binary_search_by_key(&k, |f| f.borrow())
     }
 
     #[inline(always)]
-    pub fn locate_slot_with_value<Q: ?Sized>(&self, k: &Q) -> (usize, Option<&V>)
+    pub fn locate_slot_with_value<Q>(&self, k: &Q) -> (usize, Option<&V>)
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         match self.locate_slot(k) {
@@ -326,7 +328,7 @@ impl<K: Key, V> LeafNode<K, V> {
                 // if the child split, then the new key should inserted idx + 1
                 (idx, {
                     let v = unsafe { self.value_area(idx).assume_init_ref() };
-                    Some(&v)
+                    Some(v)
                 })
             }
 
@@ -338,9 +340,9 @@ impl<K: Key, V> LeafNode<K, V> {
         }
     }
 
-    pub(crate) fn locate_slot_mut<Q: ?Sized>(&mut self, k: &Q) -> (usize, Option<&mut V>)
+    pub(crate) fn locate_slot_mut<Q>(&mut self, k: &Q) -> (usize, Option<&mut V>)
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         match self.locate_slot(k) {
@@ -485,8 +487,8 @@ impl<K: Key, V> LeafNode<K, V> {
         right.size = 0;
     }
 
-    /// This should never called with same slot
-    pub unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
+    /// This should never have called with same slot
+    pub(crate) unsafe fn take_data(&mut self, slot: usize) -> (K, V) {
         debug_assert!(slot < self.len());
 
         // safety: slot is checked against self.len()

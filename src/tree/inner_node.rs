@@ -61,9 +61,9 @@ impl<K: Key, A: Argument<K>> Clone for InnerNode<K, A> {
         }
 
         Self {
-            size: self.size.clone(),
+            size: self.size,
             slot_key: new_key,
-            child_id: self.child_id.clone(),
+            child_id: self.child_id,
             arguments: new_arguments,
         }
     }
@@ -73,6 +73,11 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
     /// Size of keys in inner node
     pub fn len(&self) -> usize {
         self.size as usize
+    }
+
+    /// whether this node is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Max key capacity
@@ -195,10 +200,10 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
 
     /// returns the child index for k
     #[inline]
-    pub fn locate_child<Q: ?Sized>(&self, k: &Q) -> (usize, NodeId)
+    pub fn locate_child<Q>(&self, k: &Q) -> (usize, NodeId)
     where
         K: std::borrow::Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         match self.keys().binary_search_by_key(&k, |f| f.borrow()) {
             Err(idx) => {
@@ -266,6 +271,7 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
 
         self.size = split_origin_size as u16;
 
+        #[allow(clippy::comparison_chain)]
         if child_idx < split_origin_size {
             // take node_size 4 as example
             // new key 2, new node n

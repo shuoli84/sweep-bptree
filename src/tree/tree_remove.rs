@@ -5,13 +5,13 @@ use crate::argument::Argument;
 use std::borrow::Borrow;
 
 impl<S: NodeStore> BPlusTree<S> {
-    pub(crate) fn remove_impl<Q: ?Sized>(&mut self, k: &Q) -> Option<(S::K, S::V)>
+    pub(crate) fn remove_impl<Q>(&mut self, k: &Q) -> Option<(S::K, S::V)>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         S::K: Borrow<Q>,
     {
         let entry_ref = self.key_to_ref(k)?;
-        let entry_ref_mut: EntryRef<&mut Self> = entry_ref.to_detached().to_ref(self);
+        let entry_ref_mut: EntryRef<&mut Self> = entry_ref.into_detached().into_ref(self);
         Self::remove_by_ref(entry_ref_mut)
     }
 
@@ -39,7 +39,7 @@ impl<S: NodeStore> BPlusTree<S> {
                     match r {
                         DeleteDescendResult::Done(_) => {
                             let child_argument =
-                                Self::new_argument_for_id(&mut tree.node_store, child_id);
+                                Self::new_argument_for_id(&tree.node_store, child_id);
                             let inner_node = tree.node_store.get_mut_inner(parent_id);
                             inner_node.set_argument(child_idx, child_argument);
                         }
@@ -67,7 +67,7 @@ impl<S: NodeStore> BPlusTree<S> {
                                 .node_store
                                 .get_mut_inner(unsafe { tree.root.inner_id_unchecked() });
 
-                            if root.len() == 0 {
+                            if root.is_empty() {
                                 tree.root = root.child_id(0);
                             }
 
@@ -99,20 +99,18 @@ impl<S: NodeStore> BPlusTree<S> {
         child_idx: usize,
         deleted_item: (S::K, S::V),
     ) -> DeleteDescendResult<S::K, S::V> {
-        if child_idx > 0 {
-            if Self::try_rotate_right_for_inner_node(&mut self.node_store, node, child_idx - 1)
+        if child_idx > 0
+            && Self::try_rotate_right_for_inner_node(&mut self.node_store, node, child_idx - 1)
                 .is_some()
-            {
-                self.st.rotate_right_inner += 1;
-                return DeleteDescendResult::Done(deleted_item);
-            }
+        {
+            self.st.rotate_right_inner += 1;
+            return DeleteDescendResult::Done(deleted_item);
         }
-        if child_idx < node.len() {
-            if Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some()
-            {
-                self.st.rotate_left_inner += 1;
-                return DeleteDescendResult::Done(deleted_item);
-            }
+        if child_idx < node.len()
+            && Self::try_rotate_left_for_inner_node(&mut self.node_store, node, child_idx).is_some()
+        {
+            self.st.rotate_left_inner += 1;
+            return DeleteDescendResult::Done(deleted_item);
         }
 
         let merge_slot = if child_idx > 0 {
@@ -211,25 +209,24 @@ impl<S: NodeStore> BPlusTree<S> {
             FixAction::MergeLeft => {
                 self.st.merge_with_left_leaf += 1;
                 // merge with prev node
-                let result = Self::merge_leaf_node_left(
+
+                Self::merge_leaf_node_left(
                     &mut self.node_store,
                     node,
                     child_idx - 1,
                     key_idx_in_child,
-                );
-                result
+                )
             }
             FixAction::MergeRight => {
                 self.st.merge_with_right_leaf += 1;
                 // merge with next node
-                let result = Self::merge_leaf_node_with_right(
+
+                Self::merge_leaf_node_with_right(
                     &mut self.node_store,
                     node,
                     child_idx,
                     key_idx_in_child,
-                );
-
-                result
+                )
             }
         }
     }

@@ -226,9 +226,9 @@ impl<K: Key, V, A: Argument<K>> NodeStore for NodeStoreVec<K, V, A> {
             .store(leaf_id.as_usize(), std::sync::atomic::Ordering::Relaxed);
     }
 
-    fn try_cache<Q: ?Sized>(&self, k: &Q) -> Option<LeafNodeId>
+    fn try_cache<Q>(&self, k: &Q) -> Option<LeafNodeId>
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         Self::K: std::borrow::Borrow<Q>,
     {
         let leaf_id = self.cached_leaf.load(std::sync::atomic::Ordering::Relaxed);

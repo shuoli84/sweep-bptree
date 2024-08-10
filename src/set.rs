@@ -97,9 +97,9 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(!set.remove(&2));
     /// ```
     #[inline]
-    pub fn remove<Q: ?Sized>(&mut self, k: &Q) -> bool
+    pub fn remove<Q>(&mut self, k: &Q) -> bool
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         self.tree.remove(k).is_some()
@@ -118,9 +118,9 @@ impl<K: Key> BPlusTreeSet<K> {
     /// assert!(!set.contains(&1));
     /// ```
     #[inline]
-    pub fn contains<Q: ?Sized>(&self, k: &Q) -> bool
+    pub fn contains<Q>(&self, k: &Q) -> bool
     where
-        Q: Ord,
+        Q: ?Sized + Ord,
         K: Borrow<Q>,
     {
         self.tree.get(k).is_some()
@@ -206,28 +206,6 @@ impl<K: Key> BPlusTreeSet<K> {
         }
     }
 
-    /// Returns a iterator over the keys in the set
-    ///
-    /// # Examples
-    /// ```rust
-    /// use sweep_bptree::BPlusTreeSet;
-    ///
-    /// let mut set = BPlusTreeSet::<String>::new();
-    ///
-    /// set.insert(1.to_string());
-    /// set.insert(2.to_string());
-    ///
-    /// let keys = set.into_iter().collect::<Vec<_>>();
-    /// assert_eq!(keys.len(), 2);
-    ///
-    /// ```
-    #[inline]
-    pub fn into_iter(self) -> iter::IntoIter<K> {
-        iter::IntoIter {
-            inner: self.tree.into_iter(),
-        }
-    }
-
     /// Visits the elements representing the union,
     /// i.e., all the elements in `self` or `other`, without duplicates,
     /// in ascending order.
@@ -274,7 +252,34 @@ impl<K: Key> FromIterator<K> for BPlusTreeSet<K> {
     }
 }
 
-mod iter {
+impl<K: Key> IntoIterator for BPlusTreeSet<K> {
+    type Item = K;
+    type IntoIter = iter::IntoIter<K>;
+
+    /// Returns an iterator over the keys in the set
+    ///
+    /// # Examples
+    /// ```rust
+    /// use sweep_bptree::BPlusTreeSet;
+    ///
+    /// let mut set = BPlusTreeSet::<String>::new();
+    ///
+    /// set.insert(1.to_string());
+    /// set.insert(2.to_string());
+    ///
+    /// let keys = set.into_iter().collect::<Vec<_>>();
+    /// assert_eq!(keys.len(), 2);
+    ///
+    /// ```
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        iter::IntoIter {
+            inner: self.tree.into_iter(),
+        }
+    }
+}
+
+pub mod iter {
     use std::{cmp::max, iter::FusedIterator};
 
     use crate::merge_iter::MergeIterInner;
