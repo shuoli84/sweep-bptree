@@ -21,8 +21,10 @@ impl Argument<i64> for EvenCount {
     }
 }
 
+/// This implementation enables get key by 'nth' even number. This effectively makes
+/// `EvenCount` a secondary index
 impl SearchArgument<i64> for EvenCount {
-    /// Query type is usize, the number of even value
+    /// offset of even number
     type Query = usize;
 
     fn locate_in_leaf(mut offset: usize, keys: &[i64]) -> Option<usize> {
@@ -80,8 +82,13 @@ fn main() {
 
     for i in 0..tree.root_argument().0 {
         let Some((k, _)) = tree.get_by_argument::<usize>(i) else {
-            break;
+            panic!("should got a value");
         };
         assert_eq!(k % 2, 0);
     }
+
+    // offset = length - 1
+    assert!(tree
+        .get_by_argument::<usize>(tree.root_argument().0)
+        .is_none());
 }
