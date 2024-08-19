@@ -4,9 +4,9 @@ use crate::Key;
 
 use super::{Augmentation, RankAugmentation, SearchAugmentation};
 
-/// Argument to count the number of groups in a set of keys
+/// Augmentation to count the number of groups in a set of keys
 /// Note, the group must be ordered
-/// This Argument basically provides two capabilities:
+/// This Augmentation basically provides two capabilities:
 /// 1. Get the group count
 /// 2. Query inside group by offset
 #[derive(Clone, Debug)]

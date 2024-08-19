@@ -855,7 +855,7 @@ pub trait NodeStore: Default {
     /// Value type for the tree
     type V;
 
-    /// The Argument type
+    /// The Augmentation type
     type Augmentation: Augmentation<Self::K>;
 
     /// Get the max number of keys inner node can hold

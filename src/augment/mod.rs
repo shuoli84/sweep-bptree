@@ -3,7 +3,7 @@ use crate::Key;
 pub mod count;
 pub mod group;
 
-/// Argument trait, it is used to store augmentation, like 'size'
+/// Augmentation trait, it is used to store augmentation, like 'size'
 /// NOTE: Since the lib has no control on how value changes, so augment only calculated from keys
 /// e.g: Map<i64, Arc<Mutex<i64>>
 pub trait Augmentation<K: Key>: Clone + Default {
@@ -11,7 +11,7 @@ pub trait Augmentation<K: Key>: Clone + Default {
         false
     }
 
-    /// create a new Argumentation from inner node and its augment
+    /// create a new Augmentation from inner node and its augment
     /// e.g: take size as example.
     /// the root node's augment is created from its children's augment and keys
     /// the inner node with height 1's is created from leaf's keys
@@ -20,7 +20,7 @@ pub trait Augmentation<K: Key>: Clone + Default {
     ///         leaf[0] 5       leaf[1] 4      leaf[2] 3   leaf[2] 2
     fn from_inner(keys: &[K], augmentations: &[Self]) -> Self;
 
-    /// create a new Argumentation from leaf node's key
+    /// create a new Augmentation from leaf node's key
     fn from_leaf(keys: &[K]) -> Self;
 }
 

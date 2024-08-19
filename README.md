@@ -39,13 +39,13 @@ assert!(map.get(&2).is_none());
 
 ### Order statistic tree
 
-Or enhaunced with `Argument`
+Or enhanced with `Augmentation`
 
 ```rust
 use sweep_bptree::BPlusTreeMap;
 use sweep_bptree::augment::count::Count;
 
-// use Count as Argument to create a order statistic tree
+// use Count to create an order statistic tree
 let mut map = BPlusTreeMap::<i32, i32, Count>::new();
 map.insert(1, 2);
 map.insert(2, 3);
@@ -57,14 +57,14 @@ assert_eq!(map.get_by_augmentation(1), Some((&2, &3)));
 
 // get the offset for key
 
-// 0 does not exists
+// 0 does not exist
 assert_eq!(map.rank_by_augmentation(&0), Err(0));
 
 assert_eq!(map.rank_by_augmentation(&1), Ok(0));
 assert_eq!(map.rank_by_augmentation(&2), Ok(1));
 assert_eq!(map.rank_by_augmentation(&3), Ok(2));
 
-// 4 does not exists
+// 4 does not exist
 assert_eq!(map.rank_by_augmentation(&4), Err(3));
 ```
 

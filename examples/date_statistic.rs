@@ -1,4 +1,4 @@
-//! This examples shows how to use Argument to make date based statistics easy
+//! This examples shows how to use Augmentation to make date based statistics easy
 use std::cmp::Ordering;
 
 use sweep_bptree::{
@@ -40,13 +40,13 @@ impl CountForYear {
     }
 }
 
-impl<V> DescendVisit<Date, V, DateStatisticArgument> for CountForYear {
+impl<V> DescendVisit<Date, V, DateStatistic> for CountForYear {
     type Result = usize;
 
     fn visit_inner(
         &mut self,
         _keys: &[Date],
-        augmentations: &[DateStatisticArgument],
+        augmentations: &[DateStatistic],
     ) -> DescendVisitResult<Self::Result> {
         // Need to handle following cases:
         // 1. if the year is at min boundary, then we can return it
@@ -119,15 +119,15 @@ struct DateStatisticEntry {
     counter: Counter,
 }
 
-/// This Argument keeps track of item count for child node.
+/// This Augmentation keeps track of item count for child node.
 #[derive(Clone, Debug, Default)]
-struct DateStatisticArgument {
+struct DateStatistic {
     min: DateStatisticEntry,
     max: DateStatisticEntry,
 }
 
-/// How the Argument is aggregated from children
-impl Augmentation<Date> for DateStatisticArgument {
+/// How the `DateStatistic` aggregated from children
+impl Augmentation<Date> for DateStatistic {
     /// aggregate for inner
     fn from_inner(_keys: &[Date], augmentations: &[Self]) -> Self {
         let mut augmentation_iter = augmentations.iter();
@@ -246,7 +246,7 @@ impl Augmentation<Date> for DateStatisticArgument {
 }
 
 fn main() {
-    let mut tree = BPlusTreeMap::<Date, (), DateStatisticArgument>::new();
+    let mut tree = BPlusTreeMap::<Date, (), DateStatistic>::new();
 
     for year in 2011..2021 {
         for month in 1..13 {

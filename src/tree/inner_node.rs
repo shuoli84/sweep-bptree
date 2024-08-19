@@ -18,7 +18,7 @@ pub struct InnerNode<K: Key, A: Augmentation<K>> {
 
     slot_key: [MaybeUninit<K>; N],
     child_id: [MaybeUninit<NodeId>; C],
-    /// The Argument for each Child
+    /// The Augmentation for each Child
     augmentations: [MaybeUninit<A>; C],
 }
 
