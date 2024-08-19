@@ -13,16 +13,16 @@ const C: usize = super::consts::INNER_C;
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
 #[derive(Debug)]
-pub struct InnerNode<K: Key, A: Argument<K>> {
+pub struct InnerNode<K: Key, A: Augmentation<K>> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
     child_id: [MaybeUninit<NodeId>; C],
     /// The Argument for each Child
-    arguments: [MaybeUninit<A>; C],
+    augmentations: [MaybeUninit<A>; C],
 }
 
-impl<K: Key, A: Argument<K>> Drop for InnerNode<K, A> {
+impl<K: Key, A: Augmentation<K>> Drop for InnerNode<K, A> {
     fn drop(&mut self) {
         // Satefy: The keys in range ..self.len() is initialized
         unsafe {
@@ -30,14 +30,14 @@ impl<K: Key, A: Argument<K>> Drop for InnerNode<K, A> {
                 k.assume_init_drop();
             }
 
-            for m in self.arguments_area_mut(..self.len() + 1) {
+            for m in self.augmentation_area_mut(..self.len() + 1) {
                 m.assume_init_drop();
             }
         }
     }
 }
 
-impl<K: Key, A: Argument<K>> Clone for InnerNode<K, A> {
+impl<K: Key, A: Augmentation<K>> Clone for InnerNode<K, A> {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
@@ -50,13 +50,13 @@ impl<K: Key, A: Argument<K>> Clone for InnerNode<K, A> {
         }
 
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
-        let mut new_arguments =
+        let mut new_augmentation =
             unsafe { MaybeUninit::<[MaybeUninit<A>; C]>::uninit().assume_init() };
 
         for i in 0..self.len() + 1 {
             unsafe {
-                *new_arguments.get_unchecked_mut(i) =
-                    MaybeUninit::new(self.argument_area(i).assume_init_ref().clone());
+                *new_augmentation.get_unchecked_mut(i) =
+                    MaybeUninit::new(self.augmentation_area(i).assume_init_ref().clone());
             };
         }
 
@@ -64,12 +64,12 @@ impl<K: Key, A: Argument<K>> Clone for InnerNode<K, A> {
             size: self.size,
             slot_key: new_key,
             child_id: self.child_id,
-            arguments: new_arguments,
+            augmentations: new_augmentation,
         }
     }
 }
 
-impl<K: Key, A: Argument<K>> InnerNode<K, A> {
+impl<K: Key, A: Augmentation<K>> InnerNode<K, A> {
     /// Size of keys in inner node
     pub fn len(&self) -> usize {
         self.size as usize
@@ -123,22 +123,22 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
     pub(crate) fn new<I: Into<NodeId> + Copy + Clone, const N1: usize, const C1: usize>(
         slot_keys: [K; N1],
         child_id: [I; C1],
-        arguments: [A; C1],
+        augmentations: [A; C1],
     ) -> Box<Self> {
-        Self::new_from_iter(slot_keys, child_id.map(|c| c.into()), arguments)
+        Self::new_from_iter(slot_keys, child_id.map(|c| c.into()), augmentations)
     }
 
     /// Create a new inner node from keys and childs iterator
     pub fn new_from_iter(
         keys: impl IntoIterator<Item = K>,
         childs: impl IntoIterator<Item = NodeId>,
-        arguments: impl IntoIterator<Item = A>,
+        augmentations: impl IntoIterator<Item = A>,
     ) -> Box<Self> {
         let mut node = Self::empty();
 
         let keys = keys.into_iter();
         let childs = childs.into_iter();
-        let arguments = arguments.into_iter();
+        let augmentations = augmentations.into_iter();
 
         let mut key_size = 0;
         for (idx, k) in keys.enumerate() {
@@ -152,8 +152,8 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
             child_size += 1;
         }
 
-        for (idx, m) in arguments.enumerate() {
-            node.arguments[idx] = MaybeUninit::new(m);
+        for (idx, m) in augmentations.enumerate() {
+            node.augmentations[idx] = MaybeUninit::new(m);
         }
 
         assert!(key_size + 1 == child_size);
@@ -176,11 +176,12 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         }
     }
 
-    pub(crate) fn arguments(&self) -> &[A] {
+    pub(crate) fn augmentations(&self) -> &[A] {
         unsafe {
             {
-                let slice: &[MaybeUninit<A>] =
-                    self.arguments.get_unchecked(..usize::from(self.size + 1));
+                let slice: &[MaybeUninit<A>] = self
+                    .augmentations
+                    .get_unchecked(..usize::from(self.size + 1));
                 // SAFETY: casting `slice` to a `*const [T]` is safe since the caller guarantees that
                 // `slice` is initialized, and `MaybeUninit` is guaranteed to have the same layout as `T`.
                 // The pointer obtained is valid since it refers to memory owned by `slice` which is a
@@ -190,11 +191,12 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         }
     }
 
-    /// Update the argument at index. The previous argument will be dropped.
-    pub(crate) fn set_argument(&mut self, idx: usize, a: A) {
+    /// Update the augment at index. The previous augment will be dropped.
+    pub(crate) fn set_augmentation(&mut self, idx: usize, a: A) {
         // Safety: the caller must ensure that the index is valid
         unsafe {
-            std::mem::replace(self.arguments_area_mut(idx), MaybeUninit::new(a)).assume_init_drop()
+            std::mem::replace(self.augmentation_area_mut(idx), MaybeUninit::new(a))
+                .assume_init_drop()
         }
     }
 
@@ -225,7 +227,7 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         slot: usize,
         key: K,
         right_child: NodeId,
-        right_child_argument: A,
+        right_child_augmentation: A,
     ) {
         debug_assert!(slot <= self.len());
         debug_assert!(!self.is_full());
@@ -239,9 +241,9 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
             slice_utils::slice_insert(self.key_area_mut(..new_size), slot, key);
             slice_utils::slice_insert(self.child_area_mut(..new_child_size), slot + 1, right_child);
             slice_utils::slice_insert(
-                self.arguments_area_mut(..new_child_size),
+                self.augmentation_area_mut(..new_child_size),
                 slot + 1,
-                right_child_argument,
+                right_child_augmentation,
             );
         }
 
@@ -257,7 +259,7 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         child_idx: usize,
         k: K,
         new_child_id: NodeId,
-        new_child_argument: A,
+        new_child_augmentation: A,
     ) -> (K, Box<Self>) {
         debug_assert!(self.is_full());
 
@@ -293,8 +295,8 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
                     new_node.child_area_mut(..split_new_size + 1),
                 );
                 slice_utils::move_to_slice(
-                    self.arguments_area_mut(split_origin_size..N + 1),
-                    new_node.arguments_area_mut(..split_new_size + 1),
+                    self.augmentation_area_mut(split_origin_size..N + 1),
+                    new_node.augmentation_area_mut(..split_new_size + 1),
                 );
 
                 slice_utils::slice_insert(
@@ -308,9 +310,9 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
                     new_child_id,
                 );
                 slice_utils::slice_insert(
-                    self.arguments_area_mut(..self.size as usize + 2),
+                    self.augmentation_area_mut(..self.size as usize + 2),
                     child_idx + 1,
-                    new_child_argument,
+                    new_child_augmentation,
                 );
             };
         } else if child_idx > split_origin_size {
@@ -339,15 +341,16 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
                     new_node.child_area_mut(0..new_child_idx),
                 );
                 slice_utils::move_to_slice(
-                    self.arguments_area_mut(
+                    self.augmentation_area_mut(
                         split_origin_size + 1..split_origin_size + 1 + new_child_idx,
                     ),
-                    new_node.arguments_area_mut(0..new_child_idx),
+                    new_node.augmentation_area_mut(0..new_child_idx),
                 );
 
                 *new_node.key_area_mut(new_slot_idx) = MaybeUninit::new(k);
                 *new_node.child_area_mut(new_child_idx) = MaybeUninit::new(new_child_id);
-                *new_node.arguments_area_mut(new_child_idx) = MaybeUninit::new(new_child_argument);
+                *new_node.augmentation_area_mut(new_child_idx) =
+                    MaybeUninit::new(new_child_augmentation);
 
                 slice_utils::move_to_slice(
                     self.key_area_mut(prompt_key_index + new_slot_idx + 1..N),
@@ -358,8 +361,8 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
                     new_node.child_area_mut(new_child_idx + 1..split_new_size + 1),
                 );
                 slice_utils::move_to_slice(
-                    self.arguments_area_mut(split_origin_size + 1 + new_child_idx..N + 1),
-                    new_node.arguments_area_mut(new_child_idx + 1..split_new_size + 1),
+                    self.augmentation_area_mut(split_origin_size + 1 + new_child_idx..N + 1),
+                    new_node.augmentation_area_mut(new_child_idx + 1..split_new_size + 1),
                 );
             };
         } else {
@@ -381,12 +384,12 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
                     new_node.child_area_mut(1..split_new_size + 1),
                 );
                 slice_utils::move_to_slice(
-                    self.arguments_area_mut(split_origin_size + 1..N + 1),
-                    new_node.arguments_area_mut(1..split_new_size + 1),
+                    self.augmentation_area_mut(split_origin_size + 1..N + 1),
+                    new_node.augmentation_area_mut(1..split_new_size + 1),
                 );
 
                 *new_node.child_area_mut(0) = MaybeUninit::new(new_child_id);
-                *new_node.arguments_area_mut(0) = MaybeUninit::new(new_child_argument);
+                *new_node.augmentation_area_mut(0) = MaybeUninit::new(new_child_augmentation);
             };
         }
 
@@ -399,7 +402,10 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         let k = unsafe {
             let k = slice_utils::slice_remove(self.key_area_mut(..self.size as usize), slot);
             slice_utils::slice_remove(self.child_area_mut(..self.size as usize + 1), slot + 1);
-            slice_utils::slice_remove(self.arguments_area_mut(..self.size as usize + 1), slot + 1);
+            slice_utils::slice_remove(
+                self.augmentation_area_mut(..self.size as usize + 1),
+                slot + 1,
+            );
             k
         };
         self.size -= 1;
@@ -431,8 +437,8 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
                 self.child_area_mut(self_size..self_size + right_size + 1),
             );
             slice_utils::move_to_slice(
-                right.arguments_area_mut(..right_size + 1),
-                self.arguments_area_mut(self_size..self_size + right_size + 1),
+                right.augmentation_area_mut(..right_size + 1),
+                self.augmentation_area_mut(self_size..self_size + right_size + 1),
             );
             self.size += right.size;
             right.size = 0;
@@ -449,8 +455,8 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
             unsafe { self.child_area_mut(self.size as usize) },
             MaybeUninit::uninit(),
         );
-        let argument = std::mem::replace(
-            unsafe { self.arguments_area_mut(self.size as usize) },
+        let augmentation = std::mem::replace(
+            unsafe { self.augmentation_area_mut(self.size as usize) },
             MaybeUninit::uninit(),
         );
         self.size -= 1;
@@ -458,7 +464,7 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
             (
                 k.assume_init_read(),
                 child.assume_init_read(),
-                argument.assume_init_read(),
+                augmentation.assume_init_read(),
             )
         }
     }
@@ -469,7 +475,7 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
             let left_c =
                 slice_utils::slice_remove(self.child_area_mut(..self.size as usize + 1), 0);
             let left_m =
-                slice_utils::slice_remove(self.arguments_area_mut(..self.size as usize + 1), 0);
+                slice_utils::slice_remove(self.augmentation_area_mut(..self.size as usize + 1), 0);
             (k, left_c, left_m)
         };
         self.size -= 1;
@@ -477,23 +483,23 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         (k, left_c, left_m)
     }
 
-    pub fn push(&mut self, k: K, child: NodeId, argument: A) {
+    pub fn push(&mut self, k: K, child: NodeId, augmentation: A) {
         unsafe {
             *self.key_area_mut(self.size as usize) = MaybeUninit::new(k);
             *self.child_area_mut(self.size as usize + 1) = MaybeUninit::new(child);
-            *self.arguments_area_mut(self.size as usize + 1) = MaybeUninit::new(argument);
+            *self.augmentation_area_mut(self.size as usize + 1) = MaybeUninit::new(augmentation);
         };
         self.size += 1;
     }
 
-    pub(crate) fn push_front(&mut self, k: K, child: NodeId, argument: A) {
+    pub(crate) fn push_front(&mut self, k: K, child: NodeId, augmentation: A) {
         unsafe {
             slice_utils::slice_insert(self.key_area_mut(0..self.size as usize + 1), 0, k);
             slice_utils::slice_insert(self.child_area_mut(0..self.size as usize + 2), 0, child);
             slice_utils::slice_insert(
-                self.arguments_area_mut(0..self.size as usize + 2),
+                self.augmentation_area_mut(0..self.size as usize + 2),
                 0,
-                argument,
+                augmentation,
             );
         }
         self.size += 1;
@@ -518,11 +524,11 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
     }
 
     #[cfg(test)]
-    fn iter_argument(&self) -> impl Iterator<Item = A> + '_ {
+    fn iter_augmentations(&self) -> impl Iterator<Item = A> + '_ {
         let slice = if self.size > 0 {
-            &self.arguments[0..self.len() + 1]
+            &self.augmentations[0..self.len() + 1]
         } else {
-            &self.arguments[..0]
+            &self.augmentations[..0]
         };
 
         slice.iter().map(|s| unsafe { s.assume_init_read() })
@@ -541,8 +547,8 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
     }
 
     #[cfg(test)]
-    pub(crate) fn argument_vec(&self) -> Vec<A> {
-        self.iter_argument().collect()
+    pub(crate) fn augmentation_vec(&self) -> Vec<A> {
+        self.iter_augmentations().collect()
     }
 
     pub fn key(&self, idx: usize) -> &K {
@@ -579,24 +585,24 @@ impl<K: Key, A: Argument<K>> InnerNode<K, A> {
         unsafe { self.slot_key.as_slice().get_unchecked(index) }
     }
 
-    unsafe fn argument_area<I, Output: ?Sized>(&self, index: I) -> &Output
+    unsafe fn augmentation_area<I, Output: ?Sized>(&self, index: I) -> &Output
     where
         I: SliceIndex<[MaybeUninit<A>], Output = Output>,
     {
         // SAFETY: the caller will not be able to call further methods on self
         // until the key slice reference is dropped, as we have unique access
         // for the lifetime of the borrow.
-        unsafe { self.arguments.as_slice().get_unchecked(index) }
+        unsafe { self.augmentations.as_slice().get_unchecked(index) }
     }
 
-    unsafe fn arguments_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
+    unsafe fn augmentation_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output
     where
         I: SliceIndex<[MaybeUninit<A>], Output = Output>,
     {
         // SAFETY: the caller will not be able to call further methods on self
         // until the key slice reference is dropped, as we have unique access
         // for the lifetime of the borrow.
-        unsafe { self.arguments.as_mut_slice().get_unchecked_mut(index) }
+        unsafe { self.augmentations.as_mut_slice().get_unchecked_mut(index) }
     }
 
     unsafe fn child_area_mut<I, Output: ?Sized>(&mut self, index: I) -> &mut Output

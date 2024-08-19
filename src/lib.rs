@@ -6,7 +6,7 @@ pub use set::*;
 mod map;
 pub use map::*;
 
-pub mod argument;
+pub mod augment;
 
 // core tree impl
 pub mod tree;

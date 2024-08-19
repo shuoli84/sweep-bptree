@@ -10,5 +10,5 @@ pub(crate) const LEAF_N: usize = INNER_N;
 pub(crate) const MIN_N: usize = INNER_N / 4;
 
 /// Visit Stack capacity, it is the maximum depth of the tree.
-/// The formular is `ceil(log(u64::MAX, K))`, the K is the minimum branching factor of the tree.
+/// The formula is `ceil(log(u64::MAX, K))`, the K is the minimum branching factor of the tree.
 pub(crate) const MAX_DEPTH: usize = usize::MAX.ilog(MIN_N) as usize;

@@ -2,7 +2,7 @@ use std::{borrow::Cow, cmp::Ordering};
 
 use crate::Key;
 
-use super::{Argument, RankArgument, SearchArgument};
+use super::{Augmentation, RankAugmentation, SearchAugmentation};
 
 /// Argument to count the number of groups in a set of keys
 /// Note, the group must be ordered
@@ -148,7 +148,7 @@ pub trait FromRef<T> {
     fn from_ref(input: &T) -> Self;
 }
 
-impl<K, G> Argument<K> for GroupCount<G>
+impl<K, G> Augmentation<K> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
@@ -192,18 +192,18 @@ where
         }
     }
 
-    fn from_inner(_keys: &[K], arguments: &[Self]) -> Self {
-        if arguments.is_empty() {
+    fn from_inner(_keys: &[K], group_counts: &[Self]) -> Self {
+        if group_counts.is_empty() {
             return Self::Zero;
         }
 
         let mut accumulated = Self::Zero;
-        arguments.iter().for_each(|a| accumulated.merge_with(a));
+        group_counts.iter().for_each(|a| accumulated.merge_with(a));
         accumulated
     }
 }
 
-impl<K, G> SearchArgument<K> for GroupCount<G>
+impl<K, G> SearchAugmentation<K> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
@@ -235,9 +235,9 @@ where
     fn locate_in_inner(
         (group, mut offset): Self::Query,
         _keys: &[K],
-        arguments: &[Self],
+        group_counts: &[Self],
     ) -> Option<(usize, Self::Query)> {
-        for (idx, a) in arguments.iter().enumerate() {
+        for (idx, a) in group_counts.iter().enumerate() {
             match a {
                 GroupCount::Zero => {}
                 GroupCount::One(g, c) => match g.cmp(&group) {
@@ -272,7 +272,7 @@ where
     }
 }
 
-impl<K, G> RankArgument<K> for GroupCount<G>
+impl<K, G> RankAugmentation<K> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
@@ -284,17 +284,17 @@ where
         None
     }
 
-    fn fold_inner(_k: &K, rank: Option<(G, usize)>, arguments: &[Self]) -> Option<(G, usize)> {
+    fn fold_inner(_k: &K, rank: Option<(G, usize)>, group_counts: &[Self]) -> Option<(G, usize)> {
         // How:
-        // 1. locate the max group and count for arguments
+        // 1. locate the max group and count for augmentations
         // 2. then if rank's g is same as max_group's g, merge count
         //    otherwise, just use the max_group
-        let mut arguments_rev_iter = arguments.iter().rev();
-        let last_argument = arguments_rev_iter.next()?;
+        let mut rev_iter = group_counts.iter().rev();
+        let last_augmentation = rev_iter.next()?;
 
-        let (max_group, mut max_group_size) = last_argument.max_group()?;
+        let (max_group, mut max_group_size) = last_augmentation.max_group()?;
 
-        for a in arguments_rev_iter {
+        for a in rev_iter {
             match a.max_group() {
                 Some((group, count)) if group.cmp(max_group) == Ordering::Equal => {
                     max_group_size += count;
@@ -389,11 +389,11 @@ mod visit {
         fn visit_inner(
             &mut self,
             _keys: &[K],
-            arguments: &[GroupCount<G>],
+            group_counts: &[GroupCount<G>],
         ) -> crate::tree::visit::DescendVisitResult<usize> {
             let mut child_idx = 0;
             let mut prev_group_count = 0;
-            for (idx, a) in arguments.iter().enumerate() {
+            for (idx, a) in group_counts.iter().enumerate() {
                 child_idx = idx;
                 match a.max_group() {
                     Some((max_group, max_group_count)) => match max_group.cmp(&self.group) {
@@ -454,16 +454,16 @@ mod tests {
         let mut tree = BPlusTreeMap::<_, _, GroupCount<Tuple2<_>>>::new();
 
         // group count is 0 for empty tree
-        assert_eq!(tree.root_argument().group_count(), 0);
+        assert_eq!(tree.root_augmentation().group_count(), 0);
 
         tree.insert((1, 1), 100);
-        assert_eq!(tree.root_argument().group_count(), 1);
+        assert_eq!(tree.root_augmentation().group_count(), 1);
         tree.remove(&(1, 1));
-        assert_eq!(tree.root_argument().group_count(), 0);
+        assert_eq!(tree.root_augmentation().group_count(), 0);
 
         tree.insert((1, 1), 100);
         tree.insert((1, 2), 101);
-        assert_eq!(tree.root_argument().group_count(), 1);
+        assert_eq!(tree.root_augmentation().group_count(), 1);
 
         // get group size for Tuple2(1)
         assert_eq!(
@@ -472,35 +472,50 @@ mod tests {
         );
 
         // get (k, v) by (group, offset)
-        assert_eq!(tree.get_by_argument((Tuple2(1), 0)).unwrap().1, &100);
+        assert_eq!(tree.get_by_augmentation((Tuple2(1), 0)).unwrap().1, &100);
 
         // or get the (group, offset) tuple by key
-        assert_eq!(tree.rank_by_argument(&(1, 0)), Err(Some((Tuple2(1), 0))));
+        assert_eq!(
+            tree.rank_by_augmentation(&(1, 0)),
+            Err(Some((Tuple2(1), 0)))
+        );
 
         tree.insert((1, 3), 100);
         tree.insert((2, 4), 100);
-        assert_eq!(tree.root_argument().group_count(), 2);
+        assert_eq!(tree.root_augmentation().group_count(), 2);
         tree.insert((3, 5), 100);
         tree.insert((4, 6), 100);
-        assert_eq!(tree.root_argument().group_count(), 4);
+        assert_eq!(tree.root_augmentation().group_count(), 4);
         tree.remove(&(4, 6));
-        assert_eq!(tree.root_argument().group_count(), 3);
+        assert_eq!(tree.root_augmentation().group_count(), 3);
 
         // find in group First(1)
         // offset 0
-        assert_eq!(tree.get_by_argument((Tuple2(1), 0)).unwrap().1, &100);
+        assert_eq!(tree.get_by_augmentation((Tuple2(1), 0)).unwrap().1, &100);
         // offset 1
-        assert_eq!(tree.get_by_argument((Tuple2(1), 1)).unwrap().1, &101);
+        assert_eq!(tree.get_by_augmentation((Tuple2(1), 1)).unwrap().1, &101);
         // offset 3 (2 is also exists)
-        assert!(tree.get_by_argument((Tuple2(1), 3)).is_none());
+        assert!(tree.get_by_augmentation((Tuple2(1), 3)).is_none());
 
-        assert_eq!(tree.rank_by_argument(&(1, 0)), Err(Some((Tuple2(1), 0))));
-        assert_eq!(tree.rank_by_argument(&(1, 1)), Ok(Some((Tuple2(1), 0))));
-        assert_eq!(tree.rank_by_argument(&(1, 2)), Ok(Some((Tuple2(1), 1))));
-        assert_eq!(tree.rank_by_argument(&(1, 3)), Ok(Some((Tuple2(1), 2))));
-        assert_eq!(tree.rank_by_argument(&(1, 4)), Err(Some((Tuple2(1), 3))));
-        assert_eq!(tree.rank_by_argument(&(2, 3)), Err(Some((Tuple2(2), 0))));
-        assert_eq!(tree.rank_by_argument(&(5, 0)), Err(Some((Tuple2(5), 0))));
+        assert_eq!(
+            tree.rank_by_augmentation(&(1, 0)),
+            Err(Some((Tuple2(1), 0)))
+        );
+        assert_eq!(tree.rank_by_augmentation(&(1, 1)), Ok(Some((Tuple2(1), 0))));
+        assert_eq!(tree.rank_by_augmentation(&(1, 2)), Ok(Some((Tuple2(1), 1))));
+        assert_eq!(tree.rank_by_augmentation(&(1, 3)), Ok(Some((Tuple2(1), 2))));
+        assert_eq!(
+            tree.rank_by_augmentation(&(1, 4)),
+            Err(Some((Tuple2(1), 3)))
+        );
+        assert_eq!(
+            tree.rank_by_augmentation(&(2, 3)),
+            Err(Some((Tuple2(2), 0)))
+        );
+        assert_eq!(
+            tree.rank_by_augmentation(&(5, 0)),
+            Err(Some((Tuple2(5), 0)))
+        );
     }
 
     #[test]
@@ -509,15 +524,15 @@ mod tests {
 
         for i in 0..1000 {
             tree.insert((i / 500, i % 500), i as i64);
-            let rank = tree.rank_by_argument(&(i / 500, i % 500));
+            let rank = tree.rank_by_augmentation(&(i / 500, i % 500));
             assert_eq!(rank, Ok(Some((Tuple2(i / 500), (i % 500) as usize))));
             assert_eq!(
-                tree.rank_by_argument(&(i / 500, i % 500 + 1)),
+                tree.rank_by_augmentation(&(i / 500, i % 500 + 1)),
                 Err(Some((Tuple2(i / 500), (i % 500) as usize + 1)))
             );
         }
 
-        assert_eq!(tree.root_argument().group_count(), 2);
+        assert_eq!(tree.root_augmentation().group_count(), 2);
     }
 
     #[test]
@@ -528,7 +543,7 @@ mod tests {
             tree.insert((i / 500, i % 500), i as i64);
         }
 
-        assert_eq!(tree.root_argument().group_count(), 3);
+        assert_eq!(tree.root_augmentation().group_count(), 3);
 
         assert_eq!(
             tree.descend_visit(ExtractGroupSize::new(Tuple2(0))),

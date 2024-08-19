@@ -1,8 +1,8 @@
 use crate::Key;
 
-use super::{Argument, RankArgument, SearchArgument};
+use super::{Augmentation, RankAugmentation, SearchAugmentation};
 
-/// This argumentation keeps track of the number of elements in the child.
+/// This augmentation keeps track of the number of elements in the child.
 /// Basicly, it turns the tree to [Order Statistic Tree](https://en.wikipedia.org/wiki/Order_statistic_tree)
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Count(usize);
@@ -14,17 +14,17 @@ impl Count {
     }
 }
 
-impl<K: Key> Argument<K> for Count {
+impl<K: Key> Augmentation<K> for Count {
     fn from_leaf(keys: &[K]) -> Self {
         Self(keys.len())
     }
 
-    fn from_inner(_keys: &[K], arguments: &[Self]) -> Self {
-        Self(arguments.iter().map(|a| a.0).sum())
+    fn from_inner(_keys: &[K], counts: &[Self]) -> Self {
+        Self(counts.iter().map(|a| a.0).sum())
     }
 }
 
-impl<K: Key> SearchArgument<K> for Count {
+impl<K: Key> SearchAugmentation<K> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
@@ -36,8 +36,8 @@ impl<K: Key> SearchArgument<K> for Count {
         }
     }
 
-    fn locate_in_inner(mut idx: usize, _keys: &[K], arguments: &[Self]) -> Option<(usize, usize)> {
-        for (i, a) in arguments.iter().enumerate() {
+    fn locate_in_inner(mut idx: usize, _keys: &[K], counts: &[Self]) -> Option<(usize, usize)> {
+        for (i, a) in counts.iter().enumerate() {
             if idx >= a.0 {
                 idx -= a.0;
             } else {
@@ -45,12 +45,12 @@ impl<K: Key> SearchArgument<K> for Count {
             }
         }
 
-        // offset is larger than the sum of all arguments
+        // offset is larger than the sum of all counts
         None
     }
 }
 
-impl<K: Key> RankArgument<K> for Count {
+impl<K: Key> RankAugmentation<K> for Count {
     /// The rank for ElementCount is index
     type Rank = usize;
 
@@ -59,8 +59,8 @@ impl<K: Key> RankArgument<K> for Count {
     }
 
     /// combine the rank of child and the rank of all prev siblings
-    fn fold_inner(_k: &K, mut rank: Self::Rank, arguments: &[Self]) -> Self::Rank {
-        for a in arguments {
+    fn fold_inner(_k: &K, mut rank: Self::Rank, counts: &[Self]) -> Self::Rank {
+        for a in counts {
             rank += a.0
         }
         rank
@@ -98,10 +98,10 @@ mod tests {
         let node_store = NodeStoreVec::<i64, u32, Count>::new();
         let mut tree = BPlusTree::new(node_store);
         tree.insert(1, 101);
-        assert_eq!(tree.root_argument().count(), 1);
+        assert_eq!(tree.root_augmentation().count(), 1);
 
         tree.remove(&1);
-        assert_eq!(tree.root_argument().count(), 0);
+        assert_eq!(tree.root_augmentation().count(), 0);
 
         for i in 2..500 {
             tree.insert(i, i as u32 + 100);
@@ -111,15 +111,18 @@ mod tests {
         assert_eq!(tree.len(), expected_size);
 
         for i in 0..expected_size {
-            assert_eq!(tree.get_by_argument(i).unwrap().1, &(100 + 2 + i as u32));
+            assert_eq!(
+                tree.get_by_augmentation(i).unwrap().1,
+                &(100 + 2 + i as u32)
+            );
         }
-        assert!(tree.get_by_argument(expected_size + 1).is_none());
+        assert!(tree.get_by_augmentation(expected_size + 1).is_none());
 
         // 1 is not in the tree
-        assert_eq!(tree.rank_by_argument(&1), Err(0));
+        assert_eq!(tree.rank_by_augmentation(&1), Err(0));
         for i in 2..500 {
-            assert_eq!(tree.rank_by_argument(&i), Ok(i as usize - 2));
+            assert_eq!(tree.rank_by_augmentation(&i), Ok(i as usize - 2));
         }
-        assert_eq!(tree.rank_by_argument(&500), Err(expected_size));
+        assert_eq!(tree.rank_by_augmentation(&500), Err(expected_size));
     }
 }

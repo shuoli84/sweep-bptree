@@ -2,7 +2,7 @@
 use std::cmp::Ordering;
 
 use sweep_bptree::{
-    argument::Argument,
+    augment::Augmentation,
     tree::visit::{DescendVisit, DescendVisitResult},
     BPlusTreeMap,
 };
@@ -46,15 +46,15 @@ impl<V> DescendVisit<Date, V, DateStatisticArgument> for CountForYear {
     fn visit_inner(
         &mut self,
         _keys: &[Date],
-        arguments: &[DateStatisticArgument],
-    ) -> sweep_bptree::tree::visit::DescendVisitResult<Self::Result> {
+        augmentations: &[DateStatisticArgument],
+    ) -> DescendVisitResult<Self::Result> {
         // Need to handle following cases:
-        // 1. if the year is at min boundary, then we can can return it
+        // 1. if the year is at min boundary, then we can return it
         // 2. if the year is larger than min, lower than max, then go down
         // 3. if the year is equal to max, then accumulate and move to next
         // 4. if the year is larger than max, then move to next
 
-        for (idx, a) in arguments.iter().enumerate() {
+        for (idx, a) in augmentations.iter().enumerate() {
             match a.min.date.year.cmp(&self.year) {
                 Ordering::Less => match a.max.date.year.cmp(&self.year) {
                     Ordering::Less => continue,
@@ -127,53 +127,53 @@ struct DateStatisticArgument {
 }
 
 /// How the Argument is aggregated from children
-impl Argument<Date> for DateStatisticArgument {
+impl Augmentation<Date> for DateStatisticArgument {
     /// aggregate for inner
-    fn from_inner(_keys: &[Date], arguments: &[Self]) -> Self {
-        let mut arguments_iter = arguments.iter();
+    fn from_inner(_keys: &[Date], augmentations: &[Self]) -> Self {
+        let mut augmentation_iter = augmentations.iter();
 
-        // arguments is not empty
-        let first_a = arguments_iter.next().unwrap();
+        // unwrap: augmentation is not empty
+        let first_a = augmentation_iter.next().unwrap();
         let mut min = first_a.min.clone();
         let mut max = first_a.max.clone();
 
-        for argument in arguments_iter {
-            match min.date.compare(&argument.min.date) {
+        for augmentation in augmentation_iter {
+            match min.date.compare(&augmentation.min.date) {
                 DateCompare::SameDay => {
-                    min.counter.day += argument.min.counter.day;
-                    min.counter.month += argument.min.counter.month;
-                    min.counter.year += argument.min.counter.year;
+                    min.counter.day += augmentation.min.counter.day;
+                    min.counter.month += augmentation.min.counter.month;
+                    min.counter.year += augmentation.min.counter.year;
                 }
                 DateCompare::SameMonth => {
-                    min.counter.month += argument.min.counter.month;
-                    min.counter.year += argument.min.counter.year;
+                    min.counter.month += augmentation.min.counter.month;
+                    min.counter.year += augmentation.min.counter.year;
                 }
                 DateCompare::SameYear => {
-                    min.counter.year += argument.min.counter.year;
+                    min.counter.year += augmentation.min.counter.year;
                 }
                 DateCompare::DifferentYear => {}
             }
 
-            match max.date.compare(&argument.max.date) {
+            match max.date.compare(&augmentation.max.date) {
                 DateCompare::SameDay => {
-                    max.counter.day += argument.max.counter.day;
-                    max.counter.month += argument.max.counter.month;
-                    max.counter.year += argument.max.counter.year;
+                    max.counter.day += augmentation.max.counter.day;
+                    max.counter.month += augmentation.max.counter.month;
+                    max.counter.year += augmentation.max.counter.year;
                 }
                 DateCompare::SameMonth => {
-                    max.date = argument.max.date;
-                    max.counter.day = argument.max.counter.day;
-                    max.counter.month += argument.max.counter.month;
-                    max.counter.year += argument.max.counter.year;
+                    max.date = augmentation.max.date;
+                    max.counter.day = augmentation.max.counter.day;
+                    max.counter.month += augmentation.max.counter.month;
+                    max.counter.year += augmentation.max.counter.year;
                 }
                 DateCompare::SameYear => {
-                    max.date = argument.max.date;
-                    max.counter.day = argument.max.counter.day;
-                    max.counter.month = argument.max.counter.month;
-                    max.counter.year += argument.max.counter.year;
+                    max.date = augmentation.max.date;
+                    max.counter.day = augmentation.max.counter.day;
+                    max.counter.month = augmentation.max.counter.month;
+                    max.counter.year += augmentation.max.counter.year;
                 }
                 DateCompare::DifferentYear => {
-                    max = argument.max.clone();
+                    max = augmentation.max.clone();
                 }
             }
         }
@@ -263,7 +263,7 @@ fn main() {
         }
     }
 
-    println!("size: {} root: {:?}", tree.len(), tree.root_argument());
+    println!("size: {} root: {:?}", tree.len(), tree.root_augmentation());
     for year in 2011..2021 {
         println!(
             "date item at {year} is {}",

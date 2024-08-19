@@ -1,23 +1,23 @@
 use std::borrow::Borrow;
 
 use crate::{
-    argument::RankArgument,
-    tree::{visit::DescendVisit, Argument, SearchArgument},
+    augment::RankAugmentation,
+    tree::{visit::DescendVisit, Augmentation, SearchAugmentation},
     BPlusTree, Key, NodeStoreVec,
 };
 
 /// A B+ tree map implemented with `BPlusTree`
-pub struct BPlusTreeMap<K: Key, V, A: Argument<K> = ()> {
+pub struct BPlusTreeMap<K: Key, V, A: Augmentation<K> = ()> {
     inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }
 
-impl<K: Key, V, A: Argument<K>> Default for BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Augmentation<K>> Default for BPlusTreeMap<K, V, A> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
     /// Create a new BPlusTreeMap
     ///
     /// # Examples
@@ -158,18 +158,18 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
         }
     }
 
-    /// Get root argument for the map
-    pub fn root_argument(&self) -> &A {
-        self.inner.root_argument()
+    /// Get root augment for the map
+    pub fn root_augmentation(&self) -> &A {
+        self.inner.root_augmentation()
     }
 
-    /// Get value by argument's query
+    /// Get value by augment's query
     ///
     /// # Example
     /// ```rust
     ///
     /// use sweep_bptree::BPlusTreeMap;
-    /// use sweep_bptree::argument::count::Count;
+    /// use sweep_bptree::augment::count::Count;
     ///
     ///
     /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
@@ -177,25 +177,25 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// map.insert(2, 3);
     /// map.insert(3, 4);
     ///
-    /// assert_eq!(map.get_by_argument(0), Some((&1, &2)));
-    /// assert_eq!(map.get_by_argument(1), Some((&2, &3)));
-    /// assert_eq!(map.get_by_argument(2), Some((&3, &4)));
+    /// assert_eq!(map.get_by_augmentation(0), Some((&1, &2)));
+    /// assert_eq!(map.get_by_augmentation(1), Some((&2, &3)));
+    /// assert_eq!(map.get_by_augmentation(2), Some((&3, &4)));
     ///
     /// ```
-    pub fn get_by_argument<Q>(&self, query: Q) -> Option<(&K, &V)>
+    pub fn get_by_augmentation<Q>(&self, query: Q) -> Option<(&K, &V)>
     where
-        A: SearchArgument<K, Query = Q>,
+        A: SearchAugmentation<K, Query = Q>,
     {
-        self.inner.get_by_argument(query)
+        self.inner.get_by_augmentation(query)
     }
 
-    /// Get mut referece to value by argument's query
+    /// Get mut referece to value by augment's query
     ///
     /// # Example
     /// ```rust
     ///
     /// use sweep_bptree::BPlusTreeMap;
-    /// use sweep_bptree::argument::count::Count;
+    /// use sweep_bptree::augment::count::Count;
     ///
     ///
     /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
@@ -203,24 +203,24 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// map.insert(2, 3);
     /// map.insert(3, 4);
     ///
-    /// *map.get_mut_by_argument(0).unwrap() = 20;
-    /// assert_eq!(map.get_by_argument(0), Some((&1, &20)));
+    /// *map.get_mut_by_augmentation(0).unwrap() = 20;
+    /// assert_eq!(map.get_by_augmentation(0), Some((&1, &20)));
     ///
     /// ```
-    pub fn get_mut_by_argument<Q>(&mut self, query: Q) -> Option<&mut V>
+    pub fn get_mut_by_augmentation<Q>(&mut self, query: Q) -> Option<&mut V>
     where
-        A: SearchArgument<K, Query = Q>,
+        A: SearchAugmentation<K, Query = Q>,
     {
-        self.inner.get_mut_by_argument(query)
+        self.inner.get_mut_by_augmentation(query)
     }
 
-    /// Remove by argument's query, returns deleted Key Value if exist
+    /// Remove by augment's query, returns deleted Key Value if exist
     ///
     /// # Example
     /// ```rust
     ///
     /// use sweep_bptree::BPlusTreeMap;
-    /// use sweep_bptree::argument::count::Count;
+    /// use sweep_bptree::augment::count::Count;
     ///
     ///
     /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
@@ -228,16 +228,16 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// map.insert(2, 3);
     /// map.insert(3, 4);
     ///
-    /// assert_eq!(map.remove_by_argument(0), Some((1, 2)));
-    /// assert_eq!(map.remove_by_argument(0), Some((2, 3)));
-    /// assert_eq!(map.remove_by_argument(0), Some((3, 4)));
+    /// assert_eq!(map.remove_by_augmentation(0), Some((1, 2)));
+    /// assert_eq!(map.remove_by_augmentation(0), Some((2, 3)));
+    /// assert_eq!(map.remove_by_augmentation(0), Some((3, 4)));
     ///
     /// ```
-    pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(K, V)>
+    pub fn remove_by_augmentation<Q>(&mut self, query: Q) -> Option<(K, V)>
     where
-        A: SearchArgument<K, Query = Q>,
+        A: SearchAugmentation<K, Query = Q>,
     {
-        self.inner.remove_by_argument(query)
+        self.inner.remove_by_augmentation(query)
     }
 
     /// Get the rank for key
@@ -247,7 +247,7 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// ``` rust
     ///
     /// use sweep_bptree::BPlusTreeMap;
-    /// use sweep_bptree::argument::count::Count;
+    /// use sweep_bptree::augment::count::Count;
     ///
     /// let mut map = BPlusTreeMap::<i32, i32, Count>::new();
     /// map.insert(1, 2);
@@ -255,22 +255,22 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     /// map.insert(3, 4);
     ///
     /// // 0 does not exists
-    /// assert_eq!(map.rank_by_argument(&0), Err(0));
+    /// assert_eq!(map.rank_by_augmentation(&0), Err(0));
     ///
     /// // 1's rank is 0
-    /// assert_eq!(map.rank_by_argument(&1), Ok(0));
-    /// assert_eq!(map.rank_by_argument(&2), Ok(1));
-    /// assert_eq!(map.rank_by_argument(&3), Ok(2));
+    /// assert_eq!(map.rank_by_augmentation(&1), Ok(0));
+    /// assert_eq!(map.rank_by_augmentation(&2), Ok(1));
+    /// assert_eq!(map.rank_by_augmentation(&3), Ok(2));
     ///
     /// // 4 does not exists
-    /// assert_eq!(map.rank_by_argument(&4), Err(3));
+    /// assert_eq!(map.rank_by_augmentation(&4), Err(3));
     ///
     /// ```
-    pub fn rank_by_argument<R>(&self, k: &K) -> Result<R, R>
+    pub fn rank_by_augmentation<R>(&self, k: &K) -> Result<R, R>
     where
-        A: RankArgument<K, Rank = R>,
+        A: RankAugmentation<K, Rank = R>,
     {
-        self.inner.rank_by_argument(k)
+        self.inner.rank_by_augmentation(k)
     }
 
     /// Visit the tree's node with a visitor
@@ -284,7 +284,7 @@ impl<K: Key, V, A: Argument<K>> BPlusTreeMap<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Argument<K>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Augmentation<K>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
     /// Create a BPlusTreeMap from an iterator
     ///
     /// # Example

@@ -6,7 +6,7 @@ use crate::NodeStore;
 pub trait DescendVisit<K, V, A> {
     type Result;
 
-    fn visit_inner(&mut self, keys: &[K], arguments: &[A]) -> DescendVisitResult<Self::Result>;
+    fn visit_inner(&mut self, keys: &[K], augmentations: &[A]) -> DescendVisitResult<Self::Result>;
     fn visit_leaf(&mut self, keys: &[K], values: &[V]) -> Option<Self::Result>;
 }
 
@@ -24,7 +24,7 @@ impl<S: NodeStore> super::BPlusTree<S> {
     /// visit the tree descendly through visitor `v`
     pub fn descend_visit<V>(&self, mut v: V) -> Option<V::Result>
     where
-        V: DescendVisit<S::K, S::V, S::Argument>,
+        V: DescendVisit<S::K, S::V, S::Augmentation>,
     {
         let mut node_id = self.root;
         loop {
@@ -32,7 +32,7 @@ impl<S: NodeStore> super::BPlusTree<S> {
                 super::NodeId::Inner(inner_id) => {
                     let inner = self.node_store.get_inner(inner_id);
 
-                    match v.visit_inner(inner.keys(), inner.arguments()) {
+                    match v.visit_inner(inner.keys(), inner.augmentations()) {
                         DescendVisitResult::GoDown(child_idx) => {
                             if child_idx > inner.len() {
                                 panic!("invalid index");

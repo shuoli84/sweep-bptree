@@ -1,7 +1,7 @@
 use super::{
     entry_ref::EntryRef, BPlusTree, InnerMergeResult, InnerNode, LeafDeleteResult, NodeStore,
 };
-use crate::argument::Argument;
+use crate::augment::Augmentation;
 use std::borrow::Borrow;
 
 impl<S: NodeStore> BPlusTree<S> {
@@ -38,10 +38,10 @@ impl<S: NodeStore> BPlusTree<S> {
                 Some((parent_id, child_idx, child_id)) => {
                     match r {
                         DeleteDescendResult::Done(_) => {
-                            let child_argument =
-                                Self::new_argument_for_id(&tree.node_store, child_id);
+                            let child_augmentation =
+                                Self::new_augmentation_for_id(&tree.node_store, child_id);
                             let inner_node = tree.node_store.get_mut_inner(parent_id);
-                            inner_node.set_argument(child_idx, child_argument);
+                            inner_node.set_augmentation(child_idx, child_augmentation);
                         }
                         DeleteDescendResult::InnerUnderSize(kv) => {
                             // Safety: When mutating sub tree, this node is the root and won't be queried or mutated
@@ -83,7 +83,8 @@ impl<S: NodeStore> BPlusTree<S> {
                     };
 
                     if r.is_some() {
-                        tree.root_argument = Self::new_argument_for_id(&tree.node_store, tree.root);
+                        tree.root_augmentation =
+                            Self::new_augmentation_for_id(&tree.node_store, tree.root);
                         tree.len -= 1;
                     }
 
@@ -95,7 +96,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn handle_inner_under_size(
         &mut self,
-        node: &mut InnerNode<S::K, S::Argument>,
+        node: &mut InnerNode<S::K, S::Augmentation>,
         child_idx: usize,
         deleted_item: (S::K, S::V),
     ) -> DeleteDescendResult<S::K, S::V> {
@@ -129,7 +130,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn handle_leaf_under_size(
         &mut self,
-        node: &mut InnerNode<S::K, S::Argument>,
+        node: &mut InnerNode<S::K, S::Augmentation>,
         child_idx: usize,
         key_idx_in_child: usize,
     ) -> DeleteDescendResult<<S as NodeStore>::K, <S as NodeStore>::V> {
@@ -233,7 +234,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn try_rotate_right_for_inner_node(
         node_store: &mut S,
-        node: &mut InnerNode<S::K, S::Argument>,
+        node: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
     ) -> Option<()> {
         //     1    3  5
@@ -247,15 +248,17 @@ impl<S: NodeStore> BPlusTree<S> {
         let prev_node = node_store.get_mut_inner(left_child_id);
         if prev_node.able_to_lend() {
             let (k, c, a) = prev_node.pop();
-            let left_argument = S::Argument::from_inner(prev_node.keys(), prev_node.arguments());
+            let left_augmentation =
+                S::Augmentation::from_inner(prev_node.keys(), prev_node.augmentations());
 
             let slot_key = node.set_key(slot, k);
             let right = node_store.get_mut_inner(right_child_id);
             right.push_front(slot_key, c, a);
-            let right_argument = S::Argument::from_inner(right.keys(), right.arguments());
+            let right_augmentation =
+                S::Augmentation::from_inner(right.keys(), right.augmentations());
 
-            node.set_argument(slot, left_argument);
-            node.set_argument(slot + 1, right_argument);
+            node.set_augmentation(slot, left_augmentation);
+            node.set_augmentation(slot + 1, right_augmentation);
 
             Some(())
         } else {
@@ -265,7 +268,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn try_rotate_left_for_inner_node(
         node_store: &mut S,
-        node: &mut InnerNode<S::K, S::Argument>,
+        node: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
     ) -> Option<()> {
         //     1  3  5
@@ -280,16 +283,17 @@ impl<S: NodeStore> BPlusTree<S> {
         if right.able_to_lend() {
             let (k, c, m) = right.pop_front();
 
-            let right_argument = S::Argument::from_inner(right.keys(), right.arguments());
+            let right_augmentation =
+                S::Augmentation::from_inner(right.keys(), right.augmentations());
 
             let slot_key = node.set_key(slot, k);
             let left = node_store.get_mut_inner(left_child_id);
             left.push(slot_key, c, m);
 
-            let left_argument = S::Argument::from_inner(left.keys(), left.arguments());
+            let left_augmentation = S::Augmentation::from_inner(left.keys(), left.augmentations());
 
-            node.set_argument(slot, left_argument);
-            node.set_argument(slot + 1, right_argument);
+            node.set_augmentation(slot, left_augmentation);
+            node.set_augmentation(slot + 1, right_augmentation);
 
             Some(())
         } else {
@@ -299,7 +303,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn merge_inner_node(
         node_store: &mut S,
-        node: &mut InnerNode<S::K, S::Argument>,
+        node: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
     ) -> InnerMergeResult {
         //     1  3  5
@@ -319,15 +323,15 @@ impl<S: NodeStore> BPlusTree<S> {
         let left = node_store.get_mut_inner(left_child_id);
         left.merge_next(slot_key, &mut right);
 
-        let argument = S::Argument::from_inner(left.keys(), left.arguments());
-        node.set_argument(slot, argument);
+        let augmentation = S::Augmentation::from_inner(left.keys(), left.augmentations());
+        node.set_augmentation(slot, augmentation);
 
         result
     }
 
     fn rotate_right_for_leaf(
         node_store: &mut S,
-        node: &mut InnerNode<S::K, S::Argument>,
+        node: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
         delete_idx: usize,
     ) -> (S::K, S::V) {
@@ -338,12 +342,12 @@ impl<S: NodeStore> BPlusTree<S> {
         debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
-        node.set_argument(slot, S::Argument::from_leaf(left.keys()));
+        node.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
 
         let new_slot_key = kv.0.clone();
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
-        node.set_argument(slot + 1, S::Argument::from_leaf(right.keys()));
+        node.set_augmentation(slot + 1, S::Augmentation::from_leaf(right.keys()));
 
         node_store.cache_leaf(right_id);
 
@@ -355,7 +359,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn rotate_left_for_leaf(
         node_store: &mut S,
-        parent: &mut InnerNode<S::K, S::Argument>,
+        parent: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
         delete_idx: usize,
     ) -> (S::K, S::V) {
@@ -366,12 +370,12 @@ impl<S: NodeStore> BPlusTree<S> {
         debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
-        parent.set_argument(slot + 1, S::Argument::from_leaf(right.keys()));
+        parent.set_augmentation(slot + 1, S::Augmentation::from_leaf(right.keys()));
 
         let new_slot_key = right.data_at(0).0.clone();
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
-        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
+        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
 
         // the prev key is dropped here
         let _ = parent.set_key(slot, new_slot_key);
@@ -382,7 +386,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn merge_leaf_node_left(
         node_store: &mut S,
-        parent: &mut InnerNode<S::K, S::Argument>,
+        parent: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
         delete_idx: usize,
     ) -> DeleteDescendResult<S::K, S::V> {
@@ -392,7 +396,7 @@ impl<S: NodeStore> BPlusTree<S> {
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.merge_right_delete_first(delete_idx, &mut right);
-        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
+        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -409,7 +413,7 @@ impl<S: NodeStore> BPlusTree<S> {
 
     fn merge_leaf_node_with_right(
         node_store: &mut S,
-        parent: &mut InnerNode<S::K, S::Argument>,
+        parent: &mut InnerNode<S::K, S::Augmentation>,
         slot: usize,
         delete_idx: usize,
     ) -> DeleteDescendResult<S::K, S::V> {
@@ -421,7 +425,7 @@ impl<S: NodeStore> BPlusTree<S> {
         let kv = left.delete_at(delete_idx);
         left.merge_right(&mut right);
 
-        parent.set_argument(slot, S::Argument::from_leaf(left.keys()));
+        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));

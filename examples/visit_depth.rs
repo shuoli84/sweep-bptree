@@ -12,7 +12,7 @@ impl<K, V, A> DescendVisit<K, V, A> for GetTreeDepth {
     fn visit_inner(
         &mut self,
         _keys: &[K],
-        _arguments: &[A],
+        _augmentations: &[A],
     ) -> sweep_bptree::tree::visit::DescendVisitResult<Self::Result> {
         self.depth += 1;
 

@@ -19,7 +19,7 @@ pub use node_stores::*;
 pub mod visit;
 
 mod bulk_load;
-pub use crate::argument::*;
+pub use crate::augment::*;
 
 use self::entry_ref::{EntryRef, VisitStack};
 mod entry_ref;
@@ -86,7 +86,7 @@ mod tree_remove;
 #[derive(Clone)]
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
-    root_argument: S::Argument,
+    root_augmentation: S::Augmentation,
     len: usize,
     node_store: ManuallyDrop<S>,
     st: Statistic,
@@ -101,7 +101,7 @@ where
         let (root_id, _) = node_store.new_empty_leaf();
         Self {
             root: NodeId::Leaf(root_id),
-            root_argument: S::Argument::default(),
+            root_augmentation: S::Augmentation::default(),
             node_store: ManuallyDrop::new(node_store),
             len: 0,
 
@@ -111,15 +111,15 @@ where
 
     /// Create a new `BPlusTree` from existing parts
     fn new_from_parts(node_store: S, root: NodeId, len: usize) -> Self {
-        let argument = if len > 0 {
-            Self::new_argument_for_id(&node_store, root)
+        let augmentation = if len > 0 {
+            Self::new_augmentation_for_id(&node_store, root)
         } else {
-            S::Argument::default()
+            S::Augmentation::default()
         };
 
         let me = Self {
             root,
-            root_argument: argument,
+            root_augmentation: augmentation,
             node_store: ManuallyDrop::new(node_store),
             len,
 
@@ -147,9 +147,9 @@ where
         self.len() == 0
     }
 
-    /// Returns a reference to root argument
-    pub fn root_argument(&self) -> &S::Argument {
-        &self.root_argument
+    /// Returns a reference to root augment
+    pub fn root_augmentation(&self) -> &S::Augmentation {
+        &self.root_augmentation
     }
 
     /// Insert a new key-value pair into the tree.
@@ -158,25 +158,27 @@ where
 
         let result = match self.descend_insert(node_id, k, v) {
             DescendInsertResult::Inserted => {
-                self.root_argument = Self::new_argument_for_id(&self.node_store, node_id);
+                self.root_augmentation = Self::new_augmentation_for_id(&self.node_store, node_id);
                 None
             }
             DescendInsertResult::Updated(prev_v) => Some(prev_v),
             DescendInsertResult::Split(k, new_child_id) => {
-                let prev_root_argument = Self::new_argument_for_id(&self.node_store, node_id);
-                let new_argument = Self::new_argument_for_id(&self.node_store, new_child_id);
+                let prev_root_augmentation =
+                    Self::new_augmentation_for_id(&self.node_store, node_id);
+                let new_augmentation =
+                    Self::new_augmentation_for_id(&self.node_store, new_child_id);
 
-                let new_root = InnerNode::<S::K, S::Argument>::new(
+                let new_root = InnerNode::<S::K, S::Augmentation>::new(
                     [k],
                     [node_id, new_child_id],
-                    [prev_root_argument, new_argument],
+                    [prev_root_augmentation, new_augmentation],
                 );
-                let new_root_argument =
-                    S::Argument::from_inner(new_root.keys(), new_root.arguments());
+                let new_root_augmentation =
+                    S::Augmentation::from_inner(new_root.keys(), new_root.augmentations());
 
                 let new_root_id = self.node_store.add_inner(new_root);
                 self.root = new_root_id.into();
-                self.root_argument = new_root_argument;
+                self.root_augmentation = new_root_augmentation;
                 None
             }
         };
@@ -239,39 +241,45 @@ where
         };
 
         loop {
-            // ascend process. Need to process split and update argument
+            // ascend process. Need to process split and update augment
             match stack.pop() {
                 Some((id, child_idx, child_id)) => match r {
                     DescendInsertResult::Split(key, right_child) => {
-                        let right_child_argument =
-                            Self::new_argument_for_id(&self.node_store, right_child);
-                        let child_argument = Self::new_argument_for_id(&self.node_store, child_id);
+                        let right_child_augmentation =
+                            Self::new_augmentation_for_id(&self.node_store, right_child);
+                        let child_augmentation =
+                            Self::new_augmentation_for_id(&self.node_store, child_id);
 
                         let inner_node = self.node_store.get_mut_inner(id);
-                        // it's easier to update argument here, the split logic handles arguments split
+                        // it's easier to update augment here, the split logic handles augmentations split
                         // too.
-                        inner_node.set_argument(child_idx, child_argument);
+                        inner_node.set_augmentation(child_idx, child_augmentation);
 
                         if !inner_node.is_full() {
                             let slot = child_idx;
-                            inner_node.insert_at(slot, key, right_child, right_child_argument);
+                            inner_node.insert_at(slot, key, right_child, right_child_augmentation);
                             r = DescendInsertResult::Inserted;
                         } else {
-                            let (prompt_k, new_node) =
-                                inner_node.split(child_idx, key, right_child, right_child_argument);
+                            let (prompt_k, new_node) = inner_node.split(
+                                child_idx,
+                                key,
+                                right_child,
+                                right_child_augmentation,
+                            );
                             let new_node_id = self.node_store.add_inner(new_node);
                             r = DescendInsertResult::Split(prompt_k, NodeId::Inner(new_node_id));
                         }
                     }
                     DescendInsertResult::Inserted => {
-                        let child_argument = Self::new_argument_for_id(&self.node_store, child_id);
+                        let child_augmentation =
+                            Self::new_augmentation_for_id(&self.node_store, child_id);
                         let inner_node = self.node_store.get_mut_inner(id);
-                        inner_node.set_argument(child_idx, child_argument);
+                        inner_node.set_augmentation(child_idx, child_augmentation);
 
                         continue;
                     }
                     DescendInsertResult::Updated(_) => {
-                        // the key didn't change, so does the argument
+                        // the key didn't change, so does the augment
                         continue;
                     }
                 },
@@ -280,15 +288,15 @@ where
         }
     }
 
-    fn new_argument_for_id(node_store: &S, id: NodeId) -> S::Argument {
+    fn new_augmentation_for_id(node_store: &S, id: NodeId) -> S::Augmentation {
         match id {
             NodeId::Inner(inner) => {
                 let inner = node_store.get_inner(inner);
-                S::Argument::from_inner(inner.keys(), inner.arguments())
+                S::Augmentation::from_inner(inner.keys(), inner.augmentations())
             }
             NodeId::Leaf(leaf) => {
                 let leaf = node_store.get_leaf(leaf);
-                S::Argument::from_leaf(leaf.keys())
+                S::Augmentation::from_leaf(leaf.keys())
             }
         }
     }
@@ -594,7 +602,7 @@ where
     fn descend_visit_inner(
         &self,
         mut node_id: InnerNodeId,
-        mut f: impl FnMut(&InnerNode<S::K, S::Argument>) -> Option<InnerNodeId>,
+        mut f: impl FnMut(&InnerNode<S::K, S::Augmentation>) -> Option<InnerNodeId>,
     ) -> Option<()> {
         loop {
             let inner = self.node_store.get_inner(node_id);
@@ -650,10 +658,10 @@ where
         std::mem::drop(std::mem::replace(self, Self::new(S::default())));
     }
 
-    /// get by argument
-    fn get_ref_by_argument<Q>(&self, mut query: Q) -> Option<EntryRef<&Self>>
+    /// get by augment
+    fn get_ref_by_augmentation<Q>(&self, mut query: Q) -> Option<EntryRef<&Self>>
     where
-        S::Argument: SearchArgument<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
     {
         let mut node_id = self.root;
         let mut stack = VisitStack::new();
@@ -662,11 +670,12 @@ where
             match node_id {
                 NodeId::Inner(inner_id) => {
                     let inner = self.node_store.get_inner(inner_id);
-                    let (offset, new_query) = <S::Argument as SearchArgument<_>>::locate_in_inner(
-                        query,
-                        inner.keys(),
-                        inner.arguments(),
-                    )?;
+                    let (offset, new_query) =
+                        <S::Augmentation as SearchAugmentation<_>>::locate_in_inner(
+                            query,
+                            inner.keys(),
+                            inner.augmentations(),
+                        )?;
                     node_id = inner.child_id(offset);
 
                     stack.push(inner_id, offset, node_id);
@@ -674,8 +683,10 @@ where
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
-                    let slot =
-                        <S::Argument as SearchArgument<_>>::locate_in_leaf(query, leaf.keys())?;
+                    let slot = <S::Augmentation as SearchAugmentation<_>>::locate_in_leaf(
+                        query,
+                        leaf.keys(),
+                    )?;
 
                     return Some(EntryRef::new(self, stack, leaf_id, slot));
                 }
@@ -683,33 +694,33 @@ where
         }
     }
 
-    /// get by argument
-    pub fn get_by_argument<Q>(&self, query: Q) -> Option<(&S::K, &S::V)>
+    /// get by augment
+    pub fn get_by_augmentation<Q>(&self, query: Q) -> Option<(&S::K, &S::V)>
     where
-        S::Argument: SearchArgument<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
     {
-        let entry_ref = self.get_ref_by_argument(query)?;
+        let entry_ref = self.get_ref_by_augmentation(query)?;
         Self::get_by_ref(entry_ref)
     }
 
-    /// get mut reference to value by argument's Query
-    pub fn get_mut_by_argument<Q>(&mut self, query: Q) -> Option<&mut S::V>
+    /// get mut reference to value by augmentation Query
+    pub fn get_mut_by_augmentation<Q>(&mut self, query: Q) -> Option<&mut S::V>
     where
-        S::Argument: SearchArgument<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
     {
-        let entry_ref = self.get_ref_by_argument(query)?;
+        let entry_ref = self.get_ref_by_augmentation(query)?;
         Some(Self::get_mut_by_ref(
             entry_ref.into_detached().into_ref(self),
         ))
     }
 
-    /// Get rank for argument
-    pub fn rank_by_argument<R>(&self, k: &S::K) -> Result<R, R>
+    /// Get rank for augment
+    pub fn rank_by_augmentation<R>(&self, k: &S::K) -> Result<R, R>
     where
-        S::Argument: RankArgument<S::K, Rank = R>,
+        S::Augmentation: RankAugmentation<S::K, Rank = R>,
     {
         let mut node_id = self.root;
-        let mut rank = <S::Argument as RankArgument<S::K>>::initial_value();
+        let mut rank = <S::Augmentation as RankAugmentation<S::K>>::initial_value();
 
         loop {
             match node_id {
@@ -717,24 +728,33 @@ where
                     let inner = self.node_store.get_inner(inner_id);
                     let (child_idx, child_id) = inner.locate_child(k);
                     node_id = child_id;
-                    let arguments = &inner.arguments()[0..child_idx];
-                    rank = <S::Argument as RankArgument<S::K>>::fold_inner(k, rank, arguments);
+                    let augmentations = &inner.augmentations()[0..child_idx];
+                    rank = <S::Augmentation as RankAugmentation<S::K>>::fold_inner(
+                        k,
+                        rank,
+                        augmentations,
+                    );
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
                     let slot = leaf.locate_slot(k);
-                    return <S::Argument as RankArgument<_>>::fold_leaf(k, rank, slot, leaf.keys());
+                    return <S::Augmentation as RankAugmentation<_>>::fold_leaf(
+                        k,
+                        rank,
+                        slot,
+                        leaf.keys(),
+                    );
                 }
             }
         }
     }
 
-    /// remove by argument
-    pub fn remove_by_argument<Q>(&mut self, query: Q) -> Option<(S::K, S::V)>
+    /// remove by augment
+    pub fn remove_by_augmentation<Q>(&mut self, query: Q) -> Option<(S::K, S::V)>
     where
-        S::Argument: SearchArgument<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
     {
-        let entry_ref = self.get_ref_by_argument(query)?;
+        let entry_ref = self.get_ref_by_augmentation(query)?;
         Self::remove_by_ref(entry_ref.into_detached().into_ref(self))
     }
 
@@ -745,7 +765,7 @@ where
         Some(leaf.data_at(slot))
     }
 
-    /// Get the &mut V for referece
+    /// Get the &mut V for reference
     fn get_mut_by_ref(entry_ref: EntryRef<&mut Self>) -> &mut S::V {
         let EntryRef {
             tree,
@@ -836,7 +856,7 @@ pub trait NodeStore: Default {
     type V;
 
     /// The Argument type
-    type Argument: Argument<Self::K>;
+    type Augmentation: Augmentation<Self::K>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;
@@ -848,19 +868,19 @@ pub trait NodeStore: Default {
     fn new_empty_inner(&mut self) -> InnerNodeId;
 
     /// Add the inner node to the store and returns its id
-    fn add_inner(&mut self, node: Box<InnerNode<Self::K, Self::Argument>>) -> InnerNodeId;
+    fn add_inner(&mut self, node: Box<InnerNode<Self::K, Self::Augmentation>>) -> InnerNodeId;
 
     /// Get the inner node
     /// # Panics
     /// if id is invalid or the node is already removed, panic
-    fn get_inner(&self, id: InnerNodeId) -> &InnerNode<Self::K, Self::Argument>;
+    fn get_inner(&self, id: InnerNodeId) -> &InnerNode<Self::K, Self::Augmentation>;
 
     /// Get the inner node
     /// if id is invalid or the node already removed, remove None
-    fn try_get_inner(&self, id: InnerNodeId) -> Option<&InnerNode<Self::K, Self::Argument>>;
+    fn try_get_inner(&self, id: InnerNodeId) -> Option<&InnerNode<Self::K, Self::Augmentation>>;
 
     /// Get a mut reference to the `InnerNode`
-    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<Self::K, Self::Argument>;
+    fn get_mut_inner(&mut self, id: InnerNodeId) -> &mut InnerNode<Self::K, Self::Augmentation>;
 
     /// Get a mut pointer to inner node.
     ///
@@ -869,13 +889,17 @@ pub trait NodeStore: Default {
     unsafe fn get_mut_inner_ptr(
         &mut self,
         id: InnerNodeId,
-    ) -> *mut InnerNode<Self::K, Self::Argument>;
+    ) -> *mut InnerNode<Self::K, Self::Augmentation>;
 
     /// Take the inner node out of the store
-    fn take_inner(&mut self, id: InnerNodeId) -> Box<InnerNode<Self::K, Self::Argument>>;
+    fn take_inner(&mut self, id: InnerNodeId) -> Box<InnerNode<Self::K, Self::Augmentation>>;
 
     /// Put back the inner node
-    fn put_back_inner(&mut self, id: InnerNodeId, node: Box<InnerNode<Self::K, Self::Argument>>);
+    fn put_back_inner(
+        &mut self,
+        id: InnerNodeId,
+        node: Box<InnerNode<Self::K, Self::Augmentation>>,
+    );
 
     /// Create a new empty leaf node and returns its id
     fn new_empty_leaf(&mut self) -> (LeafNodeId, &mut LeafNode<Self::K, Self::V>);
@@ -915,7 +939,7 @@ pub trait NodeStore: Default {
     where
         Self::K: std::fmt::Debug,
         Self::V: std::fmt::Debug + Clone,
-        Self::Argument: std::fmt::Debug;
+        Self::Augmentation: std::fmt::Debug;
 }
 
 /// Key trait
@@ -936,7 +960,7 @@ mod tests {
 
     use rand::seq::SliceRandom;
 
-    use crate::argument::count::Count;
+    use crate::augment::count::Count;
 
     use super::*;
 
@@ -956,7 +980,7 @@ mod tests {
 
         for i in keys {
             tree.insert(i, i % 13);
-            assert_eq!(tree.root_argument.count(), tree.len());
+            assert_eq!(tree.root_augmentation.count(), tree.len());
         }
 
         let mut keys = (0..size).collect::<Vec<_>>();
@@ -973,7 +997,7 @@ mod tests {
 
             let delete_result = tree.remove(&k);
             assert!(delete_result.is_some());
-            assert_eq!(tree.root_argument.count(), tree.len());
+            assert_eq!(tree.root_augmentation.count(), tree.len());
         }
 
         assert!(tree.is_empty());

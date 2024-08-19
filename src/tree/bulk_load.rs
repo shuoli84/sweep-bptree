@@ -1,6 +1,6 @@
 use crate::tree::InnerNode;
 
-use super::{Argument, LeafNode, LeafNodeId, NodeId, NodeStore};
+use super::{Augmentation, LeafNode, LeafNodeId, NodeId, NodeStore};
 
 impl<S: NodeStore> crate::BPlusTree<S> {
     /// bulk load data into a new `BPlusTree`, the loaded tree's leaf with fill rate 1.0
@@ -16,7 +16,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
         let mut item_count = 0usize;
 
         let mut data_iter = data.into_iter().dedup_keep_last(|l, r| l.0.eq(&r.0));
-        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Argument)> = Vec::new();
+        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Augmentation)> = Vec::new();
 
         let mut prev_id: Option<LeafNodeId> = None;
 
@@ -42,7 +42,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
             nodes.push((
                 NodeId::Leaf(leaf_id),
                 leaf.key_range(),
-                S::Argument::from_leaf(leaf.keys()),
+                S::Augmentation::from_leaf(leaf.keys()),
             ));
             item_count += leaf.len();
 
@@ -58,7 +58,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
     /// Returns the root id
     fn build_inner_layer(
         node_store: &mut S,
-        nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Argument)>,
+        nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Augmentation)>,
     ) -> NodeId {
         assert!(!nodes.is_empty());
 
@@ -73,7 +73,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
 
         let mut chunk_iter = nodes.chunks(child_n);
 
-        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Argument)> =
+        let mut nodes: Vec<(NodeId, (Option<S::K>, Option<S::K>), S::Augmentation)> =
             Vec::with_capacity(node_num);
 
         for _ in 0..node_num {
@@ -85,17 +85,17 @@ impl<S: NodeStore> crate::BPlusTree<S> {
                 start_key.clone().expect("the first leaf is skipped")
             });
             let childs_iter = childs.iter().map(|(child, _, _)| *child);
-            let child_argument_iter = childs.iter().map(|(_, _, m)| m.clone());
+            let child_augmentations_iter = childs.iter().map(|(_, _, m)| m.clone());
 
-            let inner = InnerNode::<S::K, S::Argument>::new_from_iter(
+            let inner = InnerNode::<S::K, S::Augmentation>::new_from_iter(
                 keys_iter,
                 childs_iter,
-                child_argument_iter,
+                child_augmentations_iter,
             );
-            let argument = S::Argument::from_inner(inner.keys(), inner.arguments());
+            let augmentation = S::Augmentation::from_inner(inner.keys(), inner.augmentations());
             let node_id = node_store.add_inner(inner);
 
-            nodes.push((NodeId::Inner(node_id), (start_key, end_key), argument));
+            nodes.push((NodeId::Inner(node_id), (start_key, end_key), augmentation));
         }
 
         Self::build_inner_layer(node_store, nodes)
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load() {
-        type Tree = BPlusTree<NodeStoreVec<i32, i32, argument::count::Count>>;
+        type Tree = BPlusTree<NodeStoreVec<i32, i32, augment::count::Count>>;
         let data = (0..400).map(|i| (i, i * 2)).collect::<Vec<_>>();
         let loaded_tree = Tree::bulk_load(data.clone());
         let mut inserted_tree = Tree::new(NodeStoreVec::default());
@@ -171,10 +171,10 @@ mod tests {
             assert_eq!(loaded_tree.get(k).unwrap(), v);
         }
 
-        // verify argument is same for both
+        // verify augment is same for both
         assert_eq!(
-            loaded_tree.root_argument().count(),
-            inserted_tree.root_argument().count()
+            loaded_tree.root_augmentation().count(),
+            inserted_tree.root_augmentation().count()
         );
 
         let loaded_kvs = loaded_tree.into_iter().collect::<Vec<_>>();
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load_with_dup_items() {
-        type Tree = BPlusTree<NodeStoreVec<i32, i32, argument::count::Count>>;
+        type Tree = BPlusTree<NodeStoreVec<i32, i32, augment::count::Count>>;
         // i / 2, so there are two keys for one value
         let data = (0..400).map(|i| (i / 2, i * 2)).collect::<Vec<_>>();
         let loaded_tree = Tree::bulk_load(data.clone());
@@ -194,10 +194,10 @@ mod tests {
         }
         assert_eq!(loaded_tree.len(), inserted_tree.len());
 
-        // verify argument is same for both
+        // verify augment is same for both
         assert_eq!(
-            loaded_tree.root_argument().count(),
-            inserted_tree.root_argument().count()
+            loaded_tree.root_augmentation().count(),
+            inserted_tree.root_augmentation().count()
         );
 
         let loaded_kvs = loaded_tree.into_iter().collect::<Vec<_>>();
