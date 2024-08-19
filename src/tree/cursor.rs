@@ -4,6 +4,8 @@ use crate::Key;
 use crate::NodeStore;
 
 /// `Cursor` points to a key value pair in the tree. Not like Iterator, it can move to next or prev.
+/// One key feature of this Cursor is, it didn't borrow the tree, so multiple Cursor can be created
+/// and the underlying tree can be updated without invalidate existing Cursor.
 #[derive(Debug, Clone, Copy)]
 pub struct Cursor<K: Key> {
     /// The key this cursor points to. It is possible the `k` doesn't exist in the tree.

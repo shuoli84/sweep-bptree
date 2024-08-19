@@ -612,12 +612,13 @@ where
         iterator::Iter::new(self)
     }
 
-    /// Create an cursor from first elem
+    /// Create a `Cursor` from first elem if exists
+    ///
     pub fn cursor_first(&self) -> Option<Cursor<S::K>> {
         Cursor::first(self).map(|c| c.0)
     }
 
-    /// Create an cursor for k
+    /// Create a cursor and value for k if k exists.
     pub fn get_cursor(&self, k: &S::K) -> Option<(Cursor<S::K>, Option<&S::V>)> {
         let node_id = self.root;
         let leaf_id = match node_id {
@@ -737,7 +738,7 @@ where
         Self::remove_by_ref(entry_ref.into_detached().into_ref(self))
     }
 
-    /// Get the (&K, &V) pair for referece
+    /// Get the (&K, &V) pair for `EntryRef`
     fn get_by_ref(entry_ref: EntryRef<&Self>) -> Option<(&S::K, &S::V)> {
         let leaf = entry_ref.tree.node_store.get_leaf(entry_ref.leaf_id);
         let slot = entry_ref.offset;

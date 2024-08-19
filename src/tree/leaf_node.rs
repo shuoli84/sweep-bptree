@@ -325,7 +325,7 @@ impl<K: Key, V> LeafNode<K, V> {
         match self.locate_slot(k) {
             Ok(idx) => {
                 // exact match, go to right child.
-                // if the child split, then the new key should inserted idx + 1
+                // if the child split, then the new key should insert idx + 1
                 (idx, {
                     let v = unsafe { self.value_area(idx).assume_init_ref() };
                     Some(v)

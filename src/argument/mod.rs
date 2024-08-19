@@ -3,7 +3,9 @@ use crate::Key;
 pub mod count;
 pub mod group;
 
-/// Augument trait, it is used to store augumentation, like 'size'
+/// Argument trait, it is used to store argumentation, like 'size'
+/// NOTE: Since the lib has no control on how value changes, so argument only calculated from keys
+/// e.g: Map<i64, Arc<Mutex<i64>>
 pub trait Argument<K: Key>: Clone + Default {
     fn is_zst() -> bool {
         false
@@ -23,6 +25,8 @@ pub trait Argument<K: Key>: Clone + Default {
 }
 
 /// Whether the argumentation able to locate element
+/// `SearchArgument` acts like a secondary index, it is able to locate
+/// the record.
 pub trait SearchArgument<K: Key>: Argument<K> {
     type Query;
 
@@ -68,12 +72,8 @@ impl<K: Key> Argument<K> for () {
     }
 
     #[inline(always)]
-    fn from_leaf(_: &[K]) -> Self {
-        
-    }
+    fn from_leaf(_: &[K]) -> Self {}
 
     #[inline(always)]
-    fn from_inner(_: &[K], _: &[Self]) -> Self {
-        
-    }
+    fn from_inner(_: &[K], _: &[Self]) -> Self {}
 }

@@ -6,7 +6,7 @@ use super::{Argument, RankArgument, SearchArgument};
 
 /// Argument to count the number of groups in a set of keys
 /// Note, the group must be ordered
-/// This Argument basicly provides two capabilities:
+/// This Argument basically provides two capabilities:
 /// 1. Get the group count
 /// 2. Query inside group by offset
 #[derive(Clone, Debug)]
