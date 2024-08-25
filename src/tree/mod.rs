@@ -1,6 +1,6 @@
 mod inner_node;
 mod slice_utils;
-use std::{borrow::Borrow, mem::ManuallyDrop};
+use std::{borrow::Borrow, hash::Hash, mem::ManuallyDrop};
 
 mod consts;
 
@@ -83,7 +83,7 @@ mod tree_remove;
 /// // now cursor_1 should retrieve the new value
 /// assert_eq!(cursor_1.value(&tree).unwrap().0, 100.);
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
     root_augmentation: S::Augmentation,
@@ -819,6 +819,40 @@ impl<S: NodeStore> IntoIterator for BPlusTree<S> {
 
     fn into_iter(self) -> Self::IntoIter {
         IntoIter::new(self)
+    }
+}
+
+impl<S: NodeStore> Hash for BPlusTree<S>
+where
+    S::K: Hash,
+    S::V: Hash,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_usize(self.len()); // consider `state.write_length_prefix(self.len());`
+        for elt in self.iter() {
+            elt.hash(state);
+        }
+    }
+}
+
+impl<K, V, A> Default for BPlusTree<NodeStoreVec<K, V, A>>
+where
+    K: Default + Key,
+    V: Default,
+    A: Augmentation<K>,
+{
+    fn default() -> Self {
+        Self::new(NodeStoreVec::new())
+    }
+}
+
+impl<S: NodeStore> PartialEq for BPlusTree<S>
+where
+    S::K: PartialEq,
+    S::V: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
     }
 }
 
