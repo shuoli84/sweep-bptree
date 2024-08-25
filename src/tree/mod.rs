@@ -835,6 +835,17 @@ where
     }
 }
 
+impl<K, V, A> Default for BPlusTree<NodeStoreVec<K, V, A>>
+where
+    K: Default + Key,
+    V: Default,
+    A: Augmentation<K>,
+{
+    fn default() -> Self {
+        Self::new(NodeStoreVec::new())
+    }
+}
+
 /// Statistic data used to guide the perf tuning
 #[derive(Default, Debug, Clone)]
 pub struct Statistic {
