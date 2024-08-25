@@ -83,7 +83,7 @@ mod tree_remove;
 /// // now cursor_1 should retrieve the new value
 /// assert_eq!(cursor_1.value(&tree).unwrap().0, 100.);
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BPlusTree<S: NodeStore> {
     root: NodeId,
     root_augmentation: S::Augmentation,
