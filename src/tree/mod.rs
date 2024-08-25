@@ -846,6 +846,16 @@ where
     }
 }
 
+impl<S: NodeStore> PartialEq for BPlusTree<S>
+where
+    S::K: PartialEq,
+    S::V: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
 /// Statistic data used to guide the perf tuning
 #[derive(Default, Debug, Clone)]
 pub struct Statistic {
