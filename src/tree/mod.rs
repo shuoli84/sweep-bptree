@@ -296,7 +296,7 @@ where
             }
             NodeId::Leaf(leaf) => {
                 let leaf = node_store.get_leaf(leaf);
-                S::Augmentation::from_leaf(leaf.keys())
+                S::Augmentation::from_leaf(leaf.keys(), leaf.values())
             }
         }
     }

@@ -182,7 +182,7 @@ impl<V> Augmentation<Date, V> for DateStatistic {
     }
 
     /// aggregate for leaf node
-    fn from_leaf(keys: &[Date]) -> Self {
+    fn from_leaf(keys: &[Date], _: &[V]) -> Self {
         let mut keys_iter = keys.iter();
         let first_key = keys_iter.next().unwrap();
 

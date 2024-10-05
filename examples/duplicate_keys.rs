@@ -19,7 +19,7 @@ impl Count {
 }
 
 impl<V> Augmentation<Key, V> for Count {
-    fn from_leaf(keys: &[Key]) -> Self {
+    fn from_leaf(keys: &[Key], _: &[V]) -> Self {
         Self(keys.iter().map(|k| k.count).sum())
     }
 

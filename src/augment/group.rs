@@ -153,7 +153,7 @@ where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
 {
-    fn from_leaf(keys: &[K]) -> Self {
+    fn from_leaf(keys: &[K], _: &[V]) -> Self {
         let mut keys_iter = keys.iter();
 
         let first_group = G::from_ref(match keys_iter.next() {

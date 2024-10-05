@@ -15,7 +15,7 @@ impl Count {
 }
 
 impl<K: Key, V> Augmentation<K, V> for Count {
-    fn from_leaf(keys: &[K]) -> Self {
+    fn from_leaf(keys: &[K], _: &[V]) -> Self {
         Self(keys.len())
     }
 
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn test_element_count() {
-        let count = <Count as Augmentation<i32, i32>>::from_leaf(&[1, 2, 3]);
+        let count = <Count as Augmentation<i32, i32>>::from_leaf(&[1, 2, 3], &[]);
         assert_eq!(count.0, 3);
 
         let count =

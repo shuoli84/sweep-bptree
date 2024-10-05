@@ -21,7 +21,7 @@ pub trait Augmentation<K: Key, V>: Clone + Default {
     fn from_inner(keys: &[K], augmentations: &[Self]) -> Self;
 
     /// create a new Augmentation from leaf node's key
-    fn from_leaf(keys: &[K]) -> Self;
+    fn from_leaf(keys: &[K], values: &[V]) -> Self;
 }
 
 /// Whether the augmentation able to locate element
@@ -72,7 +72,7 @@ impl<K: Key, V> Augmentation<K, V> for () {
     }
 
     #[inline(always)]
-    fn from_leaf(_: &[K]) -> Self {}
+    fn from_leaf(_: &[K], _: &[V]) -> Self {}
 
     #[inline(always)]
     fn from_inner(_: &[K], _: &[Self]) -> Self {}

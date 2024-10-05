@@ -342,12 +342,15 @@ impl<S: NodeStore> BPlusTree<S> {
         debug_assert!(left.able_to_lend());
 
         let kv = left.pop();
-        node.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
+        node.set_augmentation(slot, S::Augmentation::from_leaf(left.keys(), left.values()));
 
         let new_slot_key = kv.0.clone();
         let right = node_store.get_mut_leaf(right_id);
         let deleted = right.delete_with_push_front(delete_idx, kv);
-        node.set_augmentation(slot + 1, S::Augmentation::from_leaf(right.keys()));
+        node.set_augmentation(
+            slot + 1,
+            S::Augmentation::from_leaf(right.keys(), right.values()),
+        );
 
         node_store.cache_leaf(right_id);
 
@@ -370,12 +373,15 @@ impl<S: NodeStore> BPlusTree<S> {
         debug_assert!(right.able_to_lend());
 
         let kv = right.pop_front();
-        parent.set_augmentation(slot + 1, S::Augmentation::from_leaf(right.keys()));
+        parent.set_augmentation(
+            slot + 1,
+            S::Augmentation::from_leaf(right.keys(), right.values()),
+        );
 
         let new_slot_key = right.data_at(0).0.clone();
         let left = node_store.get_mut_leaf(left_id);
         let deleted = left.delete_with_push(delete_idx, kv);
-        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
+        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys(), left.values()));
 
         // the prev key is dropped here
         let _ = parent.set_key(slot, new_slot_key);
@@ -396,7 +402,7 @@ impl<S: NodeStore> BPlusTree<S> {
         let mut right = node_store.take_leaf(right_leaf_id);
         let left = node_store.get_mut_leaf(left_leaf_id);
         let kv = left.merge_right_delete_first(delete_idx, &mut right);
-        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
+        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys(), left.values()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));
@@ -425,7 +431,7 @@ impl<S: NodeStore> BPlusTree<S> {
         let kv = left.delete_at(delete_idx);
         left.merge_right(&mut right);
 
-        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys()));
+        parent.set_augmentation(slot, S::Augmentation::from_leaf(left.keys(), left.values()));
 
         if let Some(next) = left.next() {
             node_store.get_mut_leaf(next).set_prev(Some(left_leaf_id));

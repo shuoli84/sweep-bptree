@@ -10,7 +10,7 @@ fn value_is_even(v: i64) -> bool {
 }
 
 impl<V> Augmentation<i64, V> for EvenCount {
-    fn from_leaf(keys: &[i64]) -> Self {
+    fn from_leaf(keys: &[i64], _: &[V]) -> Self {
         // For leafs, we count all keys that are even
         Self(keys.iter().filter(|i| value_is_even(**i)).count())
     }
