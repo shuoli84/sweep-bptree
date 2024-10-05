@@ -4,7 +4,7 @@ use super::{Augmentation, RankAugmentation, SearchAugmentation};
 
 /// This augmentation keeps track of the number of elements in the child.
 /// Basicly, it turns the tree to [Order Statistic Tree](https://en.wikipedia.org/wiki/Order_statistic_tree)
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Count(usize);
 
 impl Count {
@@ -14,8 +14,8 @@ impl Count {
     }
 }
 
-impl<K: Key> Augmentation<K> for Count {
-    fn from_leaf(keys: &[K]) -> Self {
+impl<K: Key, V> Augmentation<K, V> for Count {
+    fn from_leaf(keys: &[K], _: &[V]) -> Self {
         Self(keys.len())
     }
 
@@ -24,11 +24,11 @@ impl<K: Key> Augmentation<K> for Count {
     }
 }
 
-impl<K: Key> SearchAugmentation<K> for Count {
+impl<K: Key, V> SearchAugmentation<K, V> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
-    fn locate_in_leaf(idx: usize, keys: &[K]) -> Option<usize> {
+    fn locate_in_leaf(idx: usize, keys: &[K], _: &[V]) -> Option<usize> {
         if idx < keys.len() {
             Some(idx)
         } else {
@@ -50,7 +50,7 @@ impl<K: Key> SearchAugmentation<K> for Count {
     }
 }
 
-impl<K: Key> RankAugmentation<K> for Count {
+impl<K: Key, V> RankAugmentation<K, V> for Count {
     /// The rank for ElementCount is index
     type Rank = usize;
 
@@ -86,10 +86,11 @@ mod tests {
 
     #[test]
     fn test_element_count() {
-        let count = Count::from_leaf(&[1, 2, 3]);
+        let count = <Count as Augmentation<i32, i32>>::from_leaf(&[1, 2, 3], &[]);
         assert_eq!(count.0, 3);
 
-        let count = Count::from_inner(&[1, 2, 3], &[count, count, count]);
+        let count =
+            <Count as Augmentation<i32, i32>>::from_inner(&[1, 2, 3], &[count, count, count]);
         assert_eq!(count.0, 9);
     }
 

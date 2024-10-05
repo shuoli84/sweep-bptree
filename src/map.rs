@@ -7,17 +7,17 @@ use crate::{
 };
 
 /// A B+ tree map implemented with `BPlusTree`
-pub struct BPlusTreeMap<K: Key, V, A: Augmentation<K> = ()> {
+pub struct BPlusTreeMap<K: Key, V, A: Augmentation<K, V> = ()> {
     inner: BPlusTree<NodeStoreVec<K, V, A>>,
 }
 
-impl<K: Key, V, A: Augmentation<K>> Default for BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Augmentation<K, V>> Default for BPlusTreeMap<K, V, A> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Augmentation<K, V>> BPlusTreeMap<K, V, A> {
     /// Create a new BPlusTreeMap
     ///
     /// # Examples
@@ -184,7 +184,7 @@ impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn get_by_augmentation<Q>(&self, query: Q) -> Option<(&K, &V)>
     where
-        A: SearchAugmentation<K, Query = Q>,
+        A: SearchAugmentation<K, V, Query = Q>,
     {
         self.inner.get_by_augmentation(query)
     }
@@ -209,7 +209,7 @@ impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn get_mut_by_augmentation<Q>(&mut self, query: Q) -> Option<&mut V>
     where
-        A: SearchAugmentation<K, Query = Q>,
+        A: SearchAugmentation<K, V, Query = Q>,
     {
         self.inner.get_mut_by_augmentation(query)
     }
@@ -235,7 +235,7 @@ impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn remove_by_augmentation<Q>(&mut self, query: Q) -> Option<(K, V)>
     where
-        A: SearchAugmentation<K, Query = Q>,
+        A: SearchAugmentation<K, V, Query = Q>,
     {
         self.inner.remove_by_augmentation(query)
     }
@@ -268,7 +268,7 @@ impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
     /// ```
     pub fn rank_by_augmentation<R>(&self, k: &K) -> Result<R, R>
     where
-        A: RankAugmentation<K, Rank = R>,
+        A: RankAugmentation<K, V, Rank = R>,
     {
         self.inner.rank_by_augmentation(k)
     }
@@ -284,7 +284,7 @@ impl<K: Key, V, A: Augmentation<K>> BPlusTreeMap<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Augmentation<K>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
+impl<K: Key, V, A: Augmentation<K, V>> FromIterator<(K, V)> for BPlusTreeMap<K, V, A> {
     /// Create a BPlusTreeMap from an iterator
     ///
     /// # Example

@@ -148,12 +148,12 @@ pub trait FromRef<T> {
     fn from_ref(input: &T) -> Self;
 }
 
-impl<K, G> Augmentation<K> for GroupCount<G>
+impl<K, V, G> Augmentation<K, V> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
 {
-    fn from_leaf(keys: &[K]) -> Self {
+    fn from_leaf(keys: &[K], _: &[V]) -> Self {
         let mut keys_iter = keys.iter();
 
         let first_group = G::from_ref(match keys_iter.next() {
@@ -203,7 +203,7 @@ where
     }
 }
 
-impl<K, G> SearchAugmentation<K> for GroupCount<G>
+impl<K, V, G> SearchAugmentation<K, V> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
@@ -211,7 +211,7 @@ where
     /// It can be searched by Group and offset
     type Query = (G, usize);
 
-    fn locate_in_leaf((group, offset): (G, usize), keys: &[K]) -> Option<usize> {
+    fn locate_in_leaf((group, offset): (G, usize), keys: &[K], _: &[V]) -> Option<usize> {
         let mut in_group_offset = 0;
         for (idx, k) in keys.iter().enumerate() {
             let group_for_key = G::from_ref(k);
@@ -272,7 +272,7 @@ where
     }
 }
 
-impl<K, G> RankAugmentation<K> for GroupCount<G>
+impl<K, V, G> RankAugmentation<K, V> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,

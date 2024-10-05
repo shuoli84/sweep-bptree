@@ -13,7 +13,7 @@ const C: usize = super::consts::INNER_C;
 /// `N` is the maximum number of keys in a node
 /// `C` is the maximum child node id in a node
 #[derive(Debug)]
-pub struct InnerNode<K: Key, A: Augmentation<K>> {
+pub struct InnerNode<K: Key, A: Clone> {
     size: u16,
 
     slot_key: [MaybeUninit<K>; N],
@@ -22,7 +22,7 @@ pub struct InnerNode<K: Key, A: Augmentation<K>> {
     augmentations: [MaybeUninit<A>; C],
 }
 
-impl<K: Key, A: Augmentation<K>> Drop for InnerNode<K, A> {
+impl<K: Key, A: Clone> Drop for InnerNode<K, A> {
     fn drop(&mut self) {
         // Satefy: The keys in range ..self.len() is initialized
         unsafe {
@@ -37,7 +37,7 @@ impl<K: Key, A: Augmentation<K>> Drop for InnerNode<K, A> {
     }
 }
 
-impl<K: Key, A: Augmentation<K>> Clone for InnerNode<K, A> {
+impl<K: Key, A: Clone> Clone for InnerNode<K, A> {
     fn clone(&self) -> Self {
         // SAFETY: An uninitialized `[MaybeUninit<_>; LEN]` is valid.
         let mut new_key = unsafe { MaybeUninit::<[MaybeUninit<K>; N]>::uninit().assume_init() };
@@ -69,7 +69,7 @@ impl<K: Key, A: Augmentation<K>> Clone for InnerNode<K, A> {
     }
 }
 
-impl<K: Key, A: Augmentation<K>> InnerNode<K, A> {
+impl<K: Key, A: Clone> InnerNode<K, A> {
     /// Size of keys in inner node
     pub fn len(&self) -> usize {
         self.size as usize

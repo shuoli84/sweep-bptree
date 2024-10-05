@@ -42,7 +42,7 @@ impl<S: NodeStore> crate::BPlusTree<S> {
             nodes.push((
                 NodeId::Leaf(leaf_id),
                 leaf.key_range(),
-                S::Augmentation::from_leaf(leaf.keys()),
+                S::Augmentation::from_leaf(leaf.keys(), leaf.values()),
             ));
             item_count += leaf.len();
 

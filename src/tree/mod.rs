@@ -161,7 +161,10 @@ where
                 self.root_augmentation = Self::new_augmentation_for_id(&self.node_store, node_id);
                 None
             }
-            DescendInsertResult::Updated(prev_v) => Some(prev_v),
+            DescendInsertResult::Updated(prev_v) => {
+                self.root_augmentation = Self::new_augmentation_for_id(&self.node_store, node_id);
+                Some(prev_v)
+            }
             DescendInsertResult::Split(k, new_child_id) => {
                 let prev_root_augmentation =
                     Self::new_augmentation_for_id(&self.node_store, node_id);
@@ -279,7 +282,11 @@ where
                         continue;
                     }
                     DescendInsertResult::Updated(_) => {
-                        // the key didn't change, so does the augment
+                        let child_augmentation =
+                            Self::new_augmentation_for_id(&self.node_store, child_id);
+                        let inner_node = self.node_store.get_mut_inner(id);
+                        inner_node.set_augmentation(child_idx, child_augmentation);
+
                         continue;
                     }
                 },
@@ -296,7 +303,7 @@ where
             }
             NodeId::Leaf(leaf) => {
                 let leaf = node_store.get_leaf(leaf);
-                S::Augmentation::from_leaf(leaf.keys())
+                S::Augmentation::from_leaf(leaf.keys(), leaf.values())
             }
         }
     }
@@ -661,7 +668,7 @@ where
     /// get by augment
     fn get_ref_by_augmentation<Q>(&self, mut query: Q) -> Option<EntryRef<&Self>>
     where
-        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, S::V, Query = Q>,
     {
         let mut node_id = self.root;
         let mut stack = VisitStack::new();
@@ -671,7 +678,7 @@ where
                 NodeId::Inner(inner_id) => {
                     let inner = self.node_store.get_inner(inner_id);
                     let (offset, new_query) =
-                        <S::Augmentation as SearchAugmentation<_>>::locate_in_inner(
+                        <S::Augmentation as SearchAugmentation<_, _>>::locate_in_inner(
                             query,
                             inner.keys(),
                             inner.augmentations(),
@@ -683,9 +690,10 @@ where
                 }
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
-                    let slot = <S::Augmentation as SearchAugmentation<_>>::locate_in_leaf(
+                    let slot = <S::Augmentation as SearchAugmentation<_, _>>::locate_in_leaf(
                         query,
                         leaf.keys(),
+                        leaf.values(),
                     )?;
 
                     return Some(EntryRef::new(self, stack, leaf_id, slot));
@@ -697,7 +705,7 @@ where
     /// get by augment
     pub fn get_by_augmentation<Q>(&self, query: Q) -> Option<(&S::K, &S::V)>
     where
-        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, S::V, Query = Q>,
     {
         let entry_ref = self.get_ref_by_augmentation(query)?;
         Self::get_by_ref(entry_ref)
@@ -706,7 +714,7 @@ where
     /// get mut reference to value by augmentation Query
     pub fn get_mut_by_augmentation<Q>(&mut self, query: Q) -> Option<&mut S::V>
     where
-        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, S::V, Query = Q>,
     {
         let entry_ref = self.get_ref_by_augmentation(query)?;
         Some(Self::get_mut_by_ref(
@@ -717,10 +725,10 @@ where
     /// Get rank for augment
     pub fn rank_by_augmentation<R>(&self, k: &S::K) -> Result<R, R>
     where
-        S::Augmentation: RankAugmentation<S::K, Rank = R>,
+        S::Augmentation: RankAugmentation<S::K, S::V, Rank = R>,
     {
         let mut node_id = self.root;
-        let mut rank = <S::Augmentation as RankAugmentation<S::K>>::initial_value();
+        let mut rank = <S::Augmentation as RankAugmentation<S::K, S::V>>::initial_value();
 
         loop {
             match node_id {
@@ -729,7 +737,7 @@ where
                     let (child_idx, child_id) = inner.locate_child(k);
                     node_id = child_id;
                     let augmentations = &inner.augmentations()[0..child_idx];
-                    rank = <S::Augmentation as RankAugmentation<S::K>>::fold_inner(
+                    rank = <S::Augmentation as RankAugmentation<S::K, S::V>>::fold_inner(
                         k,
                         rank,
                         augmentations,
@@ -738,7 +746,7 @@ where
                 NodeId::Leaf(leaf_id) => {
                     let leaf = self.node_store.get_leaf(leaf_id);
                     let slot = leaf.locate_slot(k);
-                    return <S::Augmentation as RankAugmentation<_>>::fold_leaf(
+                    return <S::Augmentation as RankAugmentation<_, _>>::fold_leaf(
                         k,
                         rank,
                         slot,
@@ -752,7 +760,7 @@ where
     /// remove by augment
     pub fn remove_by_augmentation<Q>(&mut self, query: Q) -> Option<(S::K, S::V)>
     where
-        S::Augmentation: SearchAugmentation<S::K, Query = Q>,
+        S::Augmentation: SearchAugmentation<S::K, S::V, Query = Q>,
     {
         let entry_ref = self.get_ref_by_augmentation(query)?;
         Self::remove_by_ref(entry_ref.into_detached().into_ref(self))
@@ -856,7 +864,7 @@ pub trait NodeStore: Default {
     type V;
 
     /// The Augmentation type
-    type Augmentation: Augmentation<Self::K>;
+    type Augmentation: Augmentation<Self::K, Self::V>;
 
     /// Get the max number of keys inner node can hold
     fn inner_n() -> u16;
