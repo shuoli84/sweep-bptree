@@ -18,7 +18,7 @@ impl Count {
     }
 }
 
-impl Augmentation<Key> for Count {
+impl<V> Augmentation<Key, V> for Count {
     fn from_leaf(keys: &[Key]) -> Self {
         Self(keys.iter().map(|k| k.count).sum())
     }
@@ -28,7 +28,7 @@ impl Augmentation<Key> for Count {
     }
 }
 
-impl SearchAugmentation<Key> for Count {
+impl<V> SearchAugmentation<Key, V> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
@@ -61,7 +61,7 @@ impl SearchAugmentation<Key> for Count {
     }
 }
 
-impl RankAugmentation<Key> for Count {
+impl<V> RankAugmentation<Key, V> for Count {
     /// The rank for ElementCount is index
     type Rank = usize;
 

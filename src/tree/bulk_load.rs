@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load() {
-        type Tree = BPlusTree<NodeStoreVec<i32, i32, augment::count::Count>>;
+        type Tree = BPlusTree<NodeStoreVec<i32, i32, augment::count::Count<i32>>>;
         let data = (0..400).map(|i| (i, i * 2)).collect::<Vec<_>>();
         let loaded_tree = Tree::bulk_load(data.clone());
         let mut inserted_tree = Tree::new(NodeStoreVec::default());
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn test_bulk_load_with_dup_items() {
-        type Tree = BPlusTree<NodeStoreVec<i32, i32, augment::count::Count>>;
+        type Tree = BPlusTree<NodeStoreVec<i32, i32, augment::count::Count<i32>>>;
         // i / 2, so there are two keys for one value
         let data = (0..400).map(|i| (i / 2, i * 2)).collect::<Vec<_>>();
         let loaded_tree = Tree::bulk_load(data.clone());

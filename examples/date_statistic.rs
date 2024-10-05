@@ -127,7 +127,7 @@ struct DateStatistic {
 }
 
 /// How the `DateStatistic` aggregated from children
-impl Augmentation<Date> for DateStatistic {
+impl<V> Augmentation<Date, V> for DateStatistic {
     /// aggregate for inner
     fn from_inner(_keys: &[Date], augmentations: &[Self]) -> Self {
         let mut augmentation_iter = augmentations.iter();

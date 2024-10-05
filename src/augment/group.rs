@@ -148,7 +148,7 @@ pub trait FromRef<T> {
     fn from_ref(input: &T) -> Self;
 }
 
-impl<K, G> Augmentation<K> for GroupCount<G>
+impl<K, V, G> Augmentation<K, V> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
@@ -203,7 +203,7 @@ where
     }
 }
 
-impl<K, G> SearchAugmentation<K> for GroupCount<G>
+impl<K, V, G> SearchAugmentation<K, V> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
@@ -272,7 +272,7 @@ where
     }
 }
 
-impl<K, G> RankAugmentation<K> for GroupCount<G>
+impl<K, V, G> RankAugmentation<K, V> for GroupCount<G>
 where
     K: Key,
     G: FromRef<K> + Clone + Ord + std::fmt::Debug,
