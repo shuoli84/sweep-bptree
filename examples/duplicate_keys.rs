@@ -32,7 +32,7 @@ impl<V> SearchAugmentation<Key, V> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
-    fn locate_in_leaf(offset: usize, keys: &[Key]) -> Option<usize> {
+    fn locate_in_leaf(offset: usize, keys: &[Key], _: &[V]) -> Option<usize> {
         let mut accum = 0usize;
 
         for (idx, key) in keys.iter().enumerate() {

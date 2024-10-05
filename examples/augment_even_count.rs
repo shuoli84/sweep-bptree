@@ -27,7 +27,7 @@ impl<V> SearchAugmentation<i64, V> for EvenCount {
     /// offset of even number
     type Query = usize;
 
-    fn locate_in_leaf(mut offset: usize, keys: &[i64]) -> Option<usize> {
+    fn locate_in_leaf(mut offset: usize, keys: &[i64], _: &[V]) -> Option<usize> {
         for (idx, key) in keys.iter().enumerate() {
             if value_is_even(*key) {
                 if offset == 0 {

@@ -31,7 +31,7 @@ pub trait SearchAugmentation<K: Key, V>: Augmentation<K, V> {
     type Query;
 
     /// locate the offset of the element in leaf node
-    fn locate_in_leaf(query: Self::Query, keys: &[K]) -> Option<usize>;
+    fn locate_in_leaf(query: Self::Query, keys: &[K], values: &[V]) -> Option<usize>;
 
     /// locate the child index of query in inner node, with new query
     fn locate_in_inner(

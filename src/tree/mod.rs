@@ -161,7 +161,10 @@ where
                 self.root_augmentation = Self::new_augmentation_for_id(&self.node_store, node_id);
                 None
             }
-            DescendInsertResult::Updated(prev_v) => Some(prev_v),
+            DescendInsertResult::Updated(prev_v) => {
+                self.root_augmentation = Self::new_augmentation_for_id(&self.node_store, node_id);
+                Some(prev_v)
+            }
             DescendInsertResult::Split(k, new_child_id) => {
                 let prev_root_augmentation =
                     Self::new_augmentation_for_id(&self.node_store, node_id);
@@ -279,7 +282,11 @@ where
                         continue;
                     }
                     DescendInsertResult::Updated(_) => {
-                        // the key didn't change, so does the augment
+                        let child_augmentation =
+                            Self::new_augmentation_for_id(&self.node_store, child_id);
+                        let inner_node = self.node_store.get_mut_inner(id);
+                        inner_node.set_augmentation(child_idx, child_augmentation);
+
                         continue;
                     }
                 },
@@ -686,6 +693,7 @@ where
                     let slot = <S::Augmentation as SearchAugmentation<_, _>>::locate_in_leaf(
                         query,
                         leaf.keys(),
+                        leaf.values(),
                     )?;
 
                     return Some(EntryRef::new(self, stack, leaf_id, slot));

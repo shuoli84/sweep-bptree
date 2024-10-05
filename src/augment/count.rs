@@ -28,7 +28,7 @@ impl<K: Key, V> SearchAugmentation<K, V> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
-    fn locate_in_leaf(idx: usize, keys: &[K]) -> Option<usize> {
+    fn locate_in_leaf(idx: usize, keys: &[K], _: &[V]) -> Option<usize> {
         if idx < keys.len() {
             Some(idx)
         } else {

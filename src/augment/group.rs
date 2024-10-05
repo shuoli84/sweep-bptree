@@ -211,7 +211,7 @@ where
     /// It can be searched by Group and offset
     type Query = (G, usize);
 
-    fn locate_in_leaf((group, offset): (G, usize), keys: &[K]) -> Option<usize> {
+    fn locate_in_leaf((group, offset): (G, usize), keys: &[K], _: &[V]) -> Option<usize> {
         let mut in_group_offset = 0;
         for (idx, k) in keys.iter().enumerate() {
             let group_for_key = G::from_ref(k);
