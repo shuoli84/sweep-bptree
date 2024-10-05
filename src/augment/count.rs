@@ -1,45 +1,30 @@
 use crate::Key;
 
 use super::{Augmentation, RankAugmentation, SearchAugmentation};
-use std::marker::PhantomData;
 
 /// This augmentation keeps track of the number of elements in the child.
 /// Basicly, it turns the tree to [Order Statistic Tree](https://en.wikipedia.org/wiki/Order_statistic_tree)
-#[derive(Debug)]
-pub struct Count<V>(usize, PhantomData<V>);
+#[derive(Debug, Copy, Clone, Default)]
+pub struct Count(usize);
 
-impl<V> Clone for Count<V> {
-    fn clone(&self) -> Self {
-        Self(self.0, PhantomData::default())
-    }
-}
-
-impl<V: Copy> Copy for Count<V> {}
-
-impl<V> Default for Count<V> {
-    fn default() -> Self {
-        Self(0, PhantomData::default())
-    }
-}
-
-impl<V> Count<V> {
+impl Count {
     /// Get the count value
     pub fn count(&self) -> usize {
         self.0
     }
 }
 
-impl<K: Key, V> Augmentation<K, V> for Count<V> {
+impl<K: Key, V> Augmentation<K, V> for Count {
     fn from_leaf(keys: &[K]) -> Self {
-        Self(keys.len(), PhantomData::default())
+        Self(keys.len())
     }
 
     fn from_inner(_keys: &[K], counts: &[Self]) -> Self {
-        Self(counts.iter().map(|a| a.0).sum(), PhantomData::default())
+        Self(counts.iter().map(|a| a.0).sum())
     }
 }
 
-impl<K: Key, V> SearchAugmentation<K, V> for Count<V> {
+impl<K: Key, V> SearchAugmentation<K, V> for Count {
     /// Query for ElementCount is index
     type Query = usize;
 
@@ -65,7 +50,7 @@ impl<K: Key, V> SearchAugmentation<K, V> for Count<V> {
     }
 }
 
-impl<K: Key, V> RankAugmentation<K, V> for Count<V> {
+impl<K: Key, V> RankAugmentation<K, V> for Count {
     /// The rank for ElementCount is index
     type Rank = usize;
 
@@ -101,16 +86,17 @@ mod tests {
 
     #[test]
     fn test_element_count() {
-        let count = Count::<u32>::from_leaf(&[1, 2, 3]);
+        let count = <Count as Augmentation<i32, i32>>::from_leaf(&[1, 2, 3]);
         assert_eq!(count.0, 3);
 
-        let count = Count::<u32>::from_inner(&[1, 2, 3], &[count, count, count]);
+        let count =
+            <Count as Augmentation<i32, i32>>::from_inner(&[1, 2, 3], &[count, count, count]);
         assert_eq!(count.0, 9);
     }
 
     #[test]
     fn test_element_count_in_tree() {
-        let node_store = NodeStoreVec::<i64, u32, Count<u32>>::new();
+        let node_store = NodeStoreVec::<i64, u32, Count>::new();
         let mut tree = BPlusTree::new(node_store);
         tree.insert(1, 101);
         assert_eq!(tree.root_augmentation().count(), 1);
