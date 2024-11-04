@@ -4,9 +4,10 @@ pub mod count;
 pub mod group;
 
 /// Augmentation trait, it is used to store augmentation, like 'size'
-/// NOTE: Since the lib has no control on how value changes, so augment only calculated from keys
-/// e.g: Map<i64, Arc<Mutex<i64>>
-pub trait Augmentation<K: Key>: Clone + Default {
+/// NOTE: if Augmentation's calculation depends on values, please DO NOT use `get_mut`
+/// and then modify the value. In that case, the lib lose track of value change and
+/// the augmentation is not synced.
+pub trait Augmentation<K: Key, V>: Clone + Default {
     fn is_zst() -> bool {
         false
     }
@@ -21,17 +22,17 @@ pub trait Augmentation<K: Key>: Clone + Default {
     fn from_inner(keys: &[K], augmentations: &[Self]) -> Self;
 
     /// create a new Augmentation from leaf node's key
-    fn from_leaf(keys: &[K]) -> Self;
+    fn from_leaf(keys: &[K], values: &[V]) -> Self;
 }
 
 /// Whether the augmentation able to locate element
 /// `SearchAugmentation` acts like a secondary index, it is able to locate
 /// the record.
-pub trait SearchAugmentation<K: Key>: Augmentation<K> {
+pub trait SearchAugmentation<K: Key, V>: Augmentation<K, V> {
     type Query;
 
     /// locate the offset of the element in leaf node
-    fn locate_in_leaf(query: Self::Query, keys: &[K]) -> Option<usize>;
+    fn locate_in_leaf(query: Self::Query, keys: &[K], values: &[V]) -> Option<usize>;
 
     /// locate the child index of query in inner node, with new query
     fn locate_in_inner(
@@ -42,7 +43,7 @@ pub trait SearchAugmentation<K: Key>: Augmentation<K> {
 }
 
 /// Whether the augmentation able to rank element(like the index of key)
-pub trait RankAugmentation<K: Key>: Augmentation<K> {
+pub trait RankAugmentation<K: Key, V>: Augmentation<K, V> {
     type Rank;
 
     /// Initial rank value, e.g: 0 for size
@@ -66,13 +67,13 @@ pub trait RankAugmentation<K: Key>: Augmentation<K> {
 }
 
 /// () is a dummy augment that turns Augmented tree to a normal tree
-impl<K: Key> Augmentation<K> for () {
+impl<K: Key, V> Augmentation<K, V> for () {
     fn is_zst() -> bool {
         true
     }
 
     #[inline(always)]
-    fn from_leaf(_: &[K]) -> Self {}
+    fn from_leaf(_: &[K], _: &[V]) -> Self {}
 
     #[inline(always)]
     fn from_inner(_: &[K], _: &[Self]) -> Self {}

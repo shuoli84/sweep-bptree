@@ -1,14 +1,14 @@
 use crate::tree::{Augmentation, InnerNode, InnerNodeId, Key, LeafNode, LeafNodeId, NodeStore};
 
 #[derive(Debug)]
-pub struct NodeStoreVec<K: Key, V, A: Augmentation<K> = ()> {
+pub struct NodeStoreVec<K: Key, V, A: Augmentation<K, V> = ()> {
     inner_nodes: Vec<Option<Box<InnerNode<K, A>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V>>>>,
 
     cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
-impl<K: Key, V: Clone, A: Augmentation<K>> Clone for NodeStoreVec<K, V, A> {
+impl<K: Key, V: Clone, A: Augmentation<K, V>> Clone for NodeStoreVec<K, V, A> {
     fn clone(&self) -> Self {
         Self {
             inner_nodes: self.inner_nodes.clone(),
@@ -20,7 +20,7 @@ impl<K: Key, V: Clone, A: Augmentation<K>> Clone for NodeStoreVec<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Augmentation<K>> Default for NodeStoreVec<K, V, A> {
+impl<K: Key, V, A: Augmentation<K, V>> Default for NodeStoreVec<K, V, A> {
     fn default() -> Self {
         Self {
             inner_nodes: Default::default(),
@@ -30,7 +30,7 @@ impl<K: Key, V, A: Augmentation<K>> Default for NodeStoreVec<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Augmentation<K>> NodeStoreVec<K, V, A> {
+impl<K: Key, V, A: Augmentation<K, V>> NodeStoreVec<K, V, A> {
     /// Create a new `NodeStoreVec`
     pub fn new() -> Self {
         Self::default()
@@ -81,7 +81,7 @@ impl<K: Key, V, A: Augmentation<K>> NodeStoreVec<K, V, A> {
     }
 }
 
-impl<K: Key, V, A: Augmentation<K>> NodeStore for NodeStoreVec<K, V, A> {
+impl<K: Key, V, A: Augmentation<K, V>> NodeStore for NodeStoreVec<K, V, A> {
     type K = K;
     type V = V;
     type Augmentation = A;

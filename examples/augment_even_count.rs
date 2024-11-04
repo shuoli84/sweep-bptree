@@ -9,8 +9,8 @@ fn value_is_even(v: i64) -> bool {
     v % 2 == 0
 }
 
-impl Augmentation<i64> for EvenCount {
-    fn from_leaf(keys: &[i64]) -> Self {
+impl<V> Augmentation<i64, V> for EvenCount {
+    fn from_leaf(keys: &[i64], _: &[V]) -> Self {
         // For leafs, we count all keys that are even
         Self(keys.iter().filter(|i| value_is_even(**i)).count())
     }
@@ -23,11 +23,11 @@ impl Augmentation<i64> for EvenCount {
 
 /// This implementation enables get key by 'nth' even number. This effectively makes
 /// `EvenCount` a secondary index
-impl SearchAugmentation<i64> for EvenCount {
+impl<V> SearchAugmentation<i64, V> for EvenCount {
     /// offset of even number
     type Query = usize;
 
-    fn locate_in_leaf(mut offset: usize, keys: &[i64]) -> Option<usize> {
+    fn locate_in_leaf(mut offset: usize, keys: &[i64], _: &[V]) -> Option<usize> {
         for (idx, key) in keys.iter().enumerate() {
             if value_is_even(*key) {
                 if offset == 0 {
