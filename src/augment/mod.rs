@@ -4,8 +4,9 @@ pub mod count;
 pub mod group;
 
 /// Augmentation trait, it is used to store augmentation, like 'size'
-/// NOTE: Since the lib has no control on how value changes, so augment only calculated from keys
-/// e.g: Map<i64, Arc<Mutex<i64>>
+/// NOTE: if Augmentation's calculation depends on values, please DO NOT use `get_mut`
+/// and then modify the value. In that case, the lib lose track of value change and
+/// the augmentation is not synced.
 pub trait Augmentation<K: Key, V>: Clone + Default {
     fn is_zst() -> bool {
         false
