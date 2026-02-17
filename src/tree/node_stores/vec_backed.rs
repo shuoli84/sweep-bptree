@@ -5,6 +5,7 @@ pub struct NodeStoreVec<K: Key, V, A: Augmentation<K, V> = ()> {
     inner_nodes: Vec<Option<Box<InnerNode<K, A>>>>,
     leaf_nodes: Vec<Option<Box<LeafNode<K, V>>>>,
 
+    #[cfg(feature = "cache_last_leaf")]
     cached_leaf: std::sync::atomic::AtomicUsize,
 }
 
@@ -13,6 +14,7 @@ impl<K: Key, V: Clone, A: Augmentation<K, V>> Clone for NodeStoreVec<K, V, A> {
         Self {
             inner_nodes: self.inner_nodes.clone(),
             leaf_nodes: self.leaf_nodes.clone(),
+            #[cfg(feature = "cache_last_leaf")]
             cached_leaf: std::sync::atomic::AtomicUsize::new(
                 self.cached_leaf.load(std::sync::atomic::Ordering::Relaxed),
             ),
@@ -25,6 +27,7 @@ impl<K: Key, V, A: Augmentation<K, V>> Default for NodeStoreVec<K, V, A> {
         Self {
             inner_nodes: Default::default(),
             leaf_nodes: Default::default(),
+            #[cfg(feature = "cache_last_leaf")]
             cached_leaf: std::sync::atomic::AtomicUsize::new(usize::MAX),
         }
     }
@@ -221,11 +224,13 @@ impl<K: Key, V, A: Augmentation<K, V>> NodeStore for NodeStoreVec<K, V, A> {
         }
     }
 
+    #[cfg(feature = "cache_last_leaf")]
     fn cache_leaf(&self, leaf_id: LeafNodeId) {
         self.cached_leaf
             .store(leaf_id.as_usize(), std::sync::atomic::Ordering::Relaxed);
     }
 
+    #[cfg(feature = "cache_last_leaf")]
     fn try_cache<Q>(&self, k: &Q) -> Option<LeafNodeId>
     where
         Q: ?Sized + Ord,
@@ -243,6 +248,18 @@ impl<K: Key, V, A: Augmentation<K, V>> NodeStore for NodeStoreVec<K, V, A> {
         } else {
             None
         }
+    }
+
+    #[cfg(not(feature = "cache_last_leaf"))]
+    fn cache_leaf(&self, _leaf_id: LeafNodeId) {}
+
+    #[cfg(not(feature = "cache_last_leaf"))]
+    fn try_cache<Q>(&self, _k: &Q) -> Option<LeafNodeId>
+    where
+        Q: ?Sized + Ord,
+        Self::K: std::borrow::Borrow<Q>,
+    {
+        None
     }
 }
 

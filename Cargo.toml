@@ -8,6 +8,10 @@ keywords = ["btree", "datastructure", "tree", "augemented"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["cache_last_leaf"]
+cache_last_leaf = []
+
 [lib]
 bench = false
 

@@ -352,6 +352,7 @@ impl<S: NodeStore> BPlusTree<S> {
             S::Augmentation::from_leaf(right.keys(), right.values()),
         );
 
+        #[cfg(feature = "cache_last_leaf")]
         node_store.cache_leaf(right_id);
 
         // the prev key is dropped here
@@ -386,6 +387,7 @@ impl<S: NodeStore> BPlusTree<S> {
         // the prev key is dropped here
         let _ = parent.set_key(slot, new_slot_key);
 
+        #[cfg(feature = "cache_last_leaf")]
         node_store.cache_leaf(left_id);
         deleted
     }
@@ -413,6 +415,7 @@ impl<S: NodeStore> BPlusTree<S> {
             (InnerMergeResult::UnderSize, _removed_k) => DeleteDescendResult::InnerUnderSize(kv),
         };
 
+        #[cfg(feature = "cache_last_leaf")]
         node_store.cache_leaf(left_leaf_id);
         r
     }
@@ -442,6 +445,7 @@ impl<S: NodeStore> BPlusTree<S> {
             (InnerMergeResult::Done, _removed_k) => DeleteDescendResult::Done(kv),
             (InnerMergeResult::UnderSize, _removed_k) => DeleteDescendResult::InnerUnderSize(kv),
         };
+        #[cfg(feature = "cache_last_leaf")]
         node_store.cache_leaf(left_leaf_id);
         r
     }

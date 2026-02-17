@@ -312,6 +312,7 @@ where
         let leaf_node = self.node_store.get_mut_leaf(id);
         match leaf_node.try_upsert(k, v) {
             LeafUpsertResult::Inserted => {
+                #[cfg(feature = "cache_last_leaf")]
                 self.node_store.cache_leaf(id);
                 DescendInsertResult::Inserted
             }
@@ -334,6 +335,7 @@ where
                 } else {
                     id
                 };
+                #[cfg(feature = "cache_last_leaf")]
                 self.node_store.cache_leaf(updated_id);
                 DescendInsertResult::Split(slot_key, NodeId::Leaf(right_id))
             }
@@ -345,6 +347,7 @@ where
     where
         S::K: Borrow<Q>,
     {
+        #[cfg(feature = "cache_last_leaf")]
         if let Some(leaf_id) = self.node_store.try_cache(k) {
             // cache hit
             return self.find_in_leaf(leaf_id, k);
@@ -358,14 +361,12 @@ where
     where
         S::K: Borrow<Q>,
     {
-        let mut cache_leaf_id: Option<LeafNodeId> = None;
-        if let Some(leaf_id) = self.node_store.try_cache(k) {
-            // cache hit
-            cache_leaf_id = Some(leaf_id);
-        }
-
-        if let Some(leaf_id) = cache_leaf_id {
-            return self.find_in_leaf_mut(leaf_id, k);
+        #[cfg(feature = "cache_last_leaf")]
+        {
+            if let Some(leaf_id) = self.node_store.try_cache(k) {
+                // cache hit
+                return self.find_in_leaf_mut(leaf_id, k);
+            }
         }
 
         self.find_descend_mut(self.root, k)
@@ -472,6 +473,7 @@ where
     where
         S::K: Borrow<Q>,
     {
+        #[cfg(feature = "cache_last_leaf")]
         self.node_store.cache_leaf(leaf_id);
         let leaf_node = self.node_store.get_mut_leaf(leaf_id);
         let (_, kv) = leaf_node.locate_slot_mut(k);
@@ -488,6 +490,7 @@ where
     where
         S::K: Borrow<Q>,
     {
+        #[cfg(feature = "cache_last_leaf")]
         self.node_store.cache_leaf(leaf_id);
         let leaf = self.node_store.get_leaf(leaf_id);
         let (_, v) = leaf.locate_slot_with_value(k);
@@ -581,6 +584,7 @@ where
     /// Returns the leaf whose range contains `k`.
     /// User should query the leaf and check key existance.
     pub(crate) fn locate_leaf(&self, k: &S::K) -> Option<LeafNodeId> {
+        #[cfg(feature = "cache_last_leaf")]
         if let Some(leaf_id) = self.node_store.try_cache(k) {
             return Some(leaf_id);
         }
@@ -934,13 +938,27 @@ pub trait NodeStore: Default {
     fn assign_leaf(&mut self, id: LeafNodeId, leaf: Box<LeafNode<Self::K, Self::V>>);
 
     /// cache leaf
+    #[cfg(feature = "cache_last_leaf")]
     fn cache_leaf(&self, leaf_id: LeafNodeId);
 
     /// try cache for k
+    #[cfg(feature = "cache_last_leaf")]
     fn try_cache<Q>(&self, k: &Q) -> Option<LeafNodeId>
     where
         Q: ?Sized + Ord,
         Self::K: Borrow<Q>;
+
+    #[cfg(not(feature = "cache_last_leaf"))]
+    fn cache_leaf(&self, _leaf_id: LeafNodeId) {}
+
+    #[cfg(not(feature = "cache_last_leaf"))]
+    fn try_cache<Q>(&self, _k: &Q) -> Option<LeafNodeId>
+    where
+        Q: ?Sized + Ord,
+        Self::K: Borrow<Q>,
+    {
+        None
+    }
 
     #[cfg(test)]
     fn debug(&self)
